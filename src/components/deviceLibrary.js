@@ -47,11 +47,15 @@ export const DEVICE_CATEGORIES = [
     short: 'DR',
     color: '#b66a0a',
     items: [
-      { type: 'single_door', label: 'Single Door', symbol: 'SD' },
-      { type: 'double_door', label: 'Double Door', symbol: 'DD' },
-      { type: 'sliding_door', label: 'Sliding Door', symbol: 'SL' },
-      { type: 'gate', label: 'Gate', symbol: 'GT' },
-      { type: 'turnstile', label: 'Turnstile', symbol: 'TS' },
+      { type: 'single_door', label: 'Single Door', symbol: '◧' },
+      { type: 'double_door', label: 'Double Door', symbol: '◫' },
+      { type: 'sliding_door', label: 'Sliding Door', symbol: '⇆' },
+      { type: 'overhead_door', label: 'Overhead Door', symbol: '▤' },
+      { type: 'hatch', label: 'Hatch', symbol: '▣' },
+      { type: 'folding_door', label: 'Folding Door', symbol: '≋' },
+      { type: 'revolving_door', label: 'Revolving Door', symbol: '⊕' },
+      { type: 'gate', label: 'Vehicle Gate', symbol: '╫' },
+      { type: 'turnstile', label: 'Turnstile', symbol: '✣' },
       { type: 'opening_note', label: 'Opening Note', symbol: 'DN' },
     ],
   },
@@ -93,4 +97,16 @@ export function elementSymbol(element) {
 
 export function elementColor(element) {
   return element.color || categoryFor(element.category)?.color || '#46545f';
+}
+
+export function isCameraType(type) {
+  return ['fixed_camera', 'dome_camera', 'ptz_camera', 'multisensor_camera', 'lpr_camera'].includes(type);
+}
+
+export function defaultMetadataForDevice(type, symbol, color) {
+  return {
+    symbol,
+    size: 42,
+    ...(isCameraType(type) ? { fovColor: color, fovLength: 0.22, fovSpread: 60 } : {}),
+  };
 }

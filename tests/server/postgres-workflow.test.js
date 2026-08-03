@@ -30,9 +30,9 @@ test('complete survey workflow succeeds on PostgreSQL and rejects invalid or una
       keys.forEach((key) => cloudFiles.delete(key));
       return { data: keys, error: null };
     },
-    async createSignedUrl(key) {
+    async download(key) {
       return cloudFiles.has(key)
-        ? { data: { signedUrl: `https://storage.example.test/${key}?signed=test` }, error: null }
+        ? { data: new Blob([cloudFiles.get(key)]), error: null }
         : { data: null, error: new Error('missing') };
     },
     async list() { return { data: [...cloudFiles.keys()], error: null }; },
@@ -103,7 +103,7 @@ test('complete survey workflow succeeds on PostgreSQL and rejects invalid or una
       .attach('pdf', pdf, { filename: 'floor-1.pdf', contentType: 'application/pdf' }).expect(201)).body.data;
     assert.equal(survey.hasPdf, true);
     await owner.get(`/api/surveys/${survey.id}`).expect(200);
-    await owner.get(`/api/surveys/${survey.id}/file`).expect(302).expect('Location', /storage\.example\.test/);
+    await owner.get(`/api/surveys/${survey.id}/file`).expect(200).expect('Content-Type', /application\/pdf/);
     await request(runtime.app).get(`/api/surveys/${survey.id}/file`).expect(401);
 
     const element = (await owner.post(`/api/surveys/${survey.id}/elements`).send({
@@ -130,7 +130,7 @@ test('complete survey workflow succeeds on PostgreSQL and rejects invalid or una
     const photo = (await owner.post(`/api/elements/${element.id}/photos`)
       .field('caption', 'Camera location')
       .attach('photo', png, { filename: 'camera.png', contentType: 'image/png' }).expect(201)).body.data;
-    await owner.get(`/api/photos/${photo.id}/file`).expect(302).expect('Location', /storage\.example\.test/);
+    await owner.get(`/api/photos/${photo.id}/file`).expect(200).expect('Content-Type', /image\/png/);
     await owner.get(`/api/elements/${element.id}/photos`).expect(200);
 
     const profile = (await owner.post('/api/profiles').send({

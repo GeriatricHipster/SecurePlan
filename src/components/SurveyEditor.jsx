@@ -3,7 +3,8 @@ import { io } from 'socket.io-client';
 import { api, nativeTransport, normalizeList } from '../api.js';
 import { ConfirmDialog, Field, Modal, Spinner, formatWhen, initials, roleCanAnnotate, roleCanEdit } from './Common.jsx';
 import PdfPlan from './PdfPlan.jsx';
-import { DEFAULT_PROFILE, DEVICE_CATEGORIES, MARKUP_TOOLS, categoryFor, elementColor, elementSymbol, itemFor } from './deviceLibrary.js';
+import { DEFAULT_PROFILE, DEVICE_CATEGORIES, MARKUP_TOOLS, categoryFor, defaultMetadataForDevice, elementColor, elementSymbol, isCameraType, itemFor } from './deviceLibrary.js';
+import DeviceGlyph from './DeviceGlyph.jsx';
 
 const LAYER_IDS = [...DEVICE_CATEGORIES.map((category) => category.id), 'custom', 'markup'];
 
@@ -74,7 +75,7 @@ function LibraryPanel({ activeTool, profiles, visibleLayers, canEdit, onTool, on
             <div className="component-grid">
               {category.items.map((item) => {
                 const active = activeTool.kind === 'device' && activeTool.category === category.id && activeTool.type === item.type;
-                return <button type="button" key={item.type} className={active ? 'active' : ''} aria-pressed={active} disabled={!canEdit} onClick={() => onTool({ kind: 'device', category: category.id, color: category.color, ...item })}><span className="library-symbol" style={{ '--symbol-color': category.color }}>{item.symbol}</span><span>{item.label}</span></button>;
+                return <button type="button" key={item.type} className={active ? 'active' : ''} aria-pressed={active} disabled={!canEdit} onClick={() => onTool({ kind: 'device', category: category.id, color: category.color, ...item })}><span className="library-symbol" style={{ '--symbol-color': category.color }}><DeviceGlyph type={item.type} symbol={item.symbol} label={item.label} /></span><span>{item.label}</span></button>;
               })}
             </div>
           </details>
@@ -103,7 +104,9 @@ function LibraryPanel({ activeTool, profiles, visibleLayers, canEdit, onTool, on
 }
 
 function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, onPatch, onDuplicate, onDelete, onAddNote, onAddPhoto, photoBusy, onClose }) {
-  const [form, setForm] = useState({ label: '', color: '#46545f', size: 42, rotation: 0 });
+  const [form, setForm] = useState({
+    label: '', color: '#46545f', size: 42, rotation: 0, fovColor: '#1769aa', fovLength: 0.22, fovSpread: 60,
+  });
   const [noteText, setNoteText] = useState('');
   const [noteBusy, setNoteBusy] = useState(false);
   const [noteError, setNoteError] = useState('');
@@ -111,7 +114,16 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
 
   useEffect(() => {
     if (!element) return;
-    setForm({ label: element.label || '', color: elementColor(element), size: Number(element.metadata?.size || 42), rotation: Number(element.rotation || 0) });
+    const metadata = metadataOf(element);
+    setForm({
+      label: element.label || '',
+      color: elementColor(element),
+      size: Number(metadata.size || 42),
+      rotation: Number(element.rotation || 0),
+      fovColor: metadata.fovColor || elementColor(element),
+      fovLength: Number(metadata.fovLength ?? 0.22),
+      fovSpread: Number(metadata.fovSpread ?? 60),
+    });
     setNoteText('');
     setNoteError('');
     setPhotoCaption('');
@@ -153,6 +165,25 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
             <Field label="Rotation"><div className="range-control"><input type="range" min="0" max="355" step="5" value={form.rotation} disabled={!canEdit} onChange={(e) => setForm({ ...form, rotation: Number(e.target.value) })} onPointerUp={() => onPatch({ rotation: form.rotation })} onKeyUp={() => onPatch({ rotation: form.rotation })} /><output>{form.rotation}°</output></div></Field>
           </div>
           {element.category !== 'markup' && <Field label="Icon size"><div className="range-control"><input type="range" min="28" max="100" step="2" value={form.size} disabled={!canEdit} onChange={(e) => setForm({ ...form, size: Number(e.target.value) })} onPointerUp={() => onPatch({ metadata: { ...metadata, size: form.size } })} onKeyUp={() => onPatch({ metadata: { ...metadata, size: form.size } })} /><output>{form.size}px</output></div></Field>}
+          {isCameraType(element.type) && (
+            <fieldset className="camera-fov-controls">
+              <legend>Camera field of view</legend>
+              <fieldset className="field color-field">
+                <legend className="field__label">Cone color</legend>
+                <div className="color-control">
+                  <input type="color" aria-label="Choose camera cone color" value={form.fovColor} disabled={!canEdit} onChange={(e) => setForm({ ...form, fovColor: e.target.value })} onBlur={() => onPatch({ metadata: { ...metadata, fovColor: form.fovColor } })} />
+                  <input aria-label="Camera cone color hex value" value={form.fovColor} disabled={!canEdit} pattern="#[0-9a-fA-F]{6}" onChange={(e) => setForm({ ...form, fovColor: e.target.value })} onBlur={() => /^#[0-9a-f]{6}$/i.test(form.fovColor) && onPatch({ metadata: { ...metadata, fovColor: form.fovColor } })} />
+                </div>
+              </fieldset>
+              <Field label="Cone length">
+                <div className="range-control"><input type="range" min="0.05" max="0.75" step="0.01" value={form.fovLength} disabled={!canEdit} onChange={(e) => setForm({ ...form, fovLength: Number(e.target.value) })} onPointerUp={() => onPatch({ metadata: { ...metadata, fovLength: form.fovLength } })} onKeyUp={() => onPatch({ metadata: { ...metadata, fovLength: form.fovLength } })} /><output>{Math.round(form.fovLength * 100)}%</output></div>
+              </Field>
+              <Field label="Cone spread">
+                <div className="range-control"><input type="range" min="5" max="180" step="5" value={form.fovSpread} disabled={!canEdit} onChange={(e) => setForm({ ...form, fovSpread: Number(e.target.value) })} onPointerUp={() => onPatch({ metadata: { ...metadata, fovSpread: form.fovSpread } })} onKeyUp={() => onPatch({ metadata: { ...metadata, fovSpread: form.fovSpread } })} /><output>{form.fovSpread}°</output></div>
+              </Field>
+              <p>Use Rotation above to aim the camera and its cone.</p>
+            </fieldset>
+          )}
           <p className="edit-attribution">Last edited by {element.updatedBy?.name || element.updated_by_name || 'a team member'} · {formatWhen(element.updatedAt || element.updated_at)}</p>
           {canEdit && <div className="button-group button-group--wide"><button type="button" className="button button--secondary" onClick={onDuplicate}>Duplicate</button><button type="button" className="button button--ghost danger-text" onClick={onDelete}>Delete</button></div>}
         </section>
@@ -382,7 +413,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify 
   const place = async (point) => {
     if (activeTool.kind === 'device') {
       try {
-        await createOne({ category: activeTool.category, type: activeTool.type, label: activeTool.label, x: point.x, y: point.y, width: 0.04, height: 0.04, rotation: 0, color: activeTool.color, metadata: { symbol: activeTool.symbol, size: 42 } });
+        await createOne({ category: activeTool.category, type: activeTool.type, label: activeTool.label, x: point.x, y: point.y, width: 0.04, height: 0.04, rotation: 0, color: activeTool.color, metadata: defaultMetadataForDevice(activeTool.type, activeTool.symbol, activeTool.color) });
         setActiveTool({ kind: 'markup', type: 'select', label: 'Select' });
       } catch (error) { notify(error.message); }
       return;

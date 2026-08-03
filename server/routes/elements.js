@@ -392,7 +392,7 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate }) {
       'Content-Disposition': `inline; filename="${safeFilename(photo.original_filename)}"`,
     });
     const delivery = await storedFileDelivery(photo.storage_key, 'photo', config);
-    if (delivery.url) return res.redirect(302, delivery.url);
+    if (delivery.contents) return res.send(delivery.contents);
     res.sendFile(delivery.path);
   });
 

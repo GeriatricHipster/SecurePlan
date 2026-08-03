@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as pdfjs from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { api } from '../api.js';
-import { elementColor, elementSymbol } from './deviceLibrary.js';
+import { elementColor, elementSymbol, isCameraType } from './deviceLibrary.js';
+import DeviceGlyph from './DeviceGlyph.jsx';
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -104,9 +105,37 @@ function DeviceElement({ element, orientation, selected, onPointerDown, onSelect
       aria-label={`${element.label || element.type}${selected ? ', selected' : ''}`}
       aria-pressed={selected}
     >
-      <span>{elementSymbol(element)}</span>
+      <DeviceGlyph type={element.type} symbol={elementSymbol(element)} label={element.label} />
       {(Number(element.noteCount ?? element.note_count ?? 0) + Number(element.photoCount ?? element.photo_count ?? 0)) > 0 && <small aria-hidden="true">{Number(element.noteCount ?? element.note_count ?? 0) + Number(element.photoCount ?? element.photo_count ?? 0)}</small>}
     </button>
+  );
+}
+
+function CameraFieldOfView({ element, orientation }) {
+  if (!isCameraType(element.type)) return null;
+  const metadata = element.metadata || {};
+  const origin = toDisplay({ x: Number(element.x), y: Number(element.y) }, orientation);
+  const length = Math.max(0.03, Math.min(0.75, Number(metadata.fovLength ?? 0.22)));
+  const spread = Math.max(5, Math.min(180, Number(metadata.fovSpread ?? 60)));
+  const direction = (Number(element.rotation || 0) + Number(orientation || 0) - 90) * Math.PI / 180;
+  const halfSpread = spread * Math.PI / 360;
+  const left = {
+    x: origin.x + Math.cos(direction - halfSpread) * length,
+    y: origin.y + Math.sin(direction - halfSpread) * length,
+  };
+  const right = {
+    x: origin.x + Math.cos(direction + halfSpread) * length,
+    y: origin.y + Math.sin(direction + halfSpread) * length,
+  };
+  const color = /^#[0-9a-f]{6}$/i.test(metadata.fovColor || '') ? metadata.fovColor : elementColor(element);
+  return (
+    <svg className="camera-fov" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      <polygon
+        points={`${origin.x * 100},${origin.y * 100} ${left.x * 100},${left.y * 100} ${right.x * 100},${right.y * 100}`}
+        fill={color}
+        stroke={color}
+      />
+    </svg>
   );
 }
 
@@ -273,7 +302,10 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
           >
             {elements.filter((element) => visibleLayers.has(element.category)).map((element) => element.category === 'markup'
               ? <MarkupElement key={element.id} element={element} orientation={orientation} selected={selectedId === element.id} onPointerDown={pointerDownElement} onSelect={onSelect} />
-              : <DeviceElement key={element.id} element={element} orientation={orientation} selected={selectedId === element.id} onPointerDown={pointerDownElement} onSelect={onSelect} />)}
+              : <React.Fragment key={element.id}>
+                  <CameraFieldOfView element={element} orientation={orientation} />
+                  <DeviceElement element={element} orientation={orientation} selected={selectedId === element.id} onPointerDown={pointerDownElement} onSelect={onSelect} />
+                </React.Fragment>)}
             {draftBounds && draftShape.type !== 'line' && draftShape.type !== 'arrow' && <span className={`draft-shape draft-shape--${draftShape.type}`} style={{ left: `${draftBounds.left}%`, top: `${draftBounds.top}%`, width: `${draftBounds.width}%`, height: `${draftBounds.height}%` }} />}
             {draftShape && (draftShape.type === 'line' || draftShape.type === 'arrow') && <svg className="draft-line" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1={draftShape.start.x * 100} y1={draftShape.start.y * 100} x2={draftShape.end.x * 100} y2={draftShape.end.y * 100} /></svg>}
           </div>

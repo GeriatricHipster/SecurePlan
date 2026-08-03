@@ -104,9 +104,11 @@ export function storedFilePath(storageKey, kind, config) {
 
 export async function storedFileDelivery(storageKey, kind, config) {
   if (!config.cloudMode) return { path: storedFilePath(storageKey, kind, config) };
-  const { data, error } = await storage(config).createSignedUrl(storageKey, 60);
-  if (error || !data?.signedUrl) throw new Error('Cloud file download could not be authorized.');
-  return { url: data.signedUrl };
+  const { data, error } = await storage(config).download(storageKey);
+  if (error || !data) throw new Error('Cloud file download could not be authorized.');
+  if (Buffer.isBuffer(data)) return { contents: data };
+  if (typeof data.arrayBuffer !== 'function') throw new Error('Cloud file download returned an unsupported response.');
+  return { contents: Buffer.from(await data.arrayBuffer()) };
 }
 
 export async function checkStorage(config) {

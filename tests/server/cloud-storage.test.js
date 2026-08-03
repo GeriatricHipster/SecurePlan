@@ -7,7 +7,7 @@ import {
   checkStorage, copyStoredFile, deleteStoredFile, storePdf, storePhoto, storedFileDelivery,
 } from '../../server/lib/storage.js';
 
-test('private cloud storage uploads, copies, signs, deletes, checks health, and removes temporary files', async () => {
+test('private cloud storage uploads, copies, downloads, deletes, checks health, and removes temporary files', async () => {
   const calls = [];
   const storageClient = {
     async upload(key, bytes, options) {
@@ -22,9 +22,9 @@ test('private cloud storage uploads, copies, signs, deletes, checks health, and 
       calls.push(['remove', keys]);
       return { data: keys, error: null };
     },
-    async createSignedUrl(key, seconds) {
-      calls.push(['signed', key, seconds]);
-      return { data: { signedUrl: `https://storage.example.test/${key}?signed=test` }, error: null };
+    async download(key) {
+      calls.push(['download', key]);
+      return { data: new Blob([`contents:${key}`]), error: null };
     },
     async list(prefix, options) {
       calls.push(['list', prefix, options.limit]);
@@ -49,10 +49,10 @@ test('private cloud storage uploads, copies, signs, deletes, checks health, and 
     const copiedKey = await copyStoredFile(pdfKey, 'survey', config);
     assert.match(copiedKey, /^surveys\/[a-f0-9-]+\.pdf$/);
     const delivery = await storedFileDelivery(pdfKey, 'survey', config);
-    assert.match(delivery.url, /^https:\/\/storage\.example\.test\//);
+    assert.equal(delivery.contents.toString(), `contents:${pdfKey}`);
     await deleteStoredFile(photoKey, 'photo', config);
     await checkStorage(config);
-    assert.deepEqual(calls.map((call) => call[0]), ['upload', 'upload', 'copy', 'signed', 'remove', 'list']);
+    assert.deepEqual(calls.map((call) => call[0]), ['upload', 'upload', 'copy', 'download', 'remove', 'list']);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
@@ -64,7 +64,7 @@ test('cloud storage failures reject safely and still clean temporary uploads', a
   fs.writeFileSync(temporaryPath, '%PDF-1.4\n%%EOF');
   const errorClient = {
     async upload() { return { data: null, error: new Error('provider rejected upload') }; },
-    async createSignedUrl() { return { data: null, error: new Error('not found') }; },
+    async download() { return { data: null, error: new Error('not found') }; },
     async copy() { return { data: null, error: new Error('copy failed') }; },
     async remove() { return { data: null, error: new Error('remove failed') }; },
     async list() { return { data: null, error: new Error('bucket unavailable') }; },

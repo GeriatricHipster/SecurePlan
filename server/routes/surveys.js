@@ -340,7 +340,7 @@ export function createSurveysRouter({ db, config, auth, emitSurveyUpdate, emitSi
       'Content-Disposition': `inline; filename="${safeFilename(survey.original_filename || `${survey.name}.pdf`)}"`,
     });
     const delivery = await storedFileDelivery(survey.storage_key, 'survey', config);
-    if (delivery.url) return res.redirect(302, delivery.url);
+    if (delivery.contents) return res.send(delivery.contents);
     res.sendFile(delivery.path);
   });
 
