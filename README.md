@@ -10,6 +10,7 @@ For the quickest device launch, deploy the web app first and use it as an instal
 - Expandable Access Control, CCTV, Intrusion, Doors, and Custom libraries, including the supplied 13-symbol Access Control field set
 - Drag-and-drop plotting and device assemblies, outline-free named symbols, independent camera FOV aiming, four independently controlled multisensor views, and on-canvas markup formatting
 - Selection resize handles for every plotted item plus double-click editing for markup dimensions, position, thickness, text, font size, and color
+- Contextual text and markup editor anchored beside the selected item with reliable pointer-based double-click detection
 - Original blueprint-style door/opening symbols and automatic, editable camera field-of-view cones
 - Custom multi-component profiles, including a seeded **Full Door** profile
 - Place, move, resize, rotate, recolor, copy, and delete survey elements

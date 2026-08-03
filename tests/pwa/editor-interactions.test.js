@@ -16,9 +16,11 @@ test('every selected canvas item exposes resize handles and resize commits are s
 test('markup editing requires a double click and exposes text, color, size, thickness, length, and location controls', async () => {
   const source = await readFile(sourceUrl, 'utf8');
   assert.match(source, /onDoubleClick=/);
+  assert.match(source, /event\.detail >= 2/);
   assert.match(source, /autoFocus value=\{element\.label/);
   for (const label of ['Color', 'Horizontal location', 'Vertical location', 'Text size', 'Thickness', 'Length']) {
     assert.equal(source.includes(label), true, `missing ${label} control`);
   }
   assert.match(source, /element=\{elements\.find\(\(element\) => element\.id === editingId\)\}/);
+  assert.match(source, /style=\{\{ left: `\$\{anchor\.x \* 100\}%`, top: `\$\{anchor\.y \* 100\}%` \}\}/);
 });

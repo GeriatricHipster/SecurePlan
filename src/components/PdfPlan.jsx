@@ -137,15 +137,22 @@ function CameraFieldOfView({ element, orientation }) {
   );
 }
 
-function MarkupPopup({ element, onPatch }) {
+function MarkupPopup({ element, orientation, onPatch, onClose }) {
   if (!element || element.category !== 'markup') return null;
   const metadata = element.metadata || {};
   const length = Math.max(0.01, Math.min(0.8, Math.hypot(Number(element.width), Number(element.height))));
+  const start = toDisplay({ x: Number(element.x), y: Number(element.y) }, orientation);
+  const end = toDisplay({ x: Number(element.x) + Number(element.width), y: Number(element.y) + Number(element.height) }, orientation);
+  const anchor = {
+    x: Math.max(0.18, Math.min(0.82, (start.x + end.x) / 2)),
+    y: Math.max(0.08, Math.min(0.88, Math.max(start.y, end.y) + 0.045)),
+  };
   const patchLength = (next) => {
     const angle = Math.atan2(Number(element.height), Number(element.width));
     onPatch(element.id, { width: Math.cos(angle) * next, height: Math.sin(angle) * next });
   };
-  return <div className="markup-popup" role="dialog" aria-label={`${element.type} formatting`} onPointerDown={(event) => event.stopPropagation()}>
+  return <div className="markup-popup" role="dialog" aria-label={`${element.type} formatting`} style={{ left: `${anchor.x * 100}%`, top: `${anchor.y * 100}%` }} onPointerDown={(event) => event.stopPropagation()}>
+    <button type="button" className="markup-popup__close" onClick={onClose} aria-label="Close formatting controls">×</button>
     {element.type === 'text' && <label>Text<input autoFocus value={element.label || ''} onChange={(event) => onPatch(element.id, { label: event.target.value })} /></label>}
     <label>Color<input type="color" value={elementColor(element)} onChange={(event) => onPatch(element.id, { color: event.target.value })} /></label>
     <label>Horizontal location<input type="range" min="0" max="1" step="0.005" value={Number(element.x)} onChange={(event) => onPatch(element.id, { x: Number(event.target.value) })} /></label>
@@ -285,6 +292,13 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
 
   const pointerDownElement = (event, element) => {
     event.stopPropagation();
+    if (event.detail >= 2 && element.category === 'markup') {
+      event.preventDefault();
+      dragRef.current = null;
+      onSelect(element.id);
+      setEditingId(element.id);
+      return;
+    }
     setEditingId(null);
     onSelect(element.id);
     if (!canEdit || activeTool.type !== 'select') return;
@@ -416,7 +430,7 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
             {draftBounds && draftShape.type !== 'line' && draftShape.type !== 'arrow' && <span className={`draft-shape draft-shape--${draftShape.type}`} style={{ left: `${draftBounds.left}%`, top: `${draftBounds.top}%`, width: `${draftBounds.width}%`, height: `${draftBounds.height}%` }} />}
             {draftShape && (draftShape.type === 'line' || draftShape.type === 'arrow') && <svg className="draft-line" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1={draftShape.start.x * 100} y1={draftShape.start.y * 100} x2={draftShape.end.x * 100} y2={draftShape.end.y * 100} /></svg>}
             {canEdit && <SelectionHandles element={elements.find((element) => element.id === selectedId)} orientation={orientation} dimensions={dimensions} onStart={startResize} />}
-            {canEdit && <MarkupPopup element={elements.find((element) => element.id === editingId)} onPatch={onPatchElement} />}
+            {canEdit && <MarkupPopup element={elements.find((element) => element.id === editingId)} orientation={orientation} onPatch={onPatchElement} onClose={() => setEditingId(null)} />}
           </div>
           {rendering && <div className="plan-rendering" role="status">Rendering floor plan…</div>}
         </div>
