@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { createClient } from '@supabase/supabase-js';
 import { badRequest } from './errors.js';
 
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif']);
@@ -42,29 +43,43 @@ export function validatePhotoUpload(file) {
   }
 }
 
-export function storePdf(file, config) {
-  const storageKey = `${crypto.randomUUID()}.pdf`;
-  fs.renameSync(file.path, path.join(config.surveyFilesDir, storageKey));
+export async function storePdf(file, config) {
+  const storageKey = config.cloudMode ? `surveys/${crypto.randomUUID()}.pdf` : `${crypto.randomUUID()}.pdf`;
+  if (config.cloudMode) await uploadCloudFile(file, storageKey, 'application/pdf', config);
+  else fs.renameSync(file.path, path.join(config.surveyFilesDir, storageKey));
   return storageKey;
 }
 
-export function storePhoto(file, config) {
-  const storageKey = `${crypto.randomUUID()}${IMAGE_EXTENSIONS.get(file.mimetype) || '.image'}`;
-  fs.renameSync(file.path, path.join(config.photoFilesDir, storageKey));
+export async function storePhoto(file, config) {
+  const name = `${crypto.randomUUID()}${IMAGE_EXTENSIONS.get(file.mimetype) || '.image'}`;
+  const storageKey = config.cloudMode ? `photos/${name}` : name;
+  if (config.cloudMode) await uploadCloudFile(file, storageKey, file.mimetype, config);
+  else fs.renameSync(file.path, path.join(config.photoFilesDir, storageKey));
   return storageKey;
 }
 
-export function copyStoredFile(sourceKey, kind, config) {
+export async function copyStoredFile(sourceKey, kind, config) {
   if (!sourceKey) return null;
-  const sourceDirectory = kind === 'survey' ? config.surveyFilesDir : config.photoFilesDir;
   const extension = path.extname(sourceKey).slice(0, 10);
-  const targetKey = `${crypto.randomUUID()}${extension}`;
-  fs.copyFileSync(path.join(sourceDirectory, path.basename(sourceKey)), path.join(sourceDirectory, targetKey));
+  const name = `${crypto.randomUUID()}${extension}`;
+  const targetKey = config.cloudMode ? `${kind === 'survey' ? 'surveys' : 'photos'}/${name}` : name;
+  if (config.cloudMode) {
+    const { error } = await storage(config).copy(sourceKey, targetKey);
+    if (error) throw new Error('Cloud file copy failed.');
+  } else {
+    const sourceDirectory = kind === 'survey' ? config.surveyFilesDir : config.photoFilesDir;
+    fs.copyFileSync(path.join(sourceDirectory, path.basename(sourceKey)), path.join(sourceDirectory, targetKey));
+  }
   return targetKey;
 }
 
-export function deleteStoredFile(storageKey, kind, config) {
+export async function deleteStoredFile(storageKey, kind, config) {
   if (!storageKey) return;
+  if (config.cloudMode) {
+    const { error } = await storage(config).remove([storageKey]);
+    if (error) throw new Error('Cloud file deletion failed.');
+    return;
+  }
   const directory = kind === 'survey' ? config.surveyFilesDir : config.photoFilesDir;
   try {
     fs.unlinkSync(path.join(directory, path.basename(storageKey)));
@@ -85,4 +100,44 @@ export function cleanTemporaryUpload(file) {
 export function storedFilePath(storageKey, kind, config) {
   const directory = kind === 'survey' ? config.surveyFilesDir : config.photoFilesDir;
   return path.join(directory, path.basename(storageKey));
+}
+
+export async function storedFileDelivery(storageKey, kind, config) {
+  if (!config.cloudMode) return { path: storedFilePath(storageKey, kind, config) };
+  const { data, error } = await storage(config).createSignedUrl(storageKey, 60);
+  if (error || !data?.signedUrl) throw new Error('Cloud file download could not be authorized.');
+  return { url: data.signedUrl };
+}
+
+export async function checkStorage(config) {
+  if (!config.cloudMode) return;
+  const { error } = await storage(config).list('', { limit: 1 });
+  if (error) throw new Error(`Supabase Storage readiness check failed: ${error.message}`);
+}
+
+async function uploadCloudFile(file, storageKey, contentType, config) {
+  try {
+    const contents = fs.readFileSync(file.path);
+    const { error } = await storage(config).upload(storageKey, contents, {
+      contentType,
+      upsert: false,
+    });
+    if (error) throw error;
+  } catch (error) {
+    throw new Error('Cloud file upload failed.', { cause: error });
+  } finally {
+    cleanTemporaryUpload(file);
+  }
+}
+
+const clients = new Map();
+function storage(config) {
+  const key = `${config.supabaseUrl}\n${config.supabaseSecretKey}\n${config.supabaseStorageBucket}`;
+  if (!clients.has(key)) {
+    const client = createClient(config.supabaseUrl, config.supabaseSecretKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
+    clients.set(key, client.storage.from(config.supabaseStorageBucket));
+  }
+  return clients.get(key);
 }

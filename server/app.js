@@ -8,7 +8,7 @@ import multer from 'multer';
 import { createConfig } from './config.js';
 import { createDatabase } from './db.js';
 import { ApiError } from './lib/errors.js';
-import { cleanTemporaryUpload } from './lib/storage.js';
+import { checkStorage, cleanTemporaryUpload } from './lib/storage.js';
 import { createAuthMiddleware } from './lib/auth.js';
 import { createRealtimeServer } from './realtime.js';
 import { createAuthRouter } from './routes/auth.js';
@@ -100,23 +100,27 @@ export function createApplication(overrides = {}) {
   app.get('/api/health/live', (_req, res) => {
     res.json({ data: { status: 'ok', time: new Date().toISOString(), uptimeSeconds: Math.floor(process.uptime()) } });
   });
-  const readinessHandler = (_req, res) => {
+  const readinessHandler = async (_req, res) => {
     let databaseStatus = 'unavailable';
     let storageStatus = 'unavailable';
     let freeBytes = null;
     try {
-      const database = db.prepare('SELECT 1 AS healthy').get();
+      const database = await db.prepare('SELECT 1 AS healthy').get();
       if (database.healthy !== 1) throw new Error('Database check failed.');
       databaseStatus = 'ok';
     } catch {
       // The combined readiness response below deliberately avoids exposing internals.
     }
     try {
-      fs.accessSync(config.dataDir, fs.constants.R_OK | fs.constants.W_OK);
-      fs.accessSync(config.uploadsDir, fs.constants.R_OK | fs.constants.W_OK);
-      const stats = fs.statfsSync(config.dataDir);
-      freeBytes = Number(stats.bavail) * Number(stats.bsize);
-      if (freeBytes < config.minFreeStorageBytes) throw new Error('Persistent storage is critically low.');
+      if (config.cloudMode) {
+        await checkStorage(config);
+      } else {
+        fs.accessSync(config.dataDir, fs.constants.R_OK | fs.constants.W_OK);
+        fs.accessSync(config.uploadsDir, fs.constants.R_OK | fs.constants.W_OK);
+        const stats = fs.statfsSync(config.dataDir);
+        freeBytes = Number(stats.bavail) * Number(stats.bsize);
+        if (freeBytes < config.minFreeStorageBytes) throw new Error('Persistent storage is critically low.');
+      }
       storageStatus = 'ok';
     } catch {
       // The combined readiness response below deliberately avoids exposing internals.
@@ -199,7 +203,7 @@ export function createApplication(overrides = {}) {
     if (error instanceof multer.MulterError) {
       const message = error.code === 'LIMIT_FILE_SIZE' ? 'The uploaded file is too large.' : error.message;
       apiError = new ApiError(error.code === 'LIMIT_FILE_SIZE' ? 413 : 400, 'UPLOAD_ERROR', message);
-    } else if (error?.code?.startsWith('SQLITE_CONSTRAINT')) {
+    } else if (error?.code?.startsWith('SQLITE_CONSTRAINT') || ['23503', '23505', '23514'].includes(error?.code)) {
       apiError = new ApiError(409, 'CONFLICT', 'That operation conflicts with an existing record.');
     }
 
@@ -230,7 +234,7 @@ export function createApplication(overrides = {}) {
     close: async () => {
       await new Promise((resolve) => realtime.io.close(resolve));
       if (httpServer.listening) await new Promise((resolve) => httpServer.close(resolve));
-      db.close();
+      await db.close();
     },
   };
 }

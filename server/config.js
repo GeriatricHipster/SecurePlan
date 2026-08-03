@@ -26,6 +26,23 @@ export function createConfig(overrides = {}) {
   const setupCode = overrides.setupCode !== undefined
     ? String(overrides.setupCode || '').trim()
     : String(process.env.SETUP_CODE || '').trim();
+  const databaseUrl = String(overrides.databaseUrl ?? process.env.DATABASE_URL ?? '').trim();
+  const supabaseUrl = String(overrides.supabaseUrl ?? process.env.SUPABASE_URL ?? '').trim().replace(/\/+$/, '');
+  const supabaseSecretKey = String(
+    overrides.supabaseSecretKey ?? process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? '',
+  ).trim();
+  const supabaseStorageBucket = String(
+    overrides.supabaseStorageBucket ?? process.env.SUPABASE_STORAGE_BUCKET ?? 'secureplan-files',
+  ).trim();
+  const cloudMode = Boolean(databaseUrl || supabaseUrl || supabaseSecretKey);
+  if (cloudMode && (!databaseUrl || !supabaseUrl || !supabaseSecretKey || !supabaseStorageBucket)) {
+    throw new Error(
+      'DATABASE_URL, SUPABASE_URL, SUPABASE_SECRET_KEY, and SUPABASE_STORAGE_BUCKET are all required for cloud storage.',
+    );
+  }
+  if (supabaseUrl && !/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(supabaseUrl)) {
+    throw new Error('SUPABASE_URL must be the HTTPS project URL shown in the Supabase dashboard.');
+  }
 
   const originInput =
     overrides.frontendOrigin ??
@@ -48,6 +65,12 @@ export function createConfig(overrides = {}) {
     temporaryFilesDir,
     jwtSecret,
     setupCode,
+    databaseUrl,
+    databaseSsl: overrides.databaseSsl ?? booleanSetting(process.env.DATABASE_SSL, nodeEnv === 'production', 'DATABASE_SSL'),
+    supabaseUrl,
+    supabaseSecretKey,
+    supabaseStorageBucket,
+    cloudMode,
     jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
     cookieName: process.env.AUTH_COOKIE_NAME || 'secureplan_session',
     cookieSecure:
@@ -60,7 +83,13 @@ export function createConfig(overrides = {}) {
     staticDir: path.resolve(
       overrides.staticDir || process.env.STATIC_DIR || path.join(serverDirectory, '..', 'dist'),
     ),
-    maxPdfBytes: boundedNumber(overrides.maxPdfBytes ?? process.env.MAX_PDF_BYTES, 75 * 1024 * 1024, 1, 1024 ** 3, 'MAX_PDF_BYTES'),
+    maxPdfBytes: boundedNumber(
+      overrides.maxPdfBytes ?? process.env.MAX_PDF_BYTES,
+      (cloudMode ? 50 : 75) * 1024 * 1024,
+      1,
+      1024 ** 3,
+      'MAX_PDF_BYTES',
+    ),
     maxPhotoBytes: boundedNumber(overrides.maxPhotoBytes ?? process.env.MAX_PHOTO_BYTES, 20 * 1024 * 1024, 1, 250 * 1024 * 1024, 'MAX_PHOTO_BYTES'),
     minFreeStorageBytes: boundedNumber(
       overrides.minFreeStorageBytes ?? process.env.MIN_FREE_STORAGE_BYTES,

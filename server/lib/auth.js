@@ -81,11 +81,11 @@ export function clearAuthCookie(res, config) {
 }
 
 export function createAuthMiddleware(db, config) {
-  function resolveUserFromToken(token) {
+  async function resolveUserFromToken(token) {
     if (!token) return null;
     try {
       const payload = verifySession(token, config);
-      const user = db
+      const user = await db
         .prepare(
           `SELECT id, name, email, role, workspace_access, token_version, created_at, updated_at
              FROM users WHERE id = ? AND disabled_at IS NULL`,
@@ -98,7 +98,7 @@ export function createAuthMiddleware(db, config) {
     }
   }
 
-  function optionalAuth(req, _res, next) {
+  async function optionalAuth(req, _res, next) {
     const authorization = req.headers.authorization;
     let token;
     if (authorization !== undefined) {
@@ -108,14 +108,14 @@ export function createAuthMiddleware(db, config) {
       const cookies = parseCookies(req.headers.cookie);
       token = cookies[config.cookieName];
     }
-    req.user = resolveUserFromToken(token);
-    next();
+    req.user = await resolveUserFromToken(token);
+    return next();
   }
 
-  function requireAuth(req, _res, next) {
-    optionalAuth(req, null, () => {});
+  async function requireAuth(req, _res, next) {
+    await optionalAuth(req, null, () => {});
     if (!req.user) return next(unauthorized());
-    next();
+    return next();
   }
 
   function requireGlobalRole(minimumRole) {
@@ -133,14 +133,14 @@ export function hasRole(actual, minimum) {
   return (ROLE_RANK[actual] ?? -1) >= (ROLE_RANK[minimum] ?? Number.POSITIVE_INFINITY);
 }
 
-export function siteRole(db, user, siteId) {
+export async function siteRole(db, user, siteId) {
   if (!user) return null;
   if (user.role === 'owner' || user.role === 'admin' || user.workspace_access) return user.role;
-  return db.prepare('SELECT role FROM site_members WHERE site_id = ? AND user_id = ?').get(siteId, user.id)?.role || null;
+  return (await db.prepare('SELECT role FROM site_members WHERE site_id = ? AND user_id = ?').get(siteId, user.id))?.role || null;
 }
 
-export function assertSiteAccess(db, user, siteId, minimumRole = 'viewer') {
-  const role = siteRole(db, user, siteId);
+export async function assertSiteAccess(db, user, siteId, minimumRole = 'viewer') {
+  const role = await siteRole(db, user, siteId);
   if (!role) throw forbidden('You do not have access to this site.');
   if (!hasRole(role, minimumRole)) throw forbidden();
   return role;

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { copyStoredFile, deleteStoredFile } from './storage.js';
 
-export function cloneSurvey(db, config, sourceSurvey, target, actorId, options = {}) {
+export async function cloneSurvey(db, config, sourceSurvey, target, actorId, options = {}) {
   const now = new Date().toISOString();
   const surveyId = crypto.randomUUID();
   const createdFiles = [];
@@ -9,20 +9,20 @@ export function cloneSurvey(db, config, sourceSurvey, target, actorId, options =
 
   try {
     if (sourceSurvey.storage_key) {
-      pdfKey = copyStoredFile(sourceSurvey.storage_key, 'survey', config);
+      pdfKey = await copyStoredFile(sourceSurvey.storage_key, 'survey', config);
       createdFiles.push({ key: pdfKey, kind: 'survey' });
     }
 
-    const transaction = db.transaction(() => {
+    const transaction = db.transaction(async () => {
       const nextOrder =
-        db
+        (await db
           .prepare(
             `SELECT COALESCE(MAX(order_index), -1) + 1 AS value
                FROM surveys WHERE site_id = ? AND folder_id IS ?`,
           )
-          .get(target.siteId, target.folderId || null).value || 0;
+          .get(target.siteId, target.folderId || null)).value || 0;
 
-      db.prepare(
+      await db.prepare(
         `INSERT INTO surveys
           (id, site_id, folder_id, name, original_filename, storage_key, mime_type, size_bytes,
            rotation, order_index, version, copied_from, created_by, updated_by, created_at, updated_at)
@@ -46,7 +46,7 @@ export function cloneSurvey(db, config, sourceSurvey, target, actorId, options =
       );
 
       const profileMap = options.profileMap || new Map();
-      const elements = db.prepare('SELECT * FROM elements WHERE survey_id = ? ORDER BY z_index, created_at').all(sourceSurvey.id);
+      const elements = await db.prepare('SELECT * FROM elements WHERE survey_id = ? ORDER BY z_index, created_at').all(sourceSurvey.id);
       const insertElement = db.prepare(`
         INSERT INTO elements
           (id, survey_id, profile_id, category, type, label, x, y, width, height, rotation, color,
@@ -70,12 +70,12 @@ export function cloneSurvey(db, config, sourceSurvey, target, actorId, options =
         const elementId = crypto.randomUUID();
         let profileId = profileMap.get(element.profile_id) || element.profile_id;
         if (profileId) {
-          const accessibleProfile = db
+          const accessibleProfile = await db
             .prepare('SELECT id FROM icon_profiles WHERE id = ? AND (site_id IS NULL OR site_id = ?)')
             .get(profileId, target.siteId);
           if (!accessibleProfile) profileId = null;
         }
-        insertElement.run({
+        await insertElement.run({
           id: elementId,
           surveyId,
           profileId,
@@ -95,13 +95,13 @@ export function cloneSurvey(db, config, sourceSurvey, target, actorId, options =
           now,
         });
 
-        for (const note of db.prepare('SELECT * FROM element_notes WHERE element_id = ?').all(element.id)) {
-          insertNote.run(crypto.randomUUID(), elementId, note.body, actorId, actorId, now, now);
+        for (const note of await db.prepare('SELECT * FROM element_notes WHERE element_id = ?').all(element.id)) {
+          await insertNote.run(crypto.randomUUID(), elementId, note.body, actorId, actorId, now, now);
         }
-        for (const photo of db.prepare('SELECT * FROM element_photos WHERE element_id = ?').all(element.id)) {
-          const photoKey = copyStoredFile(photo.storage_key, 'photo', config);
+        for (const photo of await db.prepare('SELECT * FROM element_photos WHERE element_id = ?').all(element.id)) {
+          const photoKey = await copyStoredFile(photo.storage_key, 'photo', config);
           createdFiles.push({ key: photoKey, kind: 'photo' });
-          insertPhoto.run(
+          await insertPhoto.run(
             crypto.randomUUID(),
             elementId,
             photo.original_filename,
@@ -115,36 +115,36 @@ export function cloneSurvey(db, config, sourceSurvey, target, actorId, options =
         }
       }
     });
-    transaction();
+    await transaction();
     return db.prepare('SELECT * FROM surveys WHERE id = ?').get(surveyId);
   } catch (error) {
-    for (const file of createdFiles) deleteStoredFile(file.key, file.kind, config);
+    for (const file of createdFiles) await deleteStoredFile(file.key, file.kind, config);
     throw error;
   }
 }
 
-export function cloneSite(db, config, sourceSite, name, actorId) {
+export async function cloneSite(db, config, sourceSite, name, actorId) {
   const now = new Date().toISOString();
   const siteId = crypto.randomUUID();
   const profileMap = new Map();
   const folderMap = new Map();
 
-  const createBase = db.transaction(() => {
-    const orderIndex = db.prepare('SELECT COALESCE(MAX(order_index), -1) + 1 AS value FROM sites').get().value;
-    db.prepare(
+  const createBase = db.transaction(async () => {
+    const orderIndex = (await db.prepare('SELECT COALESCE(MAX(order_index), -1) + 1 AS value FROM sites').get()).value;
+    await db.prepare(
       `INSERT INTO sites
         (id, name, address, description, order_index, created_by, updated_by, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(siteId, name, sourceSite.address, sourceSite.description, orderIndex, actorId, actorId, now, now);
-    db.prepare(
+    await db.prepare(
       `INSERT INTO site_members (site_id, user_id, role, added_by, created_at, updated_at)
        VALUES (?, ?, 'admin', ?, ?, ?)`,
     ).run(siteId, actorId, actorId, now, now);
 
-    for (const profile of db.prepare('SELECT * FROM icon_profiles WHERE site_id = ? AND is_builtin = 0').all(sourceSite.id)) {
+    for (const profile of await db.prepare('SELECT * FROM icon_profiles WHERE site_id = ? AND is_builtin = 0').all(sourceSite.id)) {
       const newId = crypto.randomUUID();
       profileMap.set(profile.id, newId);
-      db.prepare(
+      await db.prepare(
         `INSERT INTO icon_profiles
           (id, site_id, name, category, description, color, components_json, icon_data, is_shared,
            is_builtin, created_by, updated_by, created_at, updated_at)
@@ -166,7 +166,7 @@ export function cloneSite(db, config, sourceSite, name, actorId) {
       );
     }
 
-    const pending = db.prepare('SELECT * FROM folders WHERE site_id = ? ORDER BY created_at, order_index').all(sourceSite.id);
+    const pending = await db.prepare('SELECT * FROM folders WHERE site_id = ? ORDER BY created_at, order_index').all(sourceSite.id);
     while (pending.length) {
       const before = pending.length;
       for (let index = pending.length - 1; index >= 0; index -= 1) {
@@ -174,7 +174,7 @@ export function cloneSite(db, config, sourceSite, name, actorId) {
         if (folder.parent_id && !folderMap.has(folder.parent_id)) continue;
         const newId = crypto.randomUUID();
         folderMap.set(folder.id, newId);
-        db.prepare(
+        await db.prepare(
           `INSERT INTO folders
             (id, site_id, parent_id, name, order_index, created_by, updated_by, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -194,12 +194,12 @@ export function cloneSite(db, config, sourceSite, name, actorId) {
       if (pending.length === before) throw new Error('The folder tree contains an invalid cycle.');
     }
   });
-  createBase();
+  await createBase();
 
   try {
-    const surveys = db.prepare('SELECT * FROM surveys WHERE site_id = ? ORDER BY created_at').all(sourceSite.id);
+    const surveys = await db.prepare('SELECT * FROM surveys WHERE site_id = ? ORDER BY created_at').all(sourceSite.id);
     for (const survey of surveys) {
-      cloneSurvey(
+      await cloneSurvey(
         db,
         config,
         survey,
@@ -214,7 +214,7 @@ export function cloneSite(db, config, sourceSite, name, actorId) {
     }
     return db.prepare('SELECT * FROM sites WHERE id = ?').get(siteId);
   } catch (error) {
-    const fileRows = db
+    const fileRows = await db
       .prepare(
         `SELECT storage_key, 'survey' AS kind FROM surveys WHERE site_id = ? AND storage_key IS NOT NULL
          UNION ALL
@@ -225,18 +225,18 @@ export function cloneSite(db, config, sourceSite, name, actorId) {
           WHERE s.site_id = ?`,
       )
       .all(siteId, siteId);
-    db.prepare('DELETE FROM sites WHERE id = ?').run(siteId);
-    for (const file of fileRows) deleteStoredFile(file.storage_key, file.kind, config);
+    await db.prepare('DELETE FROM sites WHERE id = ?').run(siteId);
+    for (const file of fileRows) await deleteStoredFile(file.storage_key, file.kind, config);
     throw error;
   }
 }
 
-export function cloneFolderTree(db, config, sourceFolder, targetParentId, name, actorId) {
+export async function cloneFolderTree(db, config, sourceFolder, targetParentId, name, actorId) {
   const now = new Date().toISOString();
   const folderMap = new Map();
   const rootId = crypto.randomUUID();
 
-  const descendants = db
+  const descendants = await db
     .prepare(
       `WITH RECURSIVE descendants AS (
          SELECT * FROM folders WHERE id = ?
@@ -246,7 +246,7 @@ export function cloneFolderTree(db, config, sourceFolder, targetParentId, name, 
     )
     .all(sourceFolder.id);
   const pending = [...descendants];
-  const insertFolders = db.transaction(() => {
+  const insertFolders = db.transaction(async () => {
     while (pending.length) {
       const before = pending.length;
       for (let index = pending.length - 1; index >= 0; index -= 1) {
@@ -255,10 +255,10 @@ export function cloneFolderTree(db, config, sourceFolder, targetParentId, name, 
         const newId = folder.id === sourceFolder.id ? rootId : crypto.randomUUID();
         folderMap.set(folder.id, newId);
         const parentId = folder.id === sourceFolder.id ? targetParentId : folderMap.get(folder.parent_id);
-        const orderIndex = db
+        const orderIndex = (await db
           .prepare('SELECT COALESCE(MAX(order_index), -1) + 1 AS value FROM folders WHERE site_id = ? AND parent_id IS ?')
-          .get(sourceFolder.site_id, parentId || null).value;
-        db.prepare(
+          .get(sourceFolder.site_id, parentId || null)).value;
+        await db.prepare(
           `INSERT INTO folders
             (id, site_id, parent_id, name, order_index, created_by, updated_by, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -278,12 +278,12 @@ export function cloneFolderTree(db, config, sourceFolder, targetParentId, name, 
       if (pending.length === before) throw new Error('The folder tree contains an invalid cycle.');
     }
   });
-  insertFolders();
+  await insertFolders();
 
   try {
     for (const folder of descendants) {
-      for (const survey of db.prepare('SELECT * FROM surveys WHERE folder_id = ?').all(folder.id)) {
-        cloneSurvey(
+      for (const survey of await db.prepare('SELECT * FROM surveys WHERE folder_id = ?').all(folder.id)) {
+        await cloneSurvey(
           db,
           config,
           survey,
@@ -294,7 +294,7 @@ export function cloneFolderTree(db, config, sourceFolder, targetParentId, name, 
     }
     return db.prepare('SELECT * FROM folders WHERE id = ?').get(rootId);
   } catch (error) {
-    db.prepare('DELETE FROM folders WHERE id = ?').run(rootId);
+    await db.prepare('DELETE FROM folders WHERE id = ?').run(rootId);
     throw error;
   }
 }

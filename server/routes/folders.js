@@ -13,55 +13,55 @@ export function createFoldersRouter({ db, config, auth, emitSiteUpdate }) {
   const router = Router();
   router.use(auth.requireAuth);
 
-  router.get('/folders', (req, res) => {
+  router.get('/folders', async (req, res) => {
     const siteId = idValue(req.query.siteId, 'siteId');
-    getSite(db, siteId);
-    assertSiteAccess(db, req.user, siteId);
-    const rows = db
+    await getSite(db, siteId);
+    await assertSiteAccess(db, req.user, siteId);
+    const rows = await db
       .prepare('SELECT * FROM folders WHERE site_id = ? ORDER BY parent_id, order_index, name COLLATE NOCASE')
       .all(siteId);
     const folders = rows.map(serializeFolder);
     res.json({ data: folders, folders, tree: makeFolderTree(folders) });
   });
 
-  router.post('/folders', (req, res) => {
+  router.post('/folders', async (req, res) => {
     const siteId = idValue(req.body?.siteId, 'siteId');
-    getSite(db, siteId);
-    assertSiteAccess(db, req.user, siteId, 'editor');
+    await getSite(db, siteId);
+    await assertSiteAccess(db, req.user, siteId, 'editor');
     const parentId = optionalNullableString(req.body?.parentId, 'parentId', 80) ?? null;
     if (parentId) {
-      const parent = getFolder(db, parentId);
+      const parent = await getFolder(db, parentId);
       if (parent.site_id !== siteId) throw badRequest('The parent folder must be in the same site.', { field: 'parentId' });
     }
     const name = stringValue(req.body?.name, 'name', { max: 140 });
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    const orderIndex = db
+    const orderIndex = (await db
       .prepare('SELECT COALESCE(MAX(order_index), -1) + 1 AS value FROM folders WHERE site_id = ? AND parent_id IS ?')
-      .get(siteId, parentId).value;
-    db.prepare(
+      .get(siteId, parentId)).value;
+    await db.prepare(
       `INSERT INTO folders
         (id, site_id, parent_id, name, order_index, created_by, updated_by, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(id, siteId, parentId, name, orderIndex, req.user.id, req.user.id, now, now);
-    logActivity(db, { siteId, actorId: req.user.id, action: 'folder.created', details: { folderId: id, name } });
-    const folder = getFolder(db, id);
+    await logActivity(db, { siteId, actorId: req.user.id, action: 'folder.created', details: { folderId: id, name } });
+    const folder = await getFolder(db, id);
     emitSiteUpdate(siteId, 'folder.created', req.user, { folder: serializeFolder(folder) });
     res.status(201).json({ data: serializeFolder(folder), folder: serializeFolder(folder) });
   });
 
-  router.patch('/folders/:folderId', (req, res) => {
-    const folder = getFolder(db, idValue(req.params.folderId, 'folderId'));
-    assertSiteAccess(db, req.user, folder.site_id, 'editor');
+  router.patch('/folders/:folderId', async (req, res) => {
+    const folder = await getFolder(db, idValue(req.params.folderId, 'folderId'));
+    await assertSiteAccess(db, req.user, folder.site_id, 'editor');
     const name = req.body?.name === undefined ? folder.name : stringValue(req.body.name, 'name', { max: 140 });
     let parentId = folder.parent_id;
     if (req.body?.parentId !== undefined) {
       parentId = optionalNullableString(req.body.parentId, 'parentId', 80);
       if (parentId === folder.id) throw badRequest('A folder cannot contain itself.', { field: 'parentId' });
       if (parentId) {
-        const parent = getFolder(db, parentId);
+        const parent = await getFolder(db, parentId);
         if (parent.site_id !== folder.site_id) throw badRequest('The parent folder must be in the same site.');
-        const isDescendant = db
+        const isDescendant = await db
           .prepare(
             `WITH RECURSIVE descendants(id) AS (
                SELECT id FROM folders WHERE parent_id = ?
@@ -77,11 +77,11 @@ export function createFoldersRouter({ db, config, auth, emitSiteUpdate }) {
         ? folder.order_index
         : numberValue(req.body.orderIndex, 'orderIndex', { integer: true, min: 0, max: 100000 });
     const now = new Date().toISOString();
-    db.prepare(
+    await db.prepare(
       'UPDATE folders SET name = ?, parent_id = ?, order_index = ?, updated_by = ?, updated_at = ? WHERE id = ?',
     ).run(name, parentId || null, orderIndex, req.user.id, now, folder.id);
-    const updated = getFolder(db, folder.id);
-    logActivity(db, {
+    const updated = await getFolder(db, folder.id);
+    await logActivity(db, {
       siteId: folder.site_id,
       actorId: req.user.id,
       action: 'folder.updated',
@@ -91,24 +91,24 @@ export function createFoldersRouter({ db, config, auth, emitSiteUpdate }) {
     res.json({ data: serializeFolder(updated), folder: serializeFolder(updated) });
   });
 
-  router.post('/folders/:folderId/move', (req, res, next) => {
+  router.post('/folders/:folderId/move', async (req, res, next) => {
     req.body = { ...req.body, parentId: req.body?.parentId ?? null };
     req.url = `/folders/${req.params.folderId}`;
     req.method = 'PATCH';
     router.handle(req, res, next);
   });
 
-  router.post('/folders/:folderId/copy', (req, res) => {
-    const folder = getFolder(db, idValue(req.params.folderId, 'folderId'));
-    assertSiteAccess(db, req.user, folder.site_id, 'editor');
+  router.post('/folders/:folderId/copy', async (req, res) => {
+    const folder = await getFolder(db, idValue(req.params.folderId, 'folderId'));
+    await assertSiteAccess(db, req.user, folder.site_id, 'editor');
     const parentId = optionalNullableString(req.body?.parentId, 'parentId', 80) ?? folder.parent_id;
     if (parentId) {
-      const parent = getFolder(db, parentId);
+      const parent = await getFolder(db, parentId);
       if (parent.site_id !== folder.site_id) throw badRequest('The destination folder must be in the same site.');
     }
     const name = stringValue(req.body?.name || `${folder.name} Copy`, 'name', { max: 140 });
-    const copied = cloneFolderTree(db, config, folder, parentId, name, req.user.id);
-    logActivity(db, {
+    const copied = await cloneFolderTree(db, config, folder, parentId, name, req.user.id);
+    await logActivity(db, {
       siteId: folder.site_id,
       actorId: req.user.id,
       action: 'folder.copied',
@@ -118,13 +118,13 @@ export function createFoldersRouter({ db, config, auth, emitSiteUpdate }) {
     res.status(201).json({ data: serializeFolder(copied), folder: serializeFolder(copied) });
   });
 
-  router.delete('/folders/:folderId', (req, res) => {
-    const folder = getFolder(db, idValue(req.params.folderId, 'folderId'));
-    assertSiteAccess(db, req.user, folder.site_id, 'editor');
+  router.delete('/folders/:folderId', async (req, res) => {
+    const folder = await getFolder(db, idValue(req.params.folderId, 'folderId'));
+    await assertSiteAccess(db, req.user, folder.site_id, 'editor');
     // The product confirmation dialog explicitly warns that contents are removed.
     // API clients can request the safer non-recursive check with ?recursive=false.
     const recursive = req.query.recursive !== 'false';
-    const counts = db
+    const counts = await db
       .prepare(
         `WITH RECURSIVE descendants(id) AS (
            SELECT id FROM folders WHERE id = ?
@@ -139,7 +139,7 @@ export function createFoldersRouter({ db, config, auth, emitSiteUpdate }) {
       throw conflict('Folder is not empty. Retry with ?recursive=true to delete its subfolders and surveys.', counts);
     }
 
-    const files = db
+    const files = await db
       .prepare(
         `WITH RECURSIVE descendants(id) AS (
            SELECT id FROM folders WHERE id = ?
@@ -154,22 +154,22 @@ export function createFoldersRouter({ db, config, auth, emitSiteUpdate }) {
           WHERE e.survey_id IN (SELECT id FROM target_surveys)`,
       )
       .all(folder.id);
-    db.transaction(() => {
-      db.prepare(
+    await db.transaction(async () => {
+      await db.prepare(
         `WITH RECURSIVE descendants(id) AS (
            SELECT id FROM folders WHERE id = ?
            UNION ALL SELECT f.id FROM folders f JOIN descendants d ON f.parent_id = d.id
          ) DELETE FROM surveys WHERE folder_id IN (SELECT id FROM descendants)`,
       ).run(folder.id);
-      db.prepare('DELETE FROM folders WHERE id = ?').run(folder.id);
-      logActivity(db, {
+      await db.prepare('DELETE FROM folders WHERE id = ?').run(folder.id);
+      await logActivity(db, {
         siteId: folder.site_id,
         actorId: req.user.id,
         action: 'folder.deleted',
         details: { folderId: folder.id, name: folder.name },
       });
     })();
-    for (const file of files) deleteStoredFile(file.storage_key, file.kind, config);
+    for (const file of files) await deleteStoredFile(file.storage_key, file.kind, config);
     emitSiteUpdate(folder.site_id, 'folder.deleted', req.user, { folderId: folder.id });
     res.json({ data: { deletedId: folder.id }, success: true });
   });

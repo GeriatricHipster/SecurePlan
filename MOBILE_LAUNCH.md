@@ -8,13 +8,13 @@ The included Render Blueprint is the simplest hosted option:
 
 1. Push the project to a GitHub repository.
 2. In Render, choose **New > Blueprint** and connect the repository.
-3. Enter a private, random `SETUP_CODE` when prompted.
+3. Enter the Supabase connection values and a private, random `SETUP_CODE` when prompted. See [SUPABASE_RENDER_SETUP.md](./SUPABASE_RENDER_SETUP.md).
 4. Deploy the Blueprint.
 5. Open the generated `https://...onrender.com` URL and create the owner account using that setup code.
 
 Render sets `RENDER_EXTERNAL_URL`; SecurePlan uses it automatically, so `APP_ORIGIN` is not needed for the generated Render URL. For a custom domain, set `APP_ORIGIN=https://your-domain.example` in Render and redeploy.
 
-The Blueprint uses a persistent disk for the SQLite database, PDFs, and photos. Render persistent disks require a paid service. Back up the disk, and do not move the service to a diskless plan unless storage has been migrated elsewhere.
+The Blueprint uses Supabase PostgreSQL and private Storage, so it works on Render's diskless Free web-service tier.
 
 ## Use in a web browser
 

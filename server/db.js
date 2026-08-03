@@ -1,7 +1,9 @@
 import Database from 'better-sqlite3';
 import crypto from 'node:crypto';
+import { createPostgresDatabase } from './lib/postgres.js';
 
 export function createDatabase(config) {
+  if (config.databaseUrl) return createPostgresDatabase(config);
   const db = new Database(config.databasePath);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
@@ -182,7 +184,26 @@ export function createDatabase(config) {
   }
 
   seedBuiltInProfiles(db);
-  return db;
+  return createAsyncSqliteAdapter(db);
+}
+
+function createAsyncSqliteAdapter(database) {
+  return {
+    prepare(sql) {
+      const statement = database.prepare(sql);
+      return {
+        get: async (...args) => statement.get(...args),
+        all: async (...args) => statement.all(...args),
+        run: async (...args) => statement.run(...args),
+      };
+    },
+    transaction(operation) {
+      // Local development and tests use SQLite. Production uses the PostgreSQL
+      // adapter above, which provides true async transactions.
+      return async (...args) => operation(...args);
+    },
+    close: async () => database.close(),
+  };
 }
 
 function seedBuiltInProfiles(db) {
@@ -247,14 +268,14 @@ function seedBuiltInProfiles(db) {
   transaction();
 }
 
-export function seedOwnerDemo(db, ownerId) {
+export async function seedOwnerDemo(db, ownerId) {
   const now = new Date().toISOString();
   const siteId = crypto.randomUUID();
   const buildingId = crypto.randomUUID();
   const floorId = crypto.randomUUID();
   const surveyId = crypto.randomUUID();
 
-  db.prepare(
+  await db.prepare(
     `INSERT INTO sites
       (id, name, address, description, order_index, created_by, updated_by, created_at, updated_at)
      VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)`,
@@ -268,21 +289,21 @@ export function seedOwnerDemo(db, ownerId) {
     now,
     now,
   );
-  db.prepare(
+  await db.prepare(
     `INSERT INTO site_members (site_id, user_id, role, added_by, created_at, updated_at)
      VALUES (?, ?, 'admin', ?, ?, ?)`,
   ).run(siteId, ownerId, ownerId, now, now);
-  db.prepare(
+  await db.prepare(
     `INSERT INTO folders
       (id, site_id, parent_id, name, order_index, created_by, updated_by, created_at, updated_at)
      VALUES (?, ?, NULL, 'Student Center', 0, ?, ?, ?, ?)`,
   ).run(buildingId, siteId, ownerId, ownerId, now, now);
-  db.prepare(
+  await db.prepare(
     `INSERT INTO folders
       (id, site_id, parent_id, name, order_index, created_by, updated_by, created_at, updated_at)
      VALUES (?, ?, ?, 'First Floor', 0, ?, ?, ?, ?)`,
   ).run(floorId, siteId, buildingId, ownerId, ownerId, now, now);
-  db.prepare(
+  await db.prepare(
     `INSERT INTO surveys
       (id, site_id, folder_id, name, original_filename, storage_key, mime_type, size_bytes,
        rotation, order_index, version, created_by, updated_by, created_at, updated_at)
@@ -292,8 +313,8 @@ export function seedOwnerDemo(db, ownerId) {
   return { siteId, buildingId, floorId, surveyId };
 }
 
-export function logActivity(db, { siteId = null, surveyId = null, elementId = null, actorId, action, details = {} }) {
-  db.prepare(
+export async function logActivity(db, { siteId = null, surveyId = null, elementId = null, actorId, action, details = {} }) {
+  await db.prepare(
     `INSERT INTO activity_log
       (id, site_id, survey_id, element_id, actor_id, action, details_json, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -309,9 +330,9 @@ export function logActivity(db, { siteId = null, surveyId = null, elementId = nu
   );
 }
 
-export function touchSurvey(db, surveyId, userId) {
+export async function touchSurvey(db, surveyId, userId) {
   const now = new Date().toISOString();
-  db.prepare(
+  await db.prepare(
     `UPDATE surveys
         SET updated_by = ?, updated_at = ?, version = version + 1
       WHERE id = ?`,

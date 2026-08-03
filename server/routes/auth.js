@@ -8,8 +8,8 @@ import { seedOwnerDemo } from '../db.js';
 export function createAuthRouter({ db, config, auth, disconnectUser }) {
   const router = Router();
 
-  router.get('/bootstrap', auth.optionalAuth, (req, res) => {
-    const userCount = db.prepare('SELECT COUNT(*) AS count FROM users').get().count;
+  router.get('/bootstrap', auth.optionalAuth, async (req, res) => {
+    const userCount = Number((await db.prepare('SELECT COUNT(*) AS count FROM users').get()).count);
     const setupCodeRequired = userCount === 0 && (Boolean(config.setupCode) || config.nodeEnv === 'production');
     res.json({
       data: {
@@ -24,7 +24,7 @@ export function createAuthRouter({ db, config, auth, disconnectUser }) {
     });
   });
 
-  router.post('/auth/setup', (req, res) => {
+  router.post('/auth/setup', async (req, res) => {
     if (config.nodeEnv === 'production' && config.setupCode.length < 16) {
       throw forbidden('Owner setup is disabled until SETUP_CODE is configured with at least 16 characters.');
     }
@@ -46,28 +46,28 @@ export function createAuthRouter({ db, config, auth, disconnectUser }) {
       updated_at: now,
     };
 
-    const setup = db.transaction(() => {
-      if (db.prepare('SELECT COUNT(*) AS count FROM users').get().count > 0) {
+    const setup = await db.transaction(async () => {
+      if (Number((await db.prepare('SELECT COUNT(*) AS count FROM users').get()).count) > 0) {
         throw conflict('Owner setup has already been completed.');
       }
-      db.prepare(
+      await db.prepare(
         `INSERT INTO users
           (id, name, email, password_hash, role, workspace_access, token_version, created_at, updated_at)
          VALUES (?, ?, ?, ?, 'owner', 1, 0, ?, ?)`,
       ).run(user.id, name, email, hashPassword(password), now, now);
-      seedOwnerDemo(db, user.id);
+      await seedOwnerDemo(db, user.id);
     });
-    setup();
+    await setup();
 
     const sessionToken = signSession(user, config);
     setAuthCookie(res, sessionToken, config);
     sendAuthResponse(req, res, 201, user, sessionToken);
   });
 
-  router.post('/auth/login', (req, res) => {
+  router.post('/auth/login', async (req, res) => {
     const email = emailValue(req.body?.email);
     const password = stringValue(req.body?.password, 'password', { min: 1, max: 200, trim: false });
-    const user = db.prepare('SELECT * FROM users WHERE email = ? AND disabled_at IS NULL').get(email);
+    const user = await db.prepare('SELECT * FROM users WHERE email = ? AND disabled_at IS NULL').get(email);
     if (!user || !verifyPassword(password, user.password_hash)) {
       throw unauthorized('Email or password is incorrect.');
     }
@@ -76,7 +76,7 @@ export function createAuthRouter({ db, config, auth, disconnectUser }) {
     sendAuthResponse(req, res, 200, user, sessionToken);
   });
 
-  router.post('/auth/register', (req, res) => {
+  router.post('/auth/register', async (req, res) => {
     const name = stringValue(req.body?.name, 'name', { min: 2, max: 100 });
     const email = emailValue(req.body?.email);
     const password = passwordValue(req.body?.password);
@@ -85,8 +85,8 @@ export function createAuthRouter({ db, config, auth, disconnectUser }) {
     let userId = crypto.randomUUID();
     let user;
 
-    const register = db.transaction(() => {
-      const invitation = db.prepare('SELECT * FROM invitations WHERE code_hash = ?').get(hashInviteCode(inviteCode));
+    const register = await db.transaction(async () => {
+      const invitation = await db.prepare('SELECT * FROM invitations WHERE code_hash = ?').get(hashInviteCode(inviteCode));
       const expired = invitation?.expires_at && Date.parse(invitation.expires_at) <= Date.now();
       if (!invitation || invitation.revoked_at || expired || invitation.use_count >= invitation.max_uses) {
         throw forbidden('This invitation code is invalid, expired, revoked, or has already been used.');
@@ -95,7 +95,7 @@ export function createAuthRouter({ db, config, auth, disconnectUser }) {
         throw forbidden('This invitation was issued to a different email address.');
       }
 
-      const existing = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+      const existing = await db.prepare('SELECT * FROM users WHERE email = ?').get(email);
       if (existing && !existing.disabled_at) {
         throw conflict('An account already exists for this email address.', { field: 'email' });
       }
@@ -106,38 +106,38 @@ export function createAuthRouter({ db, config, auth, disconnectUser }) {
       const globalRole = invitation.site_id ? 'viewer' : invitation.role;
       if (existing?.disabled_at) {
         userId = existing.id;
-        db.prepare('DELETE FROM site_members WHERE user_id = ?').run(userId);
-        db.prepare(
+        await db.prepare('DELETE FROM site_members WHERE user_id = ?').run(userId);
+        await db.prepare(
           `UPDATE users
               SET name = ?, password_hash = ?, role = ?, workspace_access = ?,
                   disabled_at = NULL, token_version = token_version + 1, updated_at = ?
             WHERE id = ?`,
         ).run(name, hashPassword(password), globalRole, invitation.site_id ? 0 : 1, now, userId);
       } else {
-        db.prepare(
+        await db.prepare(
           `INSERT INTO users
             (id, name, email, password_hash, role, workspace_access, token_version, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
         ).run(userId, name, email, hashPassword(password), globalRole, invitation.site_id ? 0 : 1, now, now);
       }
       if (invitation.site_id) {
-        db.prepare(
+        await db.prepare(
           `INSERT INTO site_members (site_id, user_id, role, added_by, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?)`,
         ).run(invitation.site_id, userId, invitation.role, invitation.created_by, now, now);
       }
-      db.prepare('UPDATE invitations SET use_count = use_count + 1 WHERE id = ?').run(invitation.id);
-      user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+      await db.prepare('UPDATE invitations SET use_count = use_count + 1 WHERE id = ?').run(invitation.id);
+      user = await db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
     });
-    register();
+    await register();
 
     const sessionToken = signSession(user, config);
     setAuthCookie(res, sessionToken, config);
     sendAuthResponse(req, res, 201, user, sessionToken);
   });
 
-  router.get('/auth/me', auth.requireAuth, (req, res) => {
-    const sites = db
+  router.get('/auth/me', auth.requireAuth, async (req, res) => {
+    const sites = await db
       .prepare(
         `SELECT s.id, s.name, s.updated_at,
                 CASE WHEN ? IN ('owner','admin') OR ? = 1 THEN ? ELSE sm.role END AS role
@@ -157,8 +157,8 @@ export function createAuthRouter({ db, config, auth, disconnectUser }) {
     res.json({ data: { user: publicUser(req.user), sites }, user: publicUser(req.user) });
   });
 
-  router.post('/auth/logout', auth.requireAuth, (req, res) => {
-    db.prepare('UPDATE users SET token_version = token_version + 1, updated_at = ? WHERE id = ?').run(
+  router.post('/auth/logout', auth.requireAuth, async (req, res) => {
+    await db.prepare('UPDATE users SET token_version = token_version + 1, updated_at = ? WHERE id = ?').run(
       new Date().toISOString(),
       req.user.id,
     );

@@ -2,7 +2,7 @@
 
 SecurePlan Surveyor is a responsive physical-security survey application for laying out systems on PDF floor plans. One hosted HTTPS address works in desktop and mobile browsers and can be installed to an iPhone, iPad, or Android Home Screen. Capacitor iOS and Android source projects are also included for native development.
 
-For the quickest device launch, deploy the web app first and use it as an installable Progressive Web App (PWA). See [MOBILE_LAUNCH.md](./MOBILE_LAUNCH.md) for exact web, iPhone/iPad, Android, and native-project instructions.
+For the quickest device launch, deploy the web app first and use it as an installable Progressive Web App (PWA). See [SUPABASE_RENDER_SETUP.md](./SUPABASE_RENDER_SETUP.md) for the free cloud launch and [MOBILE_LAUNCH.md](./MOBILE_LAUNCH.md) for device instructions.
 
 ## What is included
 
@@ -47,19 +47,19 @@ JWT_SECRET="replace-with-a-long-random-secret" SETUP_CODE="private-first-owner-c
 
 The server listens on `PORT` (default `3000`) and serves both the API and built web app. `/api/health` is available for health checks. Keep `COOKIE_SECURE=true` behind HTTPS and configure `TRUST_PROXY` for the reverse proxy.
 
-### Render Blueprint
+### Render Free + Supabase Blueprint
 
-The included `render.yaml` creates one HTTPS web service with a persistent disk for SQLite, uploaded PDFs, and photos.
+The included `render.yaml` creates one free HTTPS web service. Supabase PostgreSQL stores application records and a private Supabase Storage bucket stores PDFs and photos, so Render does not need a paid disk.
 
 1. Push this project to a GitHub repository.
 2. In Render, create a new **Blueprint** and connect the repository.
-3. Enter a private `SETUP_CODE` when Render prompts for it.
+3. Enter the requested Supabase values and a private `SETUP_CODE` when Render prompts for them.
 4. Deploy, then open the generated `https://...onrender.com` address.
 5. Use the same address in desktop browsers and on iPhone, iPad, and Android.
 
 Render supplies `RENDER_EXTERNAL_URL`, and SecurePlan uses it automatically when `APP_ORIGIN` is not set. You do not need to add `APP_ORIGIN` for Render's generated URL. If you later attach a custom domain, set `APP_ORIGIN` to that custom HTTPS origin and redeploy.
 
-The Blueprint also allows the native Capacitor origins. Persistent disks require a paid Render service; do not switch to a Free instance unless the database and uploads are first moved to managed external storage.
+Follow [SUPABASE_RENDER_SETUP.md](./SUPABASE_RENDER_SETUP.md) for the exact bucket, connection, secret, deployment, and verification steps. The Blueprint also allows the native Capacitor origins.
 
 ### Docker
 
@@ -95,9 +95,9 @@ Passwords are hashed on the server. Web authentication uses an HTTP-only cookie.
 
 ## Storage and deployment notes
 
-Photos and PDFs are uploaded to authenticated server storage; the application does not keep them in browser local storage or the mobile app's permanent device storage. For this single-instance MVP, SQLite and uploads share `DATA_DIR`. Back up that directory regularly.
+Photos and PDFs are uploaded to authenticated storage; the application does not keep them in browser local storage or the mobile app's permanent device storage. Production uses Supabase PostgreSQL and a private Storage bucket. Local development defaults to SQLite and files under `DATA_DIR` so it works without cloud credentials.
 
-Before running multiple server instances, migrate the database to Postgres and uploads to S3-compatible object storage, then use a shared Socket.IO adapter.
+Run one Render instance for live editing. A multi-instance deployment would additionally require a shared Socket.IO adapter.
 
 For this release, use one floor-plan page per survey. If a PDF contains several floors, split it into one PDF per floor so placed elements remain unambiguous.
 

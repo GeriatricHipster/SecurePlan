@@ -17,21 +17,21 @@ export function createProfilesRouter({ db, auth, emitSiteUpdate }) {
   const router = Router();
   router.use(auth.requireAuth);
 
-  router.get('/profiles', (req, res) => {
+  router.get('/profiles', async (req, res) => {
     const siteId = optionalNullableString(req.query.siteId, 'siteId', 80);
     if (siteId) {
-      getSite(db, siteId);
-      assertSiteAccess(db, req.user, siteId);
+      await getSite(db, siteId);
+      await assertSiteAccess(db, req.user, siteId);
     }
     const rows = siteId
-      ? db
+      ? await db
           .prepare(
             `SELECT * FROM icon_profiles
               WHERE is_builtin = 1 OR site_id IS NULL OR site_id = ?
               ORDER BY is_builtin DESC, category, name COLLATE NOCASE`,
           )
           .all(siteId)
-      : db
+      : await db
           .prepare(
             `SELECT * FROM icon_profiles
               WHERE is_builtin = 1 OR (site_id IS NULL AND (is_shared = 1 OR created_by = ?))
@@ -42,18 +42,18 @@ export function createProfilesRouter({ db, auth, emitSiteUpdate }) {
     res.json({ data: profiles, profiles });
   });
 
-  router.post('/profiles', (req, res) => {
+  router.post('/profiles', async (req, res) => {
     const siteId = optionalNullableString(req.body?.siteId, 'siteId', 80) ?? null;
     if (siteId) {
-      getSite(db, siteId);
-      assertSiteAccess(db, req.user, siteId, 'editor');
+      await getSite(db, siteId);
+      await assertSiteAccess(db, req.user, siteId, 'editor');
     } else if (!req.user.workspace_access || !hasRole(req.user.role, 'editor')) {
       throw forbidden('A workspace editor or administrator is required to create workspace profiles.');
     }
     const values = validateProfile(req.body, false);
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    db.prepare(
+    await db.prepare(
       `INSERT INTO icon_profiles
         (id, site_id, name, category, description, color, components_json, icon_data, is_shared,
          is_builtin, created_by, updated_by, created_at, updated_at)
@@ -73,15 +73,15 @@ export function createProfilesRouter({ db, auth, emitSiteUpdate }) {
       now,
       now,
     );
-    const profile = serializeProfile(getProfile(db, id));
+    const profile = serializeProfile(await getProfile(db, id));
     if (siteId) emitSiteUpdate(siteId, 'profile.created', req.user, { profile });
     res.status(201).json({ data: profile, profile });
   });
 
-  router.patch('/profiles/:profileId', (req, res) => {
-    const profile = getProfile(db, idValue(req.params.profileId, 'profileId'));
+  router.patch('/profiles/:profileId', async (req, res) => {
+    const profile = await getProfile(db, idValue(req.params.profileId, 'profileId'));
     if (profile.is_builtin) throw forbidden('Built-in profiles cannot be changed.');
-    if (profile.site_id) assertSiteAccess(db, req.user, profile.site_id, 'editor');
+    if (profile.site_id) await assertSiteAccess(db, req.user, profile.site_id, 'editor');
     else if (profile.created_by !== req.user.id && !hasRole(req.user.role, 'manager')) throw forbidden();
     const values = validateProfile(req.body, true);
     const merged = {
@@ -94,7 +94,7 @@ export function createProfilesRouter({ db, auth, emitSiteUpdate }) {
       isShared: values.isShared === undefined ? Boolean(profile.is_shared) : values.isShared,
     };
     const now = new Date().toISOString();
-    db.prepare(
+    await db.prepare(
       `UPDATE icon_profiles
           SET name = ?, category = ?, description = ?, color = ?, components_json = ?, icon_data = ?,
               is_shared = ?, updated_by = ?, updated_at = ?
@@ -111,17 +111,17 @@ export function createProfilesRouter({ db, auth, emitSiteUpdate }) {
       now,
       profile.id,
     );
-    const updated = serializeProfile(getProfile(db, profile.id));
+    const updated = serializeProfile(await getProfile(db, profile.id));
     if (profile.site_id) emitSiteUpdate(profile.site_id, 'profile.updated', req.user, { profile: updated });
     res.json({ data: updated, profile: updated });
   });
 
-  router.delete('/profiles/:profileId', (req, res) => {
-    const profile = getProfile(db, idValue(req.params.profileId, 'profileId'));
+  router.delete('/profiles/:profileId', async (req, res) => {
+    const profile = await getProfile(db, idValue(req.params.profileId, 'profileId'));
     if (profile.is_builtin) throw forbidden('Built-in profiles cannot be deleted.');
-    if (profile.site_id) assertSiteAccess(db, req.user, profile.site_id, 'editor');
+    if (profile.site_id) await assertSiteAccess(db, req.user, profile.site_id, 'editor');
     else if (profile.created_by !== req.user.id && !hasRole(req.user.role, 'manager')) throw forbidden();
-    db.prepare('DELETE FROM icon_profiles WHERE id = ?').run(profile.id);
+    await db.prepare('DELETE FROM icon_profiles WHERE id = ?').run(profile.id);
     if (profile.site_id) emitSiteUpdate(profile.site_id, 'profile.deleted', req.user, { profileId: profile.id });
     res.json({ data: { deletedId: profile.id }, success: true });
   });

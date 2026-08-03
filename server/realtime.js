@@ -12,7 +12,7 @@ export function createRealtimeServer(httpServer, { db, config, auth }) {
   });
   const presence = new Map();
 
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     const handshakeToken = socket.handshake.auth?.token;
     let token;
     if (handshakeToken !== undefined) {
@@ -21,7 +21,7 @@ export function createRealtimeServer(httpServer, { db, config, auth }) {
       const cookies = parseCookies(socket.handshake.headers.cookie);
       token = cookies[config.cookieName];
     }
-    const user = auth.resolveUserFromToken(token);
+    const user = await auth.resolveUserFromToken(token);
     if (!user) return next(new Error('Authentication required'));
     socket.data.user = user;
     socket.data.surveys = new Set();
@@ -30,12 +30,12 @@ export function createRealtimeServer(httpServer, { db, config, auth }) {
 
   io.on('connection', (socket) => {
     socket.join(userRoom(socket.data.user.id));
-    socket.on('survey:join', (input, acknowledge = () => {}) => {
+    socket.on('survey:join', async (input, acknowledge = () => {}) => {
       try {
         const surveyId = typeof input === 'string' ? input : input?.surveyId;
         if (typeof surveyId !== 'string' || surveyId.length > 80) throw new Error('A valid surveyId is required.');
-        const survey = getSurvey(db, surveyId);
-        assertSiteAccess(db, socket.data.user, survey.site_id);
+        const survey = await getSurvey(db, surveyId);
+        await assertSiteAccess(db, socket.data.user, survey.site_id);
         const room = surveyRoom(survey.id);
         socket.join(room);
         socket.data.surveys.add(survey.id);
@@ -120,11 +120,11 @@ export function createRealtimeServer(httpServer, { db, config, auth }) {
 
   // Site rooms are useful for folder/survey lists. Authorization is checked before joining.
   io.on('connection', (socket) => {
-    socket.on('site:join', (input, acknowledge = () => {}) => {
+    socket.on('site:join', async (input, acknowledge = () => {}) => {
       try {
         const siteId = typeof input === 'string' ? input : input?.siteId;
         if (typeof siteId !== 'string' || siteId.length > 80) throw new Error('A valid siteId is required.');
-        assertSiteAccess(db, socket.data.user, siteId);
+        await assertSiteAccess(db, socket.data.user, siteId);
         socket.join(siteRoom(siteId));
         acknowledge({ ok: true, siteId });
       } catch (error) {
