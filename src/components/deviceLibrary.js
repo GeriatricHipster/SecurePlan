@@ -1,3 +1,5 @@
+import { REPORT_ICON_DATA } from './reportIcons.js';
+
 export const DEVICE_CATEGORIES = [
   {
     id: 'access_control',
@@ -5,10 +7,19 @@ export const DEVICE_CATEGORIES = [
     short: 'AC',
     color: '#b4232d',
     items: [
-      { type: 'card_reader', label: 'Card Reader', symbol: 'CR' },
-      { type: 'door_position', label: 'Door Position Switch', symbol: 'DPS' },
-      { type: 'request_to_exit', label: 'Request to Exit', symbol: 'REX' },
-      { type: 'door_lock', label: 'Door Lock', symbol: 'DL' },
+      { type: 'automatic_door_operator', label: 'Automatic Door Operator', symbol: 'ADO', reportIcon: REPORT_ICON_DATA.automatic_door_operator },
+      { type: 'biometric_reader', label: 'Biometric Reader', symbol: 'BIO', reportIcon: REPORT_ICON_DATA.biometric_reader },
+      { type: 'card_reader', label: 'Card Reader', symbol: 'CR', reportIcon: REPORT_ICON_DATA.card_reader },
+      { type: 'door_position', label: 'Door Position Switch', symbol: 'DPS', reportIcon: REPORT_ICON_DATA.door_position },
+      { type: 'double_door', label: 'Double Door', symbol: 'DD', reportIcon: REPORT_ICON_DATA.double_door },
+      { type: 'electric_exit_device', label: 'Electric Exit Device', symbol: 'EED', reportIcon: REPORT_ICON_DATA.electric_exit_device },
+      { type: 'electric_lockset', label: 'Electric Lockset', symbol: 'ELOK', reportIcon: REPORT_ICON_DATA.electric_lockset },
+      { type: 'electric_strike', label: 'Electric Strike', symbol: 'ES', reportIcon: REPORT_ICON_DATA.electric_strike },
+      { type: 'handicap_push_button', label: 'Handicap Push Button', symbol: 'ADA', reportIcon: REPORT_ICON_DATA.handicap_push_button },
+      { type: 'network_patch_panel', label: 'Network Patch Panel', symbol: 'PP', reportIcon: REPORT_ICON_DATA.network_patch_panel },
+      { type: 'network_switch', label: 'Network Switch', symbol: 'SW', reportIcon: REPORT_ICON_DATA.network_switch },
+      { type: 'request_to_exit', label: 'Request to Exit', symbol: 'REX', reportIcon: REPORT_ICON_DATA.request_to_exit },
+      { type: 'single_door', label: 'Single Door', symbol: 'SD', reportIcon: REPORT_ICON_DATA.single_door },
       { type: 'access_panel', label: 'Access Control Panel', symbol: 'ACP' },
       { type: 'power_supply', label: 'Power Supply', symbol: 'PS' },
     ],

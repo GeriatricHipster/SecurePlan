@@ -7,7 +7,7 @@ For the quickest device launch, deploy the web app first and use it as an instal
 ## What is included
 
 - Sites, folders, surveys, and batch PDF floor-plan uploads with per-survey names and optional descriptions
-- Expandable Access Control, CCTV, Intrusion, Doors, and Custom libraries
+- Expandable Access Control, CCTV, Intrusion, Doors, and Custom libraries, including the supplied 13-symbol Access Control field set
 - Original blueprint-style door/opening symbols and automatic, editable camera field-of-view cones
 - Custom multi-component profiles, including a seeded **Full Door** profile
 - Place, move, resize, rotate, recolor, copy, and delete survey elements

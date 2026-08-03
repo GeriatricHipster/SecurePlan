@@ -2,6 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DEVICE_CATEGORIES, defaultMetadataForDevice, isCameraType } from '../../src/components/deviceLibrary.js';
 
+test('Access Control includes every icon supplied in the elements report', () => {
+  const access = DEVICE_CATEGORIES.find((category) => category.id === 'access_control');
+  const expected = ['automatic_door_operator', 'biometric_reader', 'card_reader', 'door_position', 'double_door', 'electric_exit_device', 'electric_lockset', 'electric_strike', 'handicap_push_button', 'network_patch_panel', 'network_switch', 'request_to_exit', 'single_door'];
+  for (const type of expected) {
+    const item = access.items.find((candidate) => candidate.type === type);
+    assert.ok(item, `missing ${type}`);
+    assert.match(item.reportIcon, /^data:image\/png;base64,/);
+  }
+});
+
 test('door library contains the requested original blueprint opening symbols', () => {
   const doors = DEVICE_CATEGORIES.find((category) => category.id === 'doors');
   const types = new Set(doors.items.map((item) => item.type));

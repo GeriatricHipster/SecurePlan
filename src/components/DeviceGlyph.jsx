@@ -21,7 +21,8 @@ const CAMERA_PATHS = {
   lpr_camera: <><path d="M3 8h13l5 4-5 4H3z" /><rect x="6" y="10" width="8" height="4" /></>,
 };
 
-export default function DeviceGlyph({ type, symbol, label }) {
+export default function DeviceGlyph({ type, symbol, label, iconSrc }) {
+  if (iconSrc) return <img className="device-glyph-image" src={iconSrc} alt="" draggable="false" aria-hidden="true" />;
   const paths = DOOR_PATHS[type] || CAMERA_PATHS[type];
   if (!paths) return <span>{symbol || elementSymbol({ type, label, metadata: { symbol } })}</span>;
   return <svg className="device-glyph" viewBox="0 0 24 24" fill="none" aria-hidden="true">{paths}</svg>;

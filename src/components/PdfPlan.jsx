@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as pdfjs from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { api } from '../api.js';
-import { elementColor, elementSymbol, isCameraType } from './deviceLibrary.js';
+import { elementColor, elementSymbol, isCameraType, itemFor } from './deviceLibrary.js';
 import DeviceGlyph from './DeviceGlyph.jsx';
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -105,7 +105,7 @@ function DeviceElement({ element, orientation, selected, onPointerDown, onSelect
       aria-label={`${element.label || element.type}${selected ? ', selected' : ''}`}
       aria-pressed={selected}
     >
-      <DeviceGlyph type={element.type} symbol={elementSymbol(element)} label={element.label} />
+      <DeviceGlyph type={element.type} symbol={elementSymbol(element)} label={element.label} iconSrc={itemFor(element.category, element.type)?.reportIcon} />
       {(Number(element.noteCount ?? element.note_count ?? 0) + Number(element.photoCount ?? element.photo_count ?? 0)) > 0 && <small aria-hidden="true">{Number(element.noteCount ?? element.note_count ?? 0) + Number(element.photoCount ?? element.photo_count ?? 0)}</small>}
     </button>
   );

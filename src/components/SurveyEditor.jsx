@@ -75,7 +75,7 @@ function LibraryPanel({ activeTool, profiles, visibleLayers, canEdit, onTool, on
             <div className="component-grid">
               {category.items.map((item) => {
                 const active = activeTool.kind === 'device' && activeTool.category === category.id && activeTool.type === item.type;
-                return <button type="button" key={item.type} className={active ? 'active' : ''} aria-pressed={active} disabled={!canEdit} onClick={() => onTool({ kind: 'device', category: category.id, color: category.color, ...item })}><span className="library-symbol" style={{ '--symbol-color': category.color }}><DeviceGlyph type={item.type} symbol={item.symbol} label={item.label} /></span><span>{item.label}</span></button>;
+                return <button type="button" key={item.type} className={active ? 'active' : ''} aria-pressed={active} disabled={!canEdit} onClick={() => onTool({ kind: 'device', category: category.id, color: category.color, ...item })}><span className="library-symbol" style={{ '--symbol-color': category.color }}><DeviceGlyph type={item.type} symbol={item.symbol} label={item.label} iconSrc={item.reportIcon} /></span><span>{item.label}</span></button>;
               })}
             </div>
           </details>
@@ -158,7 +158,7 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
       <div className="editor-panel__heading"><div><p className="eyebrow">Selected element</p><h2>{element.label}</h2></div><button type="button" className="icon-button mobile-only" onClick={onClose} aria-label="Close properties">×</button></div>
       <div className="inspector-scroll">
         <section className="inspector-section">
-          <div className="element-identity"><span className="library-symbol" style={{ '--symbol-color': form.color }}>{elementSymbol(element)}</span><div><strong>{categoryFor(element.category)?.name || (element.category === 'markup' ? 'Markup' : 'Custom')}</strong><span>{itemFor(element.category, element.type)?.label || element.type.replaceAll('_', ' ')}</span></div></div>
+          <div className="element-identity"><span className="library-symbol" style={{ '--symbol-color': form.color }}><DeviceGlyph type={element.type} symbol={elementSymbol(element)} label={element.label} iconSrc={itemFor(element.category, element.type)?.reportIcon} /></span><div><strong>{categoryFor(element.category)?.name || (element.category === 'markup' ? 'Markup' : 'Custom')}</strong><span>{itemFor(element.category, element.type)?.label || element.type.replaceAll('_', ' ')}</span></div></div>
           <Field label="Element label"><input value={form.label} disabled={!canEdit} onChange={(e) => setForm({ ...form, label: e.target.value })} onBlur={() => form.label !== element.label && onPatch({ label: form.label })} /></Field>
           <div className="form-grid form-grid--two">
             <fieldset className="field color-field"><legend className="field__label">Icon color</legend><div className="color-control"><input type="color" aria-label="Choose icon color" value={form.color} disabled={!canEdit} onChange={(e) => setForm({ ...form, color: e.target.value })} onBlur={() => form.color !== elementColor(element) && onPatch({ color: form.color })} /><input aria-label="Icon color hex value" value={form.color} disabled={!canEdit} pattern="#[0-9a-fA-F]{6}" onChange={(e) => setForm({ ...form, color: e.target.value })} onBlur={() => /^#[0-9a-f]{6}$/i.test(form.color) && onPatch({ color: form.color })} /></div></fieldset>
