@@ -114,10 +114,31 @@ export function isCameraType(type) {
   return ['fixed_camera', 'dome_camera', 'ptz_camera', 'multisensor_camera', 'lpr_camera'].includes(type);
 }
 
+export function cameraFieldsFor(element) {
+  const metadata = element?.metadata || {};
+  const color = elementColor(element || {});
+  if (element?.type === 'multisensor_camera') {
+    const supplied = Array.isArray(metadata.fovs) ? metadata.fovs.slice(0, 4) : [];
+    return [0, 1, 2, 3].map((index) => ({
+      id: supplied[index]?.id || `fov-${index + 1}`,
+      rotation: Number(supplied[index]?.rotation ?? index * 90),
+      color: supplied[index]?.color || color,
+      length: Number(supplied[index]?.length ?? 0.22),
+      spread: Number(supplied[index]?.spread ?? 60),
+    }));
+  }
+  return [{ id: 'primary', rotation: Number(metadata.fovRotation || 0), color: metadata.fovColor || color, length: Number(metadata.fovLength ?? 0.22), spread: Number(metadata.fovSpread ?? 60) }];
+}
+
 export function defaultMetadataForDevice(type, symbol, color) {
+  const multisensorFovs = type === 'multisensor_camera' ? {
+    fovs: [0, 90, 180, 270].map((rotation, index) => ({
+      id: `fov-${index + 1}`, rotation, color, length: 0.22, spread: 60,
+    })),
+  } : {};
   return {
     symbol,
     size: 42,
-    ...(isCameraType(type) ? { fovColor: color, fovLength: 0.22, fovSpread: 60 } : {}),
+    ...(isCameraType(type) ? { fovColor: color, fovLength: 0.22, fovSpread: 60, fovRotation: 0, ...multisensorFovs } : {}),
   };
 }

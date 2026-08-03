@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DEVICE_CATEGORIES, defaultMetadataForDevice, isCameraType } from '../../src/components/deviceLibrary.js';
+import { DEVICE_CATEGORIES, cameraFieldsFor, defaultMetadataForDevice, isCameraType } from '../../src/components/deviceLibrary.js';
 
 test('Access Control includes every icon supplied in the elements report', () => {
   const access = DEVICE_CATEGORIES.find((category) => category.id === 'access_control');
@@ -24,9 +24,23 @@ test('door library contains the requested original blueprint opening symbols', (
 test('every plotted camera receives a manipulable field-of-view cone by default', () => {
   for (const type of ['fixed_camera', 'dome_camera', 'ptz_camera', 'multisensor_camera', 'lpr_camera']) {
     assert.equal(isCameraType(type), true);
-    assert.deepEqual(defaultMetadataForDevice(type, 'CAM', '#1769aa'), {
-      symbol: 'CAM', size: 42, fovColor: '#1769aa', fovLength: 0.22, fovSpread: 60,
-    });
+    const metadata = defaultMetadataForDevice(type, 'CAM', '#1769aa');
+    assert.equal(metadata.fovRotation, 0);
+    assert.equal(metadata.fovColor, '#1769aa');
+    assert.equal(metadata.fovLength, 0.22);
+    assert.equal(metadata.fovSpread, 60);
+    if (type === 'multisensor_camera') {
+      assert.deepEqual(metadata.fovs.map((fov) => fov.rotation), [0, 90, 180, 270]);
+      assert.equal(metadata.fovs.every((fov) => fov.color === '#1769aa'), true);
+    }
   }
   assert.deepEqual(defaultMetadataForDevice('card_reader', 'CR', '#b4232d'), { symbol: 'CR', size: 42 });
+});
+
+test('legacy or incomplete multisensor metadata safely expands to four independent views', () => {
+  const fields = cameraFieldsFor({ type: 'multisensor_camera', color: '#1769aa', metadata: { fovs: [{ rotation: 35, color: '#ff0000' }] } });
+  assert.equal(fields.length, 4);
+  assert.deepEqual(fields.map((field) => field.rotation), [35, 90, 180, 270]);
+  assert.equal(fields[0].color, '#ff0000');
+  assert.equal(fields.slice(1).every((field) => field.color === '#1769aa'), true);
 });
