@@ -507,6 +507,11 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify 
     if (commit) api.updateElement(id, { x, y }).then(touch).catch((error) => { notify(error.message); reloadElements(); });
   };
 
+  const resizeElement = (id, values, commit) => {
+    setElements((current) => current.map((element) => element.id === id ? normalizeElement({ ...element, ...values }) : element));
+    if (commit) api.updateElement(id, values).then((updated) => { setElements((current) => current.map((element) => element.id === id ? normalizeElement({ ...element, ...updated }) : element)); touch(); }).catch((error) => { notify(error.message); reloadElements(); });
+  };
+
   const patchSelected = async (values) => {
     if (!selected) return;
     const previous = selected;
@@ -609,7 +614,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify 
             <div className="page-controls"><button type="button" className="icon-button" aria-label="Previous PDF page" disabled={pageInfo.page <= 1} onClick={() => setPageInfo((current) => ({ ...current, page: current.page - 1 }))}>‹</button><span>Page {pageInfo.page} of {pageInfo.pages}</span><button type="button" className="icon-button" aria-label="Next PDF page" disabled={pageInfo.page >= pageInfo.pages} onClick={() => setPageInfo((current) => ({ ...current, page: current.page + 1 }))}>›</button></div>
             <div className="zoom-controls"><button type="button" className="icon-button" aria-label="Zoom out" onClick={() => setZoom((value) => Math.max(0.35, Number((value - 0.1).toFixed(2))))}>−</button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button type="button" className="icon-button" aria-label="Zoom in" onClick={() => setZoom((value) => Math.min(2.5, Number((value + 0.1).toFixed(2))))}>＋</button><button type="button" className="button button--ghost fit-button" onClick={() => setZoom(0.85)}>Fit</button></div>
           </div>
-          <PdfPlan survey={survey} orientation={orientation} pageNumber={pageInfo.page} onPageInfo={setPageInfo} zoom={zoom} onZoom={setZoom} elements={elements} visibleLayers={visibleLayers} selectedId={selectedId} activeTool={activeTool} canEdit={canEdit} onPlace={place} onDropComponent={dropComponent} onDraw={draw} onPatchElement={patchElement} onSelect={(id) => { setSelectedId(id); if (id && window.innerWidth < 900) setMobilePanel('inspector'); }} onMove={move} onDeleteSelected={() => selected && setModal({ type: 'delete-element' })} notify={notify} />
+          <PdfPlan survey={survey} orientation={orientation} pageNumber={pageInfo.page} onPageInfo={setPageInfo} zoom={zoom} onZoom={setZoom} elements={elements} visibleLayers={visibleLayers} selectedId={selectedId} activeTool={activeTool} canEdit={canEdit} onPlace={place} onDropComponent={dropComponent} onDraw={draw} onPatchElement={patchElement} onResizeElement={resizeElement} onSelect={(id) => { setSelectedId(id); if (id && window.innerWidth < 900) setMobilePanel('inspector'); }} onMove={move} onDeleteSelected={() => selected && setModal({ type: 'delete-element' })} notify={notify} />
         </section>
 
         <div className={`mobile-editor-drawer mobile-editor-drawer--right ${mobilePanel === 'inspector' ? 'open' : ''}`}><InspectorPanel element={selected} notes={notes} notesLoading={notesLoading} canEdit={canEdit} canAnnotate={canAnnotate} onPatch={patchSelected} onDuplicate={duplicateSelected} onDelete={() => setModal({ type: 'delete-element' })} onAddNote={addNote} onAddPhoto={addPhoto} photoBusy={photoBusy} onClose={() => setMobilePanel(null)} /></div>
