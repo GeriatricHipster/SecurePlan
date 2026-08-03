@@ -55,6 +55,7 @@ function SurveyCard({ survey, canEdit, onOpen, onAction }) {
         </span>
         <span className="survey-card__body">
           <strong>{survey.name}</strong>
+          {survey.description && <span className="survey-card__description">{survey.description}</span>}
           <span>{deviceCount} plotted element{deviceCount === 1 ? '' : 's'} · {survey.rotation ?? survey.orientation ?? 0}°</span>
           <span className="survey-card__edited"><span className="mini-avatar" aria-hidden="true">{initials(editor)}</span> {editor} · {formatWhen(survey.updatedAt || survey.updated_at)}</span>
         </span>
@@ -62,7 +63,7 @@ function SurveyCard({ survey, canEdit, onOpen, onAction }) {
       {canEdit && (
         <div className="survey-card__menu">
           <Menu label={`Actions for ${survey.name}`}>
-            <MenuButton onClick={() => onAction('survey-edit', { survey })}>Rename</MenuButton>
+            <MenuButton onClick={() => onAction('survey-edit', { survey })}>Edit details</MenuButton>
             <MenuButton onClick={() => onAction('survey-copy', { survey })}>Make a copy</MenuButton>
             <MenuButton onClick={() => onAction('survey-move', { survey })}>Move to folder</MenuButton>
             <MenuButton danger onClick={() => onAction('survey-delete', { survey })}>Delete</MenuButton>
@@ -93,7 +94,7 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modal, setModal] = useState(null);
-  const [form, setForm] = useState({ name: '', file: null, destinationId: '' });
+  const [form, setForm] = useState({ name: '', description: '', files: [], items: [], destinationId: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const canEdit = roleCanEdit(user.role);
@@ -123,8 +124,8 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
     if (type === 'folder-create') setForm({ name: '', parentId: data.parentId ?? selectedFolderId, destinationId: '' });
     if (type === 'folder-edit') setForm({ name: data.folder.name, destinationId: '' });
     if (type === 'folder-move') setForm({ name: data.folder.name, destinationId: folderParent(data.folder) || '' });
-    if (type === 'survey-create') setForm({ name: '', file: null, destinationId: selectedFolderId || '' });
-    if (type === 'survey-edit') setForm({ name: data.survey.name });
+    if (type === 'survey-create') setForm({ name: '', description: '', files: [], items: [], destinationId: selectedFolderId || '' });
+    if (type === 'survey-edit') setForm({ name: data.survey.name, description: data.survey.description || '' });
     if (type === 'survey-move') setForm({ name: data.survey.name, destinationId: surveyFolder(data.survey) || '' });
     setModal({ type, ...data });
   };
@@ -150,14 +151,26 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
         notify('Folder moved.');
       }
       if (modal.type === 'survey-create') {
-        const created = await api.createSurvey({ siteId, folderId: selectedFolderId || '', name: form.name, file: form.file });
+        const created = await api.createSurvey({
+          siteId, folderId: selectedFolderId || '', name: form.name, description: form.description,
+        });
         setSurveys((current) => [...current, created]);
         notify('Survey created.');
       }
+      if (modal.type === 'survey-review') {
+        const created = normalizeList(await api.createSurveysBatch({
+          siteId,
+          folderId: selectedFolderId || '',
+          files: form.files,
+          surveys: form.items.map(({ name, description }) => ({ name, description })),
+        }));
+        setSurveys((current) => [...current, ...created]);
+        notify(`${created.length} survey${created.length === 1 ? '' : 's'} created.`);
+      }
       if (modal.type === 'survey-edit') {
-        const updated = await api.updateSurvey(modal.survey.id, { name: form.name });
-        setSurveys((current) => current.map((survey) => survey.id === modal.survey.id ? { ...survey, ...updated, name: form.name } : survey));
-        notify('Survey renamed.');
+        const updated = await api.updateSurvey(modal.survey.id, { name: form.name, description: form.description });
+        setSurveys((current) => current.map((survey) => survey.id === modal.survey.id ? { ...survey, ...updated, name: form.name, description: form.description } : survey));
+        notify('Survey details updated.');
       }
       if (modal.type === 'survey-move') {
         const updated = await api.moveSurvey(modal.survey.id, { folderId: form.destinationId || null });
@@ -281,18 +294,84 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
         </section>
       </div>
 
-      <Modal open={['folder-create', 'folder-edit', 'folder-move', 'survey-create', 'survey-edit', 'survey-move'].includes(modal?.type)} title={{ 'folder-create': 'Create folder', 'folder-edit': 'Rename folder', 'folder-move': 'Move folder', 'survey-create': 'Create survey', 'survey-edit': 'Rename survey', 'survey-move': 'Move survey' }[modal?.type] || ''} onClose={() => setModal(null)}>
+      <Modal
+        open={['folder-create', 'folder-edit', 'folder-move', 'survey-create', 'survey-review', 'survey-edit', 'survey-move'].includes(modal?.type)}
+        title={{ 'folder-create': 'Create folder', 'folder-edit': 'Rename folder', 'folder-move': 'Move folder', 'survey-create': 'Create surveys', 'survey-review': 'Review selected floor plans', 'survey-edit': 'Edit survey details', 'survey-move': 'Move survey' }[modal?.type] || ''}
+        description={modal?.type === 'survey-review' ? 'Each PDF will become an independent survey with its own plotted elements and markup.' : undefined}
+        onClose={() => setModal(null)}
+        wide={modal?.type === 'survey-review'}
+      >
         <form className="stack-form" onSubmit={save}>
           {error && <div className="notice notice--error" role="alert">{error}</div>}
-          {!['folder-move', 'survey-move'].includes(modal?.type) && (
+          {['folder-create', 'folder-edit'].includes(modal?.type) && (
             <Field label={modal?.type?.startsWith('folder') ? 'Folder name' : 'Survey name'}>
               <input required autoFocus value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </Field>
           )}
           {modal?.type === 'survey-create' && (
-            <Field label="Floor plan PDF (optional)" hint="Up to 75 MB. A blank survey is created if no PDF is selected.">
-              <input type="file" accept="application/pdf,.pdf" onChange={(e) => setForm({ ...form, file: e.target.files?.[0] || null })} />
-            </Field>
+            <>
+              <Field label="PDF floor plans" hint="Select up to 20 PDFs. You will name and describe each survey on the next screen.">
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  multiple
+                  onChange={(event) => {
+                    const files = [...(event.target.files || [])].slice(0, 20);
+                    if (!files.length) return;
+                    setForm({
+                      ...form,
+                      files,
+                      items: files.map((file) => ({
+                        name: file.name.replace(/\.pdf$/i, ''),
+                        description: '',
+                        filename: file.name,
+                        size: file.size,
+                      })),
+                    });
+                    setModal({ type: 'survey-review' });
+                  }}
+                />
+              </Field>
+              <div className="survey-create-divider"><span>or create a blank survey</span></div>
+              <Field label="Blank survey name">
+                <input required value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              </Field>
+              <Field label="Description (optional)">
+                <textarea rows="3" maxLength="2000" value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+              </Field>
+            </>
+          )}
+          {modal?.type === 'survey-edit' && (
+            <>
+              <Field label="Survey name"><input required autoFocus value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+              <Field label="Description (optional)"><textarea rows="4" maxLength="2000" value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
+            </>
+          )}
+          {modal?.type === 'survey-review' && (
+            <div className="batch-survey-list">
+              {form.items.map((item, index) => (
+                <section className="batch-survey-row" key={`${item.filename}-${index}`}>
+                  <div className="batch-survey-row__file">
+                    <span aria-hidden="true">PDF</span>
+                    <div><strong>{item.filename}</strong><small>{(item.size / 1024 / 1024).toFixed(1)} MB</small></div>
+                  </div>
+                  <div className="batch-survey-row__fields">
+                    <Field label={`Survey name ${index + 1}`}>
+                      <input required maxLength="180" value={item.name} onChange={(event) => setForm({
+                        ...form,
+                        items: form.items.map((entry, itemIndex) => itemIndex === index ? { ...entry, name: event.target.value } : entry),
+                      })} />
+                    </Field>
+                    <Field label="Description (optional)">
+                      <textarea rows="2" maxLength="2000" value={item.description} onChange={(event) => setForm({
+                        ...form,
+                        items: form.items.map((entry, itemIndex) => itemIndex === index ? { ...entry, description: event.target.value } : entry),
+                      })} />
+                    </Field>
+                  </div>
+                </section>
+              ))}
+            </div>
           )}
           {['folder-move', 'survey-move'].includes(modal?.type) && (
             <Field label="Destination folder">
@@ -304,7 +383,7 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
           )}
           <div className="modal__actions">
             <button type="button" className="button button--ghost" onClick={() => setModal(null)}>Cancel</button>
-            <button className="button button--primary" disabled={busy}>{busy ? 'Saving…' : modal?.type?.includes('move') ? 'Move' : 'Save'}</button>
+            <button className="button button--primary" disabled={busy}>{busy ? 'Saving…' : modal?.type === 'survey-review' ? `Create ${form.items.length} surveys` : modal?.type?.includes('move') ? 'Move' : 'Save'}</button>
           </div>
         </form>
       </Modal>

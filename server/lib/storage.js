@@ -132,6 +132,7 @@ async function uploadCloudFile(file, storageKey, contentType, config) {
 
 const clients = new Map();
 function storage(config) {
+  if (config.storageClient) return config.storageClient;
   const key = `${config.supabaseUrl}\n${config.supabaseSecretKey}\n${config.supabaseStorageBucket}`;
   if (!clients.has(key)) {
     const client = createClient(config.supabaseUrl, config.supabaseSecretKey, {

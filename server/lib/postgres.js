@@ -193,6 +193,7 @@ const POSTGRES_SCHEMA = `
     site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
     folder_id TEXT REFERENCES folders(id) ON DELETE SET NULL,
     name TEXT NOT NULL,
+    description TEXT,
     original_filename TEXT,
     storage_key TEXT UNIQUE,
     mime_type TEXT,
@@ -302,4 +303,5 @@ const POSTGRES_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_notes_element ON element_notes(element_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_photos_element ON element_photos(element_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_activity_survey ON activity_log(survey_id, created_at DESC);
+  ALTER TABLE surveys ADD COLUMN IF NOT EXISTS description TEXT;
 `;

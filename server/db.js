@@ -64,6 +64,7 @@ export function createDatabase(config) {
       site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
       folder_id TEXT REFERENCES folders(id) ON DELETE SET NULL,
       name TEXT NOT NULL,
+      description TEXT,
       original_filename TEXT,
       storage_key TEXT UNIQUE,
       mime_type TEXT,
@@ -182,6 +183,8 @@ export function createDatabase(config) {
     db.exec('ALTER TABLE users ADD COLUMN workspace_access INTEGER NOT NULL DEFAULT 0');
     db.exec("UPDATE users SET workspace_access = 1 WHERE role IN ('owner','admin')");
   }
+  const surveyColumns = new Set(db.prepare('PRAGMA table_info(surveys)').all().map((column) => column.name));
+  if (!surveyColumns.has('description')) db.exec('ALTER TABLE surveys ADD COLUMN description TEXT');
 
   seedBuiltInProfiles(db);
   return createAsyncSqliteAdapter(db);

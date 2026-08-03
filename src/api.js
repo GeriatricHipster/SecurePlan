@@ -58,6 +58,9 @@ async function request(path, options = {}) {
     );
     error.status = response.status;
     error.details = payload?.error?.details || payload?.details;
+    error.code = payload?.error?.code;
+    error.requestId = payload?.requestId || response.headers.get('x-request-id');
+    if (error.requestId && response.status >= 500) error.message += ` Reference: ${error.requestId}`;
     throw error;
   }
 
@@ -107,6 +110,15 @@ export const api = {
     });
     if (file) form.append('pdf', file);
     return request('/api/surveys', { method: 'POST', body: form });
+  },
+  createSurveysBatch: ({ files, surveys, ...values }) => {
+    const form = new FormData();
+    Object.entries(values).forEach(([key, value]) => {
+      if (value != null) form.append(key, value);
+    });
+    files.forEach((file) => form.append('pdfs', file));
+    form.append('surveys', JSON.stringify(surveys));
+    return request('/api/surveys/batch', { method: 'POST', body: form });
   },
   updateSurvey: (id, values) => request(`/api/surveys/${id}`, json('PATCH', values)),
   deleteSurvey: (id) => request(`/api/surveys/${id}`, json('DELETE')),

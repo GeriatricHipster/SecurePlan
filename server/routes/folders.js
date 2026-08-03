@@ -37,7 +37,7 @@ export function createFoldersRouter({ db, config, auth, emitSiteUpdate }) {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const orderIndex = (await db
-      .prepare('SELECT COALESCE(MAX(order_index), -1) + 1 AS value FROM folders WHERE site_id = ? AND parent_id IS ?')
+      .prepare("SELECT COALESCE(MAX(order_index), -1) + 1 AS value FROM folders WHERE site_id = ? AND COALESCE(parent_id, '') = COALESCE(?, '')")
       .get(siteId, parentId)).value;
     await db.prepare(
       `INSERT INTO folders

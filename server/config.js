@@ -70,6 +70,7 @@ export function createConfig(overrides = {}) {
     supabaseUrl,
     supabaseSecretKey,
     supabaseStorageBucket,
+    storageClient: overrides.storageClient,
     cloudMode,
     jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
     cookieName: process.env.AUTH_COOKIE_NAME || 'secureplan_session',

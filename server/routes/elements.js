@@ -33,10 +33,13 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate }) {
     await assertSiteAccess(db, req.user, survey.site_id);
     const rows = await db
       .prepare(
-        `SELECT e.*,
-                (SELECT COUNT(*) FROM element_notes n WHERE n.element_id = e.id) AS note_count,
-                (SELECT COUNT(*) FROM element_photos p WHERE p.element_id = e.id) AS photo_count
-           FROM elements e WHERE e.survey_id = ? ORDER BY e.z_index, e.created_at`,
+        `SELECT e.*, COALESCE(n.note_count, 0) AS note_count, COALESCE(p.photo_count, 0) AS photo_count
+           FROM elements e
+           LEFT JOIN (SELECT element_id, COUNT(*) AS note_count FROM element_notes GROUP BY element_id) n
+             ON n.element_id = e.id
+           LEFT JOIN (SELECT element_id, COUNT(*) AS photo_count FROM element_photos GROUP BY element_id) p
+             ON p.element_id = e.id
+          WHERE e.survey_id = ? ORDER BY e.z_index, e.created_at`,
       )
       .all(surveyId);
     const elements = rows.map(serializeElement);

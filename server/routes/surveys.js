@@ -16,6 +16,10 @@ export function createSurveysRouter({ db, config, auth, emitSurveyUpdate, emitSi
     dest: config.temporaryFilesDir,
     limits: { fileSize: config.maxPdfBytes, files: 1, fields: 20 },
   });
+  const batchUpload = multer({
+    dest: config.temporaryFilesDir,
+    limits: { fileSize: config.maxPdfBytes, files: 20, fields: 10 },
+  });
   router.use(auth.requireAuth);
 
   router.get('/surveys', async (req, res) => {
@@ -26,7 +30,7 @@ export function createSurveysRouter({ db, config, auth, emitSurveyUpdate, emitSi
     const params = [siteId];
     let folderClause = '';
     if (req.query.folderId !== undefined) {
-      folderClause = 'AND s.folder_id IS ?';
+      folderClause = "AND COALESCE(s.folder_id, '') = COALESCE(?, '')";
       params.push(folderId || null);
     }
     const rows = await db
@@ -45,14 +49,14 @@ export function createSurveysRouter({ db, config, auth, emitSurveyUpdate, emitSi
   router.get('/surveys/:surveyId', async (req, res) => {
     const survey = await getSurvey(db, idValue(req.params.surveyId, 'surveyId'));
     await assertSiteAccess(db, req.user, survey.site_id);
-    const activity = await db
+    const activity = (await db
       .prepare(
         `SELECT a.id, a.action, a.details_json, a.created_at,
                 u.id AS actor_id, u.name AS actor_name, u.email AS actor_email
            FROM activity_log a LEFT JOIN users u ON u.id = a.actor_id
           WHERE a.survey_id = ? ORDER BY a.created_at DESC LIMIT 30`,
       )
-      .all(survey.id)
+      .all(survey.id))
       .map((row) => ({
         id: row.id,
         action: row.action,
@@ -81,10 +85,11 @@ export function createSurveysRouter({ db, config, auth, emitSurveyUpdate, emitSi
         'name',
         { max: 180 },
       );
+      const description = optionalNullableString(req.body?.description, 'description', 2000) ?? null;
       const id = crypto.randomUUID();
       const now = new Date().toISOString();
       const orderIndex = (await db
-        .prepare('SELECT COALESCE(MAX(order_index), -1) + 1 AS value FROM surveys WHERE site_id = ? AND folder_id IS ?')
+        .prepare("SELECT COALESCE(MAX(order_index), -1) + 1 AS value FROM surveys WHERE site_id = ? AND COALESCE(folder_id, '') = COALESCE(?, '')")
         .get(siteId, folderId)).value;
       const storageKey = req.file ? await storePdf(req.file, config) : null;
       req.file = null;
@@ -92,14 +97,15 @@ export function createSurveysRouter({ db, config, auth, emitSurveyUpdate, emitSi
         await db.transaction(async () => {
           await db.prepare(
             `INSERT INTO surveys
-              (id, site_id, folder_id, name, original_filename, storage_key, mime_type, size_bytes,
+              (id, site_id, folder_id, name, description, original_filename, storage_key, mime_type, size_bytes,
                rotation, order_index, version, created_by, updated_by, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?, ?, ?)`,
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, ?, ?, ?)`,
           ).run(
             id,
             siteId,
             folderId,
             name,
+            description,
             originalFilename,
             storageKey,
             storageKey ? 'application/pdf' : null,
@@ -124,19 +130,99 @@ export function createSurveysRouter({ db, config, auth, emitSurveyUpdate, emitSi
     }
   });
 
+  router.post('/surveys/batch', batchUpload.array('pdfs', 20), async (req, res) => {
+    const files = req.files || [];
+    const uploaded = [];
+    try {
+      const siteId = idValue(req.body?.siteId, 'siteId');
+      await getSite(db, siteId);
+      await assertSiteAccess(db, req.user, siteId, 'editor');
+      const folderId = optionalNullableString(req.body?.folderId, 'folderId', 80) ?? null;
+      if (folderId) {
+        const folder = await getFolder(db, folderId);
+        if (folder.site_id !== siteId) throw badRequest('The folder must be in the selected site.', { field: 'folderId' });
+      }
+      if (!files.length) throw badRequest('Select at least one PDF floor plan.', { field: 'pdfs' });
+
+      let details;
+      try {
+        details = JSON.parse(String(req.body?.surveys || '[]'));
+      } catch {
+        throw badRequest('Survey details are invalid.', { field: 'surveys' });
+      }
+      if (!Array.isArray(details) || details.length !== files.length) {
+        throw badRequest('Provide a name for every selected PDF.', { field: 'surveys' });
+      }
+
+      const rows = files.map((file, index) => {
+        validatePdfUpload(file);
+        const originalFilename = safeFilename(file.originalname || `floor-plan-${index + 1}.pdf`);
+        return {
+          id: crypto.randomUUID(),
+          file,
+          originalFilename,
+          name: stringValue(details[index]?.name || originalFilename.replace(/\.pdf$/i, ''), `surveys[${index}].name`, { max: 180 }),
+          description: optionalNullableString(details[index]?.description, `surveys[${index}].description`, 2000) ?? null,
+        };
+      });
+      const now = new Date().toISOString();
+      const firstOrder = (await db
+        .prepare("SELECT COALESCE(MAX(order_index), -1) + 1 AS value FROM surveys WHERE site_id = ? AND COALESCE(folder_id, '') = COALESCE(?, '')")
+        .get(siteId, folderId)).value;
+
+      for (const row of rows) {
+        row.storageKey = await storePdf(row.file, config);
+        uploaded.push(row.storageKey);
+      }
+
+      try {
+        await db.transaction(async () => {
+          for (const [index, row] of rows.entries()) {
+            await db.prepare(
+              `INSERT INTO surveys
+                (id, site_id, folder_id, name, description, original_filename, storage_key, mime_type,
+                 size_bytes, rotation, order_index, version, created_by, updated_by, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'application/pdf', ?, 0, ?, 1, ?, ?, ?, ?)`,
+            ).run(
+              row.id, siteId, folderId, row.name, row.description, row.originalFilename, row.storageKey,
+              row.file.size || 0, firstOrder + index, req.user.id, req.user.id, now, now,
+            );
+            await logActivity(db, {
+              siteId, surveyId: row.id, actorId: req.user.id, action: 'survey.created',
+              details: { name: row.name, batch: true },
+            });
+          }
+        })();
+      } catch (error) {
+        await Promise.allSettled(uploaded.map((key) => deleteStoredFile(key, 'survey', config)));
+        throw error;
+      }
+
+      const created = [];
+      for (const row of rows) created.push(serializeSurvey(await getSurvey(db, row.id)));
+      for (const survey of created) emitSiteUpdate(siteId, 'survey.created', req.user, { survey });
+      res.status(201).json({ data: created, surveys: created });
+    } finally {
+      for (const file of files) cleanTemporaryUpload(file);
+    }
+  });
+
   router.patch('/surveys/:surveyId', async (req, res) => {
     const survey = await getSurvey(db, idValue(req.params.surveyId, 'surveyId'));
     await assertSiteAccess(db, req.user, survey.site_id, 'editor');
     const name = req.body?.name === undefined ? survey.name : stringValue(req.body.name, 'name', { max: 180 });
+    const description = req.body?.description === undefined
+      ? survey.description
+      : optionalNullableString(req.body.description, 'description', 2000);
     const orderIndex =
       req.body?.orderIndex === undefined
         ? survey.order_index
         : numberValue(req.body.orderIndex, 'orderIndex', { integer: true, min: 0, max: 100000 });
     const now = new Date().toISOString();
     await db.prepare(
-      `UPDATE surveys SET name = ?, order_index = ?, updated_by = ?, updated_at = ?, version = version + 1
+      `UPDATE surveys SET name = ?, description = ?, order_index = ?, updated_by = ?, updated_at = ?, version = version + 1
         WHERE id = ?`,
-    ).run(name, orderIndex, req.user.id, now, survey.id);
+    ).run(name, description, orderIndex, req.user.id, now, survey.id);
     await logActivity(db, {
       siteId: survey.site_id,
       surveyId: survey.id,

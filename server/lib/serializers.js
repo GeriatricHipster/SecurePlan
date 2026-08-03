@@ -53,6 +53,7 @@ export function serializeSurvey(row) {
     siteId: row.site_id,
     folderId: row.folder_id,
     name: row.name,
+    description: row.description || '',
     originalFilename: row.original_filename,
     hasPdf: Boolean(row.storage_key),
     pdfUrl: row.storage_key ? `/api/surveys/${row.id}/file` : null,

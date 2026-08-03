@@ -18,20 +18,21 @@ export async function cloneSurvey(db, config, sourceSurvey, target, actorId, opt
         (await db
           .prepare(
             `SELECT COALESCE(MAX(order_index), -1) + 1 AS value
-               FROM surveys WHERE site_id = ? AND folder_id IS ?`,
+               FROM surveys WHERE site_id = ? AND COALESCE(folder_id, '') = COALESCE(?, '')`,
           )
           .get(target.siteId, target.folderId || null)).value || 0;
 
       await db.prepare(
         `INSERT INTO surveys
-          (id, site_id, folder_id, name, original_filename, storage_key, mime_type, size_bytes,
+          (id, site_id, folder_id, name, description, original_filename, storage_key, mime_type, size_bytes,
            rotation, order_index, version, copied_from, created_by, updated_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
       ).run(
         surveyId,
         target.siteId,
         target.folderId || null,
         target.name,
+        sourceSurvey.description,
         sourceSurvey.original_filename,
         pdfKey,
         sourceSurvey.mime_type,
@@ -256,7 +257,7 @@ export async function cloneFolderTree(db, config, sourceFolder, targetParentId, 
         folderMap.set(folder.id, newId);
         const parentId = folder.id === sourceFolder.id ? targetParentId : folderMap.get(folder.parent_id);
         const orderIndex = (await db
-          .prepare('SELECT COALESCE(MAX(order_index), -1) + 1 AS value FROM folders WHERE site_id = ? AND parent_id IS ?')
+          .prepare("SELECT COALESCE(MAX(order_index), -1) + 1 AS value FROM folders WHERE site_id = ? AND COALESCE(parent_id, '') = COALESCE(?, '')")
           .get(sourceFolder.site_id, parentId || null)).value;
         await db.prepare(
           `INSERT INTO folders
