@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: secureplan-surveyor
+    runtime: node
+    # Persistent disks are not available on Render's Free web-service tier.
+    plan: starter
+    buildCommand: npm ci && npm run check
+    startCommand: npm start
+    healthCheckPath: /api/health
+    maxShutdownDelaySeconds: 15
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SETUP_CODE
+        sync: false
+      - key: DATA_DIR
+        value: /var/data
+      - key: TRUST_PROXY
+        value: "1"
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: MOBILE_ORIGINS
+        value: "capacitor://localhost,https://localhost"
+      - key: MIN_FREE_STORAGE_BYTES
+        value: "1048576"
+    disk:
+      name: secureplan-data
+      mountPath: /var/data
+      sizeGB: 1
