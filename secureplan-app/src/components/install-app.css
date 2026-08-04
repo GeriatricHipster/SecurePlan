@@ -1,0 +1,129 @@
+.install-prompt {
+  display: grid;
+  position: fixed;
+  z-index: 850;
+  right: 20px;
+  bottom: 20px;
+  width: min(480px, calc(100vw - 32px));
+  min-height: 76px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: rgb(255 255 255 / 97%);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(12px);
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+}
+
+.app-shell--survey .install-prompt {
+  display: none;
+}
+
+.install-prompt ~ .toast {
+  bottom: 112px;
+}
+
+.install-prompt > img {
+  width: 48px;
+  height: 48px;
+  border-radius: 11px;
+}
+
+.install-prompt > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.install-prompt strong {
+  font-size: .82rem;
+}
+
+.install-prompt span {
+  color: var(--muted);
+  font-size: .68rem;
+  line-height: 1.4;
+}
+
+.install-prompt .button {
+  min-width: 82px;
+}
+
+.install-steps {
+  display: flex;
+  margin: 0 0 20px;
+  padding: 0;
+  flex-direction: column;
+  gap: 15px;
+  list-style: none;
+}
+
+.install-steps li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.install-steps li > span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--red-soft);
+  color: var(--red-dark);
+  font-size: .75rem;
+  font-weight: 800;
+  place-items: center;
+}
+
+.install-steps p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: .84rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+  .install-prompt {
+    right: 12px;
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    left: 12px;
+    width: auto;
+  }
+
+  .install-prompt ~ .toast {
+    bottom: calc(200px + env(safe-area-inset-bottom));
+  }
+
+  .app-shell--survey .install-prompt {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .install-prompt {
+    gap: 8px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .install-prompt > img {
+    width: 42px;
+    height: 42px;
+  }
+
+  .install-prompt > .button {
+    grid-column: 2;
+    min-height: 40px;
+    justify-self: start;
+  }
+
+  .install-prompt > .icon-button {
+    align-self: start;
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
