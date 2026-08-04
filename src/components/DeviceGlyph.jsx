@@ -29,6 +29,8 @@ function rgbFor(color) {
 
 export default function DeviceGlyph({ type, symbol, label, iconSrc, color = DEFAULT_ICON_COLOR }) {
   const generatedId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
+  const outlineColor = color || DEFAULT_ICON_COLOR;
+
   if (iconSrc) {
     const filterId = `report-icon-${generatedId}`;
     const rgb = rgbFor(color);
@@ -44,11 +46,47 @@ export default function DeviceGlyph({ type, symbol, label, iconSrc, color = DEFA
             </feComponentTransfer>
           </filter>
         </defs>
+        <rect x="5" y="5" width="62" height="62" rx="12" fill="none" stroke={outlineColor} strokeWidth="2.5" />
         <image className="device-glyph-image" href={iconSrc} width="72" height="72" filter={`url(#${filterId})`} draggable="false" />
       </svg>
     );
   }
+
   const paths = DOOR_PATHS[type] || CAMERA_PATHS[type];
-  if (!paths) return <span>{symbol || elementSymbol({ type, label, metadata: { symbol } })}</span>;
-  return <svg className="device-glyph" viewBox="0 0 24 24" fill="none" aria-hidden="true">{paths}</svg>;
+  if (!paths) {
+    const fallbackText = symbol || elementSymbol({ type, label, metadata: { symbol } });
+    return (
+      <svg className="device-glyph device-glyph--fallback" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="2.5" y="2.5" width="19" height="19" rx="4" fill="none" stroke={outlineColor} strokeWidth="1.8" />
+        <text
+          x="12"
+          y="15"
+          textAnchor="middle"
+          fontSize="7.5"
+          fontWeight="700"
+          fill={outlineColor}
+          stroke={outlineColor}
+          strokeWidth="0.35"
+          paintOrder="stroke fill"
+        >
+          {fallbackText}
+        </text>
+      </svg>
+    );
+  }
+
+  return (
+    <svg
+      className="device-glyph"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+      stroke={outlineColor}
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {paths}
+    </svg>
+  );
 }

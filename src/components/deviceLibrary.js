@@ -31,6 +31,8 @@ export const DEVICE_CATEGORIES = [
       { type: 'handicap_push_button', label: 'Handicap Push Button', symbol: 'ADA', reportIcon: REPORT_ICON_DATA.handicap_push_button },
       { type: 'network_patch_panel', label: 'Network Patch Panel', symbol: 'PP', reportIcon: REPORT_ICON_DATA.network_patch_panel },
       { type: 'network_switch', label: 'Network Switch', symbol: 'SW', reportIcon: REPORT_ICON_DATA.network_switch },
+      { type: 'panic_button', label: 'Panic Button', symbol: 'PAN' },
+      { type: 'lockdown_button', label: 'Lockdown Button', symbol: 'LCK' },
       { type: 'request_to_exit', label: 'Request to Exit', symbol: 'REX', reportIcon: REPORT_ICON_DATA.request_to_exit },
       { type: 'single_door', label: 'Single Door', symbol: 'SD', reportIcon: REPORT_ICON_DATA.single_door },
       { type: 'access_panel', label: 'Access Control Panel', symbol: 'ACP' },
@@ -144,6 +146,10 @@ export function isDoorType(type) {
 export function doorFunctionFor(value) {
   const id = typeof value === 'object' ? value?.metadata?.doorFunction : value;
   return DOOR_FUNCTIONS.find((option) => option.id === id) || DOOR_FUNCTIONS[1];
+}
+
+export function doorOutlineColorFor(value) {
+  return doorFunctionFor(value).color;
 }
 
 export function devicePlacementDefaults(type, symbol, requestedDoorFunction = 'controlled') {
