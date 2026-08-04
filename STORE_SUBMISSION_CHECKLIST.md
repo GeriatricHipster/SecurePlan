@@ -1,6 +1,6 @@
 # SecurePlan Store Submission Checklist
 
-SecurePlan's iOS and Android projects are configured under bundle/application ID `com.secureplan.surveyor`, version `0.8.0`, build `2`. The application code can be prepared here, but final signing and submission must be completed by the account owner because Apple and Google require private developer credentials and legal agreements.
+SecurePlan's iOS and Android projects are configured under bundle/application ID `com.secureplan.surveyor`, version `0.8.1`, build `3`. The application code can be prepared here, but final signing and submission must be completed by the account owner because Apple and Google require private developer credentials and legal agreements.
 
 ## Blocking items before public review
 
@@ -16,10 +16,10 @@ SecurePlan's iOS and Android projects are configured under bundle/application ID
 2. Install Xcode 26 or newer on a Mac. Starting April 28, 2026, Apple requires iPhone/iPad submissions to use the iOS 26 SDK or newer.
 3. In App Store Connect, create an iOS app using bundle ID `com.secureplan.surveyor`.
 4. Set `.env.native` to the production Render HTTPS URL and run `npm ci` followed by `npm run native:sync`.
-5. Open `ios/App/App.xcworkspace` in Xcode, select the owner's signing team, and verify version `0.8.0`, build `2`.
+5. Open `ios/App/App.xcworkspace` in Xcode, select the owner's signing team, and verify version `0.8.1`, build `3`.
 6. Test on iPhone and iPad, then choose **Product > Archive > Distribute App > App Store Connect**.
 7. In App Store Connect, complete the description, keywords, support URL, privacy-policy URL, screenshots, age rating, app privacy disclosures, encryption questions, accessibility information, and reviewer login.
-8. Release to internal TestFlight first. After testing, attach the build to version `0.8.0` and submit it for App Review.
+8. Release to internal TestFlight first. After testing, attach the build to version `0.8.1` and submit it for App Review.
 
 ## Google Play
 

@@ -206,10 +206,12 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
   const draftFrameRef = useRef(null);
   const draftPointRef = useRef(null);
   const lastTapRef = useRef({ id: null, at: 0 });
+  const panRef = useRef(null);
   const [dimensions, setDimensions] = useState({ width: 1180, height: 840 });
   const [rendering, setRendering] = useState(true);
   const [draftShape, setDraftShape] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const [panning, setPanning] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -260,6 +262,15 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
   };
 
   const pointerDownSurface = (event) => {
+    if (activeTool.type === 'select' && event.button === 0) {
+      const scroll = scrollRef.current;
+      onSelect(null);
+      setEditingId(null);
+      panRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, scrollLeft: scroll.scrollLeft, scrollTop: scroll.scrollTop };
+      event.currentTarget.setPointerCapture(event.pointerId);
+      setPanning(true);
+      return;
+    }
     if (!canEdit) { onSelect(null); return; }
     if (activeTool.kind === 'device' || activeTool.kind === 'profile') {
       onPlace(fromDisplay(surfacePoint(event), orientation));
@@ -342,6 +353,12 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
   };
 
   const pointerMove = (event) => {
+    if (panRef.current?.pointerId === event.pointerId) {
+      const scroll = scrollRef.current;
+      scroll.scrollLeft = panRef.current.scrollLeft - (event.clientX - panRef.current.startX);
+      scroll.scrollTop = panRef.current.scrollTop - (event.clientY - panRef.current.startY);
+      return;
+    }
     if (drawRef.current?.pointerId === event.pointerId) {
       const end = surfacePoint(event);
       draftPointRef.current = end;
@@ -384,6 +401,11 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
   };
 
   const pointerUp = (event) => {
+    if (panRef.current?.pointerId === event.pointerId) {
+      panRef.current = null;
+      setPanning(false);
+      return;
+    }
     if (drawRef.current?.pointerId === event.pointerId) {
       const start = fromDisplay(drawRef.current.startDisplay, orientation);
       const end = fromDisplay(surfacePoint(event), orientation);
@@ -438,14 +460,14 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
   return (
     <div ref={scrollRef} className="plan-scroll" aria-label="Blueprint workspace">
       <div className="plan-zoom-space" style={{ width: dimensions.width * zoom, height: dimensions.height * zoom }}>
-        <div className={`plan-stage tool-${['device', 'profile'].includes(activeTool.kind) ? activeTool.kind : activeTool.type}`} style={{ width: dimensions.width, height: dimensions.height, transform: `scale(${zoom})` }}>
+        <div className={`plan-stage tool-${['device', 'profile'].includes(activeTool.kind) ? activeTool.kind : activeTool.type} ${panning ? 'is-panning' : ''}`} style={{ width: dimensions.width, height: dimensions.height, transform: `scale(${zoom})` }}>
           <canvas ref={canvasRef} aria-label={`Floor plan page ${pageNumber}`} />
           <div
             ref={surfaceRef}
             className="plan-surface"
             tabIndex="0"
             role="region"
-            aria-label="Interactive floor plan. Choose a component then click to place it. Selected elements can be moved with arrow keys."
+            aria-label="Interactive floor plan. In Select mode, drag an empty area to move the blueprint. Choose a component then click to place it. Selected elements can be moved with arrow keys."
             onPointerDown={pointerDownSurface}
             onPointerMove={pointerMove}
             onPointerUp={pointerUp}

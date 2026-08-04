@@ -2138,7 +2138,12 @@ h3 {
 }
 
 .tool-select .plan-surface {
-  touch-action: pan-x pan-y;
+  cursor: grab;
+  touch-action: none;
+}
+
+.tool-select.is-panning .plan-surface {
+  cursor: grabbing;
 }
 
 .tool-device .plan-surface,

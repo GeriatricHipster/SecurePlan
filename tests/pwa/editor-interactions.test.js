@@ -42,3 +42,13 @@ test('mobile markup supports double tap and text renders without a dotted box', 
   assert.match(textRule, /border: 0;/);
   assert.doesNotMatch(textRule, /dashed/);
 });
+
+test('select mode pans the blueprint with mouse or touch without moving plotted elements', async () => {
+  const source = await readFile(sourceUrl, 'utf8');
+  const styles = await readFile(new URL('../../src/styles.css', import.meta.url), 'utf8');
+  assert.match(source, /panRef\.current = \{ pointerId: event\.pointerId/);
+  assert.match(source, /scroll\.scrollLeft = panRef\.current\.scrollLeft - \(event\.clientX - panRef\.current\.startX\)/);
+  assert.match(source, /scroll\.scrollTop = panRef\.current\.scrollTop - \(event\.clientY - panRef\.current\.startY\)/);
+  assert.match(source, /event\.currentTarget\.setPointerCapture\(event\.pointerId\)/);
+  assert.match(styles, /\.tool-select \.plan-surface \{[\s\S]*?cursor: grab;[\s\S]*?touch-action: none;/);
+});
