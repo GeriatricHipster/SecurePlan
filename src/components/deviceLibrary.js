@@ -198,3 +198,71 @@ export function defaultMetadataForDevice(type, symbol, color) {
     ...(isCameraType(type) ? { fovColor: color, fovLength: 0.22, fovSpread: 60, fovRotation: 0, ...multisensorFovs } : {}),
   };
 }
+
+export const DOOR_FUNCTION_OUTLINES = {
+  access_control: '#2563eb',   // blue
+  intrusion: '#7c3aed',        // purple
+  cctv: '#16a34a',             // green
+  fire: '#dc2626',             // red
+  panic: '#b91c1c',            // deep red
+  lockdown: '#ea580c',         // orange
+  default: '#475569',          // slate
+};
+
+export const ACCESS_CONTROL_ICON_OPTIONS = [
+  { value: 'door_reader', label: 'Door Reader' },
+  { value: 'mag_lock', label: 'Mag Lock' },
+  { value: 'rex', label: 'REX / Request to Exit' },
+  { value: 'card_reader', label: 'Card Reader' },
+
+  // new items you asked for
+  { value: 'panic_button', label: 'Panic Button' },
+  { value: 'lockdown_button', label: 'Lock Down Button' },
+];
+
+export const DEVICE_LIBRARY = {
+  door_reader: { label: 'Door Reader', group: 'Access Control' },
+  mag_lock: { label: 'Mag Lock', group: 'Access Control' },
+  rex: { label: 'REX / Request to Exit', group: 'Access Control' },
+  card_reader: { label: 'Card Reader', group: 'Access Control' },
+  panic_button: { label: 'Panic Button', group: 'Access Control' },
+  lockdown_button: { label: 'Lock Down Button', group: 'Access Control' },
+
+  camera: { label: 'Camera', group: 'CCTV' },
+  motion: { label: 'Motion Detector', group: 'Intrusion' },
+  glass_break: { label: 'Glass Break', group: 'Intrusion' },
+  smoke: { label: 'Smoke Detector', group: 'Fire' },
+};
+
+export function getOutlineColor(doorFunction) {
+  if (!doorFunction) return DOOR_FUNCTION_OUTLINES.default;
+  return DOOR_FUNCTION_OUTLINES[doorFunction] || DOOR_FUNCTION_OUTLINES.default;
+}
+
+export function getDeviceLabel(type) {
+  return DEVICE_LIBRARY[type]?.label || type || 'Unknown Device';
+}
+
+export function buildDeviceCounts(items = []) {
+  const counts = {};
+
+  for (const item of items) {
+    const key = item?.deviceType || item?.type || 'unknown';
+    counts[key] = (counts[key] || 0) + 1;
+  }
+
+  return counts;
+}
+
+export function buildDeviceCountRows(items = []) {
+  const counts = buildDeviceCounts(items);
+
+  return Object.entries(counts)
+    .map(([type, count]) => ({
+      type,
+      label: getDeviceLabel(type),
+      count,
+      group: DEVICE_LIBRARY[type]?.group || 'Other',
+    }))
+    .sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label));
+}
