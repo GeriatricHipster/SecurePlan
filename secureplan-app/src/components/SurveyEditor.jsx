@@ -701,3 +701,20 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify 
     </main>
   );
 }
+
+import { exportSurveyPdf } from './surveyPdfExport.js';
+
+<button
+  type="button"
+  className="button button--primary"
+  onClick={() =>
+    exportSurveyPdf({
+      survey,
+      site,
+      elements,
+      planImageDataUrl,
+    })
+  }
+>
+  Export PDF
+</button>
