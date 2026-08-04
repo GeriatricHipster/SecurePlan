@@ -8,6 +8,12 @@ export const DOOR_FUNCTIONS = [
   { id: 'full', label: 'Full', color: '#15803d', description: 'Monitoring and control' },
 ];
 
+export const DOOR_OUTLINE_COLORS = {
+  monitored: '#b68a5a',
+  controlled: DEFAULT_ICON_COLOR,
+  full: '#15803d',
+};
+
 const DOOR_DEVICE_TYPES = new Set([
   'single_door', 'double_door', 'sliding_door', 'overhead_door', 'hatch',
   'folding_door', 'revolving_door',
@@ -146,6 +152,10 @@ export function doorFunctionFor(value) {
   return DOOR_FUNCTIONS.find((option) => option.id === id) || DOOR_FUNCTIONS[1];
 }
 
+export function doorOutlineColorFor(value) {
+  return doorFunctionFor(value)?.color || DEFAULT_ICON_COLOR;
+}
+
 export function devicePlacementDefaults(type, symbol, requestedDoorFunction = 'controlled') {
   const doorFunction = doorFunctionFor(requestedDoorFunction);
   const color = isDoorType(type) ? doorFunction.color : DEFAULT_ICON_COLOR;
@@ -191,4 +201,23 @@ export function defaultMetadataForDevice(type, symbol, color) {
     workflowStatus: 'planned',
     ...(isCameraType(type) ? { fovColor: color, fovLength: 0.22, fovSpread: 60, fovRotation: 0, ...multisensorFovs } : {}),
   };
+}
+
+export function surveyDeviceCounts(elements = []) {
+  const counts = new Map();
+
+  for (const element of elements) {
+    const type = element?.type || element?.deviceType || 'unknown';
+    counts.set(type, (counts.get(type) || 0) + 1);
+  }
+
+  return [...counts.entries()].map(([type, count]) => ({
+    type,
+    label: itemFor('access_control', type)?.label
+      || itemFor('cctv', type)?.label
+      || itemFor('intrusion', type)?.label
+      || itemFor('doors', type)?.label
+      || type,
+    count,
+  }));
 }
