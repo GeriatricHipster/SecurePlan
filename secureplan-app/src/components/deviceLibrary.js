@@ -41,6 +41,8 @@ export const DEVICE_CATEGORIES = [
       { type: 'single_door', label: 'Single Door', symbol: 'SD', reportIcon: REPORT_ICON_DATA.single_door },
       { type: 'access_panel', label: 'Access Control Panel', symbol: 'ACP' },
       { type: 'power_supply', label: 'Power Supply', symbol: 'PS' },
+      { type: 'panic_button', label: 'Panic Button', symbol: 'PB' },
+      { type: 'lockdown_button', label: 'Lockdown Button', symbol: 'LD' },
     ],
   },
   {
