@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as pdfjs from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { api } from '../api.js';
-import { cameraFieldsFor, elementColor, elementSymbol, isCameraType, itemFor, workflowStatusFor } from './deviceLibrary.js';
+import { cameraFieldsFor, doorOutlineColorFor, elementColor, elementSymbol, isCameraType, itemFor, workflowStatusFor } from './deviceLibrary.js';
 import DeviceGlyph from './DeviceGlyph.jsx';
 import { clampPlanZoom, pointerDistance, pointerMidpoint, zoomFromPinch } from './planGestures.js';
 
@@ -97,24 +97,67 @@ function DeviceElement({ element, orientation, selected, onPointerDown, onSelect
   const size = Number(element.metadata?.size || element.size || 42);
   const rotation = Number(element.rotation || 0) + Number(orientation || 0);
   const color = elementColor(element);
+  const outlineColor = doorOutlineColorFor(element.metadata?.doorFunction || element.type);
   const components = Array.isArray(element.metadata?.components) ? element.metadata.components : [];
   const workflow = workflowStatusFor(element);
+
   return (
     <button
       type="button"
       data-element-id={element.id}
       className={`plan-element ${selected ? 'selected' : ''}`}
-      style={{ left: `${point.x * 100}%`, top: `${point.y * 100}%`, width: `${size}px`, height: `${size}px`, '--element-color': color, transform: 'translate(-50%, -50%)' }}
+      style={{
+        left: `${point.x * 100}%`,
+        top: `${point.y * 100}%`,
+        width: `${size}px`,
+        height: `${size}px`,
+        '--element-color': color,
+        '--outline-color': outlineColor,
+        transform: 'translate(-50%, -50%)',
+        border: `2.5px solid ${outlineColor}`,
+        boxShadow: selected
+          ? `0 0 0 4px color-mix(in srgb, ${outlineColor} 22%, transparent), 0 10px 22px rgb(15 23 42 / 24%)`
+          : `0 8px 18px rgb(15 23 42 / 18%)`,
+        background: 'rgba(255,255,255,.95)',
+        borderRadius: '999px',
+      }}
       onPointerDown={(event) => onPointerDown(event, element)}
       onClick={(event) => { event.stopPropagation(); onSelect(element.id); }}
       aria-label={`${element.label || element.type}${selected ? ', selected' : ''}`}
       aria-pressed={selected}
     >
-      <span className="plan-element__glyph" style={{ transform: `rotate(${rotation}deg)` }}><DeviceGlyph type={element.type} symbol={elementSymbol(element)} label={element.label} iconSrc={itemFor(element.category, element.type)?.reportIcon} color={color} /></span>
-      {components.length > 0 && <span className="plan-element__components" aria-label={`Components: ${components.map((component) => component.label).join(', ')}`}>{components.map((component, index) => <i key={`${component.type}-${index}`} title={component.label}>{component.symbol || itemFor(component.category, component.type)?.symbol || '?'}</i>)}</span>}
+      <span className="plan-element__glyph" style={{ transform: `rotate(${rotation}deg)` }}>
+        <DeviceGlyph
+          type={element.type}
+          symbol={elementSymbol(element)}
+          label={element.label}
+          iconSrc={itemFor(element.category, element.type)?.reportIcon}
+          color={color}
+        />
+      </span>
+
+      {components.length > 0 && (
+        <span className="plan-element__components" aria-label={`Components: ${components.map((component) => component.label).join(', ')}`}>
+          {components.map((component, index) => (
+            <i key={`${component.type}-${index}`} title={component.label}>
+              {component.symbol || itemFor(component.category, component.type)?.symbol || '?'}
+            </i>
+          ))}
+        </span>
+      )}
+
       <span className="plan-element__label">{element.label}</span>
-      <span className="plan-element__status" style={{ '--status-color': workflow.color }} title={`Installation status: ${workflow.label}`} aria-label={`Installation status: ${workflow.label}`} />
-      {(Number(element.noteCount ?? element.note_count ?? 0) + Number(element.photoCount ?? element.photo_count ?? 0)) > 0 && <small aria-hidden="true">{Number(element.noteCount ?? element.note_count ?? 0) + Number(element.photoCount ?? element.photo_count ?? 0)}</small>}
+      <span
+        className="plan-element__status"
+        style={{ '--status-color': workflow.color }}
+        title={`Installation status: ${workflow.label}`}
+        aria-label={`Installation status: ${workflow.label}`}
+      />
+      {(Number(element.noteCount ?? element.note_count ?? 0) + Number(element.photoCount ?? element.photo_count ?? 0)) > 0 && (
+        <small aria-hidden="true">
+          {Number(element.noteCount ?? element.note_count ?? 0) + Number(element.photoCount ?? element.photo_count ?? 0)}
+        </small>
+      )}
     </button>
   );
 }
