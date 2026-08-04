@@ -1,0 +1,18 @@
+{
+	"appId": "com.secureplan.surveyor",
+	"appName": "SecurePlan Surveyor",
+	"webDir": "dist",
+	"backgroundColor": "#071019",
+	"ios": {
+		"contentInset": "automatic",
+		"preferredContentMode": "mobile"
+	},
+	"android": {
+		"backgroundColor": "#071019",
+		"allowMixedContent": false
+	},
+	"server": {
+		"androidScheme": "https"
+	},
+	"packageClassList": []
+}
