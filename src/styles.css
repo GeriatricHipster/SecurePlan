@@ -2235,6 +2235,18 @@ h3 {
   place-items: center;
 }
 
+.plan-element__status {
+  position: absolute;
+  bottom: -5px;
+  left: -5px;
+  width: 13px;
+  height: 13px;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: var(--status-color);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 30%);
+}
+
 .plan-element:hover,
 .plan-element.selected {
   z-index: 20;
@@ -2499,6 +2511,106 @@ h3 {
   justify-content: space-between;
   gap: 8px;
 }
+
+.device-lifecycle {
+  display: grid;
+  gap: 12px;
+  margin-top: 13px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+
+.workflow-badge,
+.schedule-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--workflow-color);
+  font-size: .58rem;
+  font-weight: 800;
+}
+
+.workflow-badge::before,
+.schedule-status::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--workflow-color);
+  content: '';
+}
+
+.workflow-progress {
+  display: flex;
+  position: relative;
+  height: 39px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #edf1f2;
+}
+
+.workflow-progress > span {
+  align-self: stretch;
+  opacity: .28;
+}
+
+.workflow-progress output {
+  position: absolute;
+  right: 10px;
+  color: var(--ink);
+  font-size: .65rem;
+  font-weight: 800;
+}
+
+.asset-record {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-soft);
+}
+
+.asset-record summary {
+  display: flex;
+  min-height: 48px;
+  align-items: flex-start;
+  justify-content: center;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 11px;
+  cursor: pointer;
+}
+
+.asset-record summary strong { font-size: .68rem; }
+.asset-record summary span { color: var(--muted); font-size: .55rem; }
+.asset-record > .form-grid { padding: 5px 10px 12px; }
+
+.workflow-summary {
+  display: flex;
+  margin: 12px 0;
+  overflow-x: auto;
+  gap: 7px;
+}
+
+.workflow-summary > div {
+  display: grid;
+  min-width: 115px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  grid-template-columns: auto 1fr;
+  gap: 2px 7px;
+}
+
+.workflow-summary i {
+  width: 9px;
+  height: 9px;
+  align-self: center;
+  border-radius: 50%;
+  grid-row: 1 / span 2;
+}
+
+.workflow-summary strong { font-size: .8rem; }
+.workflow-summary span { color: var(--muted); font-size: .52rem; }
 
 .draft-shape {
   position: absolute;

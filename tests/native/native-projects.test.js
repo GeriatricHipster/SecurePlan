@@ -40,9 +40,11 @@ test('native projects declare required network and field-photo permissions', () 
   assert.match(androidManifest, /android:allowBackup="false"/);
 });
 
-test('store projects use the SecurePlan 0.7.0 release version', () => {
-  assert.match(text('android/app/build.gradle'), /versionName "0\.7\.0"/);
-  assert.match(text('ios/App/App.xcodeproj/project.pbxproj'), /MARKETING_VERSION = 0\.7\.0;/);
+test('store projects use the SecurePlan 0.8.0 release version', () => {
+  assert.match(text('android/app/build.gradle'), /versionCode 2/);
+  assert.match(text('android/app/build.gradle'), /versionName "0\.8\.0"/);
+  assert.match(text('ios/App/App.xcodeproj/project.pbxproj'), /CURRENT_PROJECT_VERSION = 2;/);
+  assert.match(text('ios/App/App.xcodeproj/project.pbxproj'), /MARKETING_VERSION = 0\.8\.0;/);
 });
 
 test('native launcher and splash assets use expected platform dimensions and branding', () => {

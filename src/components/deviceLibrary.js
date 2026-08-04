@@ -81,6 +81,16 @@ export const MARKUP_TOOLS = [
   { type: 'text', label: 'Text callout', symbol: 'T' },
 ];
 
+export const DEVICE_WORKFLOW_STATUSES = [
+  { id: 'planned', label: 'Planned', color: '#64748b', progress: 0 },
+  { id: 'ready', label: 'Ready for field', color: '#2563eb', progress: 10 },
+  { id: 'in_progress', label: 'In progress', color: '#d97706', progress: 40 },
+  { id: 'installed', label: 'Installed', color: '#7c3aed', progress: 70 },
+  { id: 'tested', label: 'Tested / commissioned', color: '#0891b2', progress: 90 },
+  { id: 'complete', label: 'Complete', color: '#15803d', progress: 100 },
+  { id: 'blocked', label: 'Blocked / issue', color: '#b4232d', progress: 40 },
+];
+
 export const DEFAULT_PROFILE = {
   id: 'full-door-default',
   name: 'Full Door',
@@ -114,6 +124,11 @@ export function isCameraType(type) {
   return ['fixed_camera', 'dome_camera', 'ptz_camera', 'multisensor_camera', 'lpr_camera'].includes(type);
 }
 
+export function workflowStatusFor(element) {
+  const id = element?.metadata?.workflowStatus || 'planned';
+  return DEVICE_WORKFLOW_STATUSES.find((status) => status.id === id) || DEVICE_WORKFLOW_STATUSES[0];
+}
+
 export function cameraFieldsFor(element) {
   const metadata = element?.metadata || {};
   const color = elementColor(element || {});
@@ -139,6 +154,7 @@ export function defaultMetadataForDevice(type, symbol, color) {
   return {
     symbol,
     size: 42,
+    workflowStatus: 'planned',
     ...(isCameraType(type) ? { fovColor: color, fovLength: 0.22, fovSpread: 60, fovRotation: 0, ...multisensorFovs } : {}),
   };
 }

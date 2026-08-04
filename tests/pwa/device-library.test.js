@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { DEVICE_CATEGORIES, cameraFieldsFor, defaultMetadataForDevice, isCameraType } from '../../src/components/deviceLibrary.js';
+import { DEVICE_CATEGORIES, DEVICE_WORKFLOW_STATUSES, cameraFieldsFor, defaultMetadataForDevice, isCameraType, workflowStatusFor } from '../../src/components/deviceLibrary.js';
 
 test('Access Control includes every icon supplied in the elements report', () => {
   const access = DEVICE_CATEGORIES.find((category) => category.id === 'access_control');
@@ -34,7 +34,7 @@ test('every plotted camera receives a manipulable field-of-view cone by default'
       assert.equal(metadata.fovs.every((fov) => fov.color === '#1769aa'), true);
     }
   }
-  assert.deepEqual(defaultMetadataForDevice('card_reader', 'CR', '#b4232d'), { symbol: 'CR', size: 42 });
+  assert.deepEqual(defaultMetadataForDevice('card_reader', 'CR', '#b4232d'), { symbol: 'CR', size: 42, workflowStatus: 'planned' });
 });
 
 test('legacy or incomplete multisensor metadata safely expands to four independent views', () => {
@@ -43,4 +43,11 @@ test('legacy or incomplete multisensor metadata safely expands to four independe
   assert.deepEqual(fields.map((field) => field.rotation), [35, 90, 180, 270]);
   assert.equal(fields[0].color, '#ff0000');
   assert.equal(fields.slice(1).every((field) => field.color === '#1769aa'), true);
+});
+
+test('device lifecycle statuses provide stable field progress and safe fallbacks', () => {
+  assert.deepEqual(DEVICE_WORKFLOW_STATUSES.map((status) => status.id), ['planned', 'ready', 'in_progress', 'installed', 'tested', 'complete', 'blocked']);
+  assert.equal(workflowStatusFor({ metadata: { workflowStatus: 'complete' } }).progress, 100);
+  assert.equal(workflowStatusFor({ metadata: { workflowStatus: 'not-a-real-status' } }).id, 'planned');
+  assert.equal(workflowStatusFor({}).id, 'planned');
 });

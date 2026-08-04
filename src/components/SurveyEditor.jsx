@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import { api, nativeTransport, normalizeList } from '../api.js';
 import { ConfirmDialog, Field, Modal, Spinner, formatWhen, initials, roleCanAnnotate, roleCanEdit } from './Common.jsx';
 import PdfPlan from './PdfPlan.jsx';
-import { DEFAULT_PROFILE, DEVICE_CATEGORIES, MARKUP_TOOLS, cameraFieldsFor, categoryFor, defaultMetadataForDevice, elementColor, elementSymbol, isCameraType, itemFor } from './deviceLibrary.js';
+import { DEFAULT_PROFILE, DEVICE_CATEGORIES, DEVICE_WORKFLOW_STATUSES, MARKUP_TOOLS, cameraFieldsFor, categoryFor, defaultMetadataForDevice, elementColor, elementSymbol, isCameraType, itemFor, workflowStatusFor } from './deviceLibrary.js';
 import DeviceGlyph from './DeviceGlyph.jsx';
 
 const LAYER_IDS = [...DEVICE_CATEGORIES.map((category) => category.id), 'custom', 'markup'];
@@ -110,6 +110,47 @@ function LibraryPanel({ activeTool, profiles, visibleLayers, canEdit, onTool, on
   );
 }
 
+function DeviceLifecyclePanel({ element, canEdit, onPatch }) {
+  const metadata = metadataOf(element);
+  const asset = metadata.asset || {};
+  const [form, setForm] = useState({});
+  useEffect(() => {
+    setForm({
+      workflowStatus: metadata.workflowStatus || 'planned', assignee: metadata.assignee || '', dueDate: metadata.dueDate || '',
+      manufacturer: asset.manufacturer || '', model: asset.model || '', partNumber: asset.partNumber || '', serialNumber: asset.serialNumber || '',
+      ipAddress: asset.ipAddress || '', macAddress: asset.macAddress || '', installDate: asset.installDate || '', warrantyExpiry: asset.warrantyExpiry || '',
+    });
+  }, [element.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const update = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+  const saveWorkflow = (field) => {
+    if (form[field] === (metadata[field] || '')) return;
+    onPatch({ metadata: { ...metadata, [field]: form[field] } });
+  };
+  const saveAsset = (field) => {
+    if (form[field] === (asset[field] || '')) return;
+    onPatch({ metadata: { ...metadata, asset: { ...asset, [field]: form[field] } } });
+  };
+  return <section className="device-lifecycle" aria-label="Device lifecycle">
+    <div className="section-title"><h3>Lifecycle & field status</h3><span className="workflow-badge" style={{ '--workflow-color': workflowStatusFor({ metadata: { ...metadata, workflowStatus: form.workflowStatus } }).color }}>{workflowStatusFor({ metadata: { ...metadata, workflowStatus: form.workflowStatus } }).label}</span></div>
+    <div className="form-grid form-grid--two">
+      <Field label="Installation status"><select value={form.workflowStatus || 'planned'} disabled={!canEdit} onChange={(event) => { const workflowStatus = event.target.value; update('workflowStatus', workflowStatus); onPatch({ metadata: { ...metadata, workflowStatus } }); }}>{DEVICE_WORKFLOW_STATUSES.map((status) => <option key={status.id} value={status.id}>{status.label}</option>)}</select></Field>
+      <Field label="Assigned to"><input value={form.assignee || ''} disabled={!canEdit} placeholder="Technician or vendor" onChange={(event) => update('assignee', event.target.value)} onBlur={() => saveWorkflow('assignee')} /></Field>
+      <Field label="Target date"><input type="date" value={form.dueDate || ''} disabled={!canEdit} onChange={(event) => update('dueDate', event.target.value)} onBlur={() => saveWorkflow('dueDate')} /></Field>
+      <Field label="Progress"><div className="workflow-progress"><span style={{ width: `${workflowStatusFor({ metadata: { workflowStatus: form.workflowStatus } }).progress}%`, backgroundColor: workflowStatusFor({ metadata: { workflowStatus: form.workflowStatus } }).color }} /><output>{workflowStatusFor({ metadata: { workflowStatus: form.workflowStatus } }).progress}%</output></div></Field>
+    </div>
+    <details className="asset-record"><summary><strong>Asset record</strong><span>Manufacturer, model, serial, network and warranty</span></summary><div className="form-grid form-grid--two">
+      <Field label="Manufacturer"><input value={form.manufacturer || ''} disabled={!canEdit} onChange={(event) => update('manufacturer', event.target.value)} onBlur={() => saveAsset('manufacturer')} /></Field>
+      <Field label="Model"><input value={form.model || ''} disabled={!canEdit} onChange={(event) => update('model', event.target.value)} onBlur={() => saveAsset('model')} /></Field>
+      <Field label="Part number"><input value={form.partNumber || ''} disabled={!canEdit} onChange={(event) => update('partNumber', event.target.value)} onBlur={() => saveAsset('partNumber')} /></Field>
+      <Field label="Serial number"><input value={form.serialNumber || ''} disabled={!canEdit} onChange={(event) => update('serialNumber', event.target.value)} onBlur={() => saveAsset('serialNumber')} /></Field>
+      <Field label="IP address"><input value={form.ipAddress || ''} disabled={!canEdit} inputMode="decimal" onChange={(event) => update('ipAddress', event.target.value)} onBlur={() => saveAsset('ipAddress')} /></Field>
+      <Field label="MAC address"><input value={form.macAddress || ''} disabled={!canEdit} autoCapitalize="characters" onChange={(event) => update('macAddress', event.target.value)} onBlur={() => saveAsset('macAddress')} /></Field>
+      <Field label="Installed"><input type="date" value={form.installDate || ''} disabled={!canEdit} onChange={(event) => update('installDate', event.target.value)} onBlur={() => saveAsset('installDate')} /></Field>
+      <Field label="Warranty expires"><input type="date" value={form.warrantyExpiry || ''} disabled={!canEdit} onChange={(event) => update('warrantyExpiry', event.target.value)} onBlur={() => saveAsset('warrantyExpiry')} /></Field>
+    </div></details>
+  </section>;
+}
+
 function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, onPatch, onDuplicate, onDelete, onAddNote, onAddPhoto, photoBusy, onClose }) {
   const [form, setForm] = useState({
     label: '', color: '#46545f', size: 42, rotation: 0, fovColor: '#1769aa', fovLength: 0.22, fovSpread: 60, fovRotation: 0,
@@ -205,6 +246,7 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
             </fieldset>
           )}
           {element.category !== 'markup' && Array.isArray(metadata.components) && metadata.components.length > 0 && <fieldset className="assembly-components"><legend>Attached components</legend>{metadata.components.map((component, index) => <div key={`${component.type}-${index}`}><span><strong>{component.symbol}</strong> {component.label}</span>{canEdit && <button type="button" className="icon-button" aria-label={`Remove ${component.label}`} onClick={() => onPatch({ metadata: { ...metadata, components: metadata.components.filter((_, itemIndex) => itemIndex !== index) } })}>×</button>}</div>)}</fieldset>}
+          {element.category !== 'markup' && <DeviceLifecyclePanel element={element} canEdit={canEdit} onPatch={onPatch} />}
           <p className="edit-attribution">Last edited by {element.updatedBy?.name || element.updated_by_name || 'a team member'} · {formatWhen(element.updatedAt || element.updated_at)}</p>
           {canEdit && <div className="button-group button-group--wide"><button type="button" className="button button--secondary" onClick={onDuplicate}>Duplicate</button><button type="button" className="button button--ghost danger-text" onClick={onDelete}>Delete</button></div>}
         </section>
@@ -237,8 +279,8 @@ function Presence({ users, status }) {
 function Schedule({ elements, onSelect, onClose }) {
   const devices = elements.filter((element) => element.category !== 'markup');
   const download = () => {
-    const rows = [['Label', 'System', 'Type', 'Notes', 'Photos', 'Last edited']];
-    devices.forEach((element) => rows.push([element.label, categoryFor(element.category)?.name || 'Custom', itemFor(element.category, element.type)?.label || element.type, element.noteCount ?? element.note_count ?? 0, element.photoCount ?? element.photo_count ?? element.photos?.length ?? 0, element.updatedAt || element.updated_at || '']));
+    const rows = [['Label', 'System', 'Type', 'Status', 'Progress', 'Assignee', 'Target date', 'Manufacturer', 'Model', 'Part number', 'Serial number', 'IP address', 'MAC address', 'Installed', 'Warranty expires', 'Notes', 'Photos', 'Last edited']];
+    devices.forEach((element) => { const metadata = metadataOf(element); const asset = metadata.asset || {}; const workflow = workflowStatusFor(element); rows.push([element.label, categoryFor(element.category)?.name || 'Custom', itemFor(element.category, element.type)?.label || element.type, workflow.label, `${workflow.progress}%`, metadata.assignee || '', metadata.dueDate || '', asset.manufacturer || '', asset.model || '', asset.partNumber || '', asset.serialNumber || '', asset.ipAddress || '', asset.macAddress || '', asset.installDate || '', asset.warrantyExpiry || '', element.noteCount ?? element.note_count ?? 0, element.photoCount ?? element.photo_count ?? element.photos?.length ?? 0, element.updatedAt || element.updated_at || '']); });
     const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
     const anchor = document.createElement('a');
@@ -250,7 +292,8 @@ function Schedule({ elements, onSelect, onClose }) {
   return (
     <div>
       <div className="schedule-summary">{DEVICE_CATEGORIES.map((category) => <div key={category.id}><span className="category-dot" style={{ backgroundColor: category.color }} /><strong>{devices.filter((item) => item.category === category.id).length}</strong><small>{category.name}</small></div>)}</div>
-      <div className="table-scroll"><table><thead><tr><th>Element</th><th>System</th><th>Type</th><th>Notes</th><th>Photos</th><th>Last edit</th></tr></thead><tbody>{devices.map((element) => <tr key={element.id}><td><button type="button" onClick={() => { onSelect(element.id); onClose(); }}><span className="schedule-symbol" style={{ '--element-color': elementColor(element) }}>{elementSymbol(element)}</span>{element.label}</button></td><td>{categoryFor(element.category)?.name || 'Custom'}</td><td>{itemFor(element.category, element.type)?.label || element.type}</td><td>{element.noteCount ?? element.note_count ?? 0}</td><td>{element.photoCount ?? element.photo_count ?? element.photos?.length ?? 0}</td><td>{formatWhen(element.updatedAt || element.updated_at)}</td></tr>)}</tbody></table></div>
+      <div className="workflow-summary">{DEVICE_WORKFLOW_STATUSES.map((status) => { const count = devices.filter((element) => workflowStatusFor(element).id === status.id).length; return count ? <div key={status.id}><i style={{ backgroundColor: status.color }} /><strong>{count}</strong><span>{status.label}</span></div> : null; })}</div>
+      <div className="table-scroll"><table><thead><tr><th>Element</th><th>Status</th><th>Progress</th><th>Assigned</th><th>Target</th><th>System</th><th>Type</th><th>Asset</th><th>Notes</th><th>Photos</th><th>Last edit</th></tr></thead><tbody>{devices.map((element) => { const metadata = metadataOf(element); const asset = metadata.asset || {}; const workflow = workflowStatusFor(element); return <tr key={element.id}><td><button type="button" onClick={() => { onSelect(element.id); onClose(); }}><span className="schedule-symbol" style={{ '--element-color': elementColor(element) }}>{elementSymbol(element)}</span>{element.label}</button></td><td><span className="schedule-status" style={{ '--workflow-color': workflow.color }}>{workflow.label}</span></td><td>{workflow.progress}%</td><td>{metadata.assignee || '—'}</td><td>{metadata.dueDate || '—'}</td><td>{categoryFor(element.category)?.name || 'Custom'}</td><td>{itemFor(element.category, element.type)?.label || element.type}</td><td>{[asset.manufacturer, asset.model, asset.serialNumber].filter(Boolean).join(' · ') || '—'}</td><td>{element.noteCount ?? element.note_count ?? 0}</td><td>{element.photoCount ?? element.photo_count ?? element.photos?.length ?? 0}</td><td>{formatWhen(element.updatedAt || element.updated_at)}</td></tr>; })}</tbody></table></div>
       {!devices.length && <p className="inline-empty">Place components on the floor plan to build the device schedule.</p>}
       <div className="modal__actions"><button type="button" className="button button--secondary" onClick={download} disabled={!devices.length}>Export CSV</button><button type="button" className="button button--primary" onClick={onClose}>Done</button></div>
     </div>

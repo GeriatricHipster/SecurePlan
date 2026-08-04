@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as pdfjs from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { api } from '../api.js';
-import { cameraFieldsFor, elementColor, elementSymbol, isCameraType, itemFor } from './deviceLibrary.js';
+import { cameraFieldsFor, elementColor, elementSymbol, isCameraType, itemFor, workflowStatusFor } from './deviceLibrary.js';
 import DeviceGlyph from './DeviceGlyph.jsx';
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -97,6 +97,7 @@ function DeviceElement({ element, orientation, selected, onPointerDown, onSelect
   const rotation = Number(element.rotation || 0) + Number(orientation || 0);
   const color = elementColor(element);
   const components = Array.isArray(element.metadata?.components) ? element.metadata.components : [];
+  const workflow = workflowStatusFor(element);
   return (
     <button
       type="button"
@@ -111,6 +112,7 @@ function DeviceElement({ element, orientation, selected, onPointerDown, onSelect
       <span className="plan-element__glyph" style={{ transform: `rotate(${rotation}deg)` }}><DeviceGlyph type={element.type} symbol={elementSymbol(element)} label={element.label} iconSrc={itemFor(element.category, element.type)?.reportIcon} /></span>
       {components.length > 0 && <span className="plan-element__components" aria-label={`Components: ${components.map((component) => component.label).join(', ')}`}>{components.map((component, index) => <i key={`${component.type}-${index}`} title={component.label}>{component.symbol || itemFor(component.category, component.type)?.symbol || '?'}</i>)}</span>}
       <span className="plan-element__label">{element.label}</span>
+      <span className="plan-element__status" style={{ '--status-color': workflow.color }} title={workflow.label} aria-label={`Status: ${workflow.label}`} />
       {(Number(element.noteCount ?? element.note_count ?? 0) + Number(element.photoCount ?? element.photo_count ?? 0)) > 0 && <small aria-hidden="true">{Number(element.noteCount ?? element.note_count ?? 0) + Number(element.photoCount ?? element.photo_count ?? 0)}</small>}
     </button>
   );
