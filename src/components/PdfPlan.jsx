@@ -137,10 +137,19 @@ function CameraFieldOfView({ element, orientation }) {
   );
 }
 
-function MarkupPopup({ element, orientation, onPatch, onClose }) {
+function MarkupPopup({ element, orientation, onPreview, onCommit, onClose }) {
+  const [draft, setDraft] = useState(null);
+  useEffect(() => {
+    if (!element) { setDraft(null); return; }
+    setDraft({
+      label: element.label || '', color: elementColor(element), x: Number(element.x), y: Number(element.y),
+      width: Number(element.width), height: Number(element.height), metadata: element.metadata || {},
+    });
+  }, [element?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!element || element.category !== 'markup') return null;
-  const metadata = element.metadata || {};
-  const length = Math.max(0.01, Math.min(0.8, Math.hypot(Number(element.width), Number(element.height))));
+  if (!draft) return null;
+  const metadata = draft.metadata || {};
+  const length = Math.max(0.01, Math.min(0.8, Math.hypot(Number(draft.width), Number(draft.height))));
   const start = toDisplay({ x: Number(element.x), y: Number(element.y) }, orientation);
   const end = toDisplay({ x: Number(element.x) + Number(element.width), y: Number(element.y) + Number(element.height) }, orientation);
   const anchor = {
@@ -148,18 +157,22 @@ function MarkupPopup({ element, orientation, onPatch, onClose }) {
     y: Math.max(0.08, Math.min(0.88, Math.max(start.y, end.y) + 0.045)),
   };
   const patchLength = (next) => {
-    const angle = Math.atan2(Number(element.height), Number(element.width));
-    onPatch(element.id, { width: Math.cos(angle) * next, height: Math.sin(angle) * next });
+    const angle = Math.atan2(Number(draft.height), Number(draft.width));
+    const values = { width: Math.cos(angle) * next, height: Math.sin(angle) * next };
+    setDraft((current) => ({ ...current, ...values }));
+    onPreview(element.id, values);
   };
+  const preview = (values) => { setDraft((current) => ({ ...current, ...values })); onPreview(element.id, values); };
+  const previewMetadata = (values) => { const next = { ...metadata, ...values }; setDraft((current) => ({ ...current, metadata: next })); onPreview(element.id, { metadata: next }); };
   return <div className="markup-popup" role="dialog" aria-label={`${element.type} formatting`} style={{ left: `${anchor.x * 100}%`, top: `${anchor.y * 100}%` }} onPointerDown={(event) => event.stopPropagation()}>
     <button type="button" className="markup-popup__close" onClick={onClose} aria-label="Close formatting controls">×</button>
-    {element.type === 'text' && <label>Text<input autoFocus value={element.label || ''} onChange={(event) => onPatch(element.id, { label: event.target.value })} /></label>}
-    <label>Color<input type="color" value={elementColor(element)} onChange={(event) => onPatch(element.id, { color: event.target.value })} /></label>
-    <label>Horizontal location<input type="range" min="0" max="1" step="0.005" value={Number(element.x)} onChange={(event) => onPatch(element.id, { x: Number(event.target.value) })} /></label>
-    <label>Vertical location<input type="range" min="0" max="1" step="0.005" value={Number(element.y)} onChange={(event) => onPatch(element.id, { y: Number(event.target.value) })} /></label>
-    {element.type === 'text' ? <label>Text size<input type="range" min="10" max="72" value={Number(metadata.fontSize || 18)} onChange={(event) => onPatch(element.id, { metadata: { ...metadata, fontSize: Number(event.target.value) } })} /></label> : <>
-      <label>Thickness<input type="range" min="1" max="20" value={Number(metadata.strokeWidth || 3)} onChange={(event) => onPatch(element.id, { metadata: { ...metadata, strokeWidth: Number(event.target.value) } })} /></label>
-      <label>Length<input type="range" min="0.01" max="0.8" step="0.01" value={length} onChange={(event) => patchLength(Number(event.target.value))} /></label>
+    {element.type === 'text' && <label>Text<input autoFocus value={draft.label} onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value }))} onBlur={() => draft.label !== element.label && onCommit(element.id, { label: draft.label })} /></label>}
+    <label>Color<input type="color" value={draft.color} onChange={(event) => preview({ color: event.target.value })} onBlur={() => onCommit(element.id, { color: draft.color })} /></label>
+    <label>Horizontal location<input type="range" min="0" max="1" step="0.005" value={draft.x} onChange={(event) => preview({ x: Number(event.target.value) })} onPointerUp={() => onCommit(element.id, { x: draft.x })} onKeyUp={() => onCommit(element.id, { x: draft.x })} /></label>
+    <label>Vertical location<input type="range" min="0" max="1" step="0.005" value={draft.y} onChange={(event) => preview({ y: Number(event.target.value) })} onPointerUp={() => onCommit(element.id, { y: draft.y })} onKeyUp={() => onCommit(element.id, { y: draft.y })} /></label>
+    {element.type === 'text' ? <label>Text size<input type="range" min="10" max="72" value={Number(metadata.fontSize || 18)} onChange={(event) => previewMetadata({ fontSize: Number(event.target.value) })} onPointerUp={() => onCommit(element.id, { metadata: draft.metadata })} onKeyUp={() => onCommit(element.id, { metadata: draft.metadata })} /></label> : <>
+      <label>Thickness<input type="range" min="1" max="20" value={Number(metadata.strokeWidth || 3)} onChange={(event) => previewMetadata({ strokeWidth: Number(event.target.value) })} onPointerUp={() => onCommit(element.id, { metadata: draft.metadata })} onKeyUp={() => onCommit(element.id, { metadata: draft.metadata })} /></label>
+      <label>Length<input type="range" min="0.01" max="0.8" step="0.01" value={length} onChange={(event) => patchLength(Number(event.target.value))} onPointerUp={() => onCommit(element.id, { width: draft.width, height: draft.height })} onKeyUp={() => onCommit(element.id, { width: draft.width, height: draft.height })} /></label>
     </>}
   </div>;
 }
@@ -180,13 +193,15 @@ function SelectionHandles({ element, orientation, dimensions, onStart }) {
   return <div className="resize-handles" aria-label={`Resize ${element.label}`}>{points.map(([handle, x, y]) => <button key={handle} type="button" className={`resize-handle resize-handle--${handle}`} style={{ left: `${x * 100}%`, top: `${y * 100}%` }} onPointerDown={(event) => onStart(event, element, handle)} aria-label={`Resize ${element.label} from ${handle}`} />)}</div>;
 }
 
-export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, zoom, onZoom, elements, visibleLayers, selectedId, activeTool, canEdit, onPlace, onDropComponent, onDraw, onPatchElement, onResizeElement, onSelect, onMove, onDeleteSelected, notify }) {
+export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, zoom, onZoom, elements, visibleLayers, selectedId, activeTool, canEdit, onPlace, onDropComponent, onDraw, onPreviewElement, onPatchElement, onResizeElement, onSelect, onMove, onDeleteSelected, notify }) {
   const canvasRef = useRef(null);
   const surfaceRef = useRef(null);
   const dragRef = useRef(null);
   const drawRef = useRef(null);
   const scrollRef = useRef(null);
   const resizeRef = useRef(null);
+  const draftFrameRef = useRef(null);
+  const draftPointRef = useRef(null);
   const [dimensions, setDimensions] = useState({ width: 1180, height: 840 });
   const [rendering, setRendering] = useState(true);
   const [draftShape, setDraftShape] = useState(null);
@@ -248,7 +263,7 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
     }
     if (['line', 'arrow', 'rectangle', 'ellipse'].includes(activeTool.type)) {
       const startDisplay = surfacePoint(event);
-      drawRef.current = { pointerId: event.pointerId, startDisplay };
+      drawRef.current = { pointerId: event.pointerId, startDisplay, type: activeTool.type };
       event.currentTarget.setPointerCapture(event.pointerId);
       setDraftShape({ type: activeTool.type, start: startDisplay, end: startDisplay });
       return;
@@ -290,6 +305,10 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
     return () => scroll.removeEventListener('wheel', wheel);
   }, [zoom, onZoom]);
 
+  useEffect(() => () => {
+    if (draftFrameRef.current) cancelAnimationFrame(draftFrameRef.current);
+  }, []);
+
   const pointerDownElement = (event, element) => {
     event.stopPropagation();
     if (event.detail >= 2 && element.category === 'markup') {
@@ -318,7 +337,12 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
   const pointerMove = (event) => {
     if (drawRef.current?.pointerId === event.pointerId) {
       const end = surfacePoint(event);
-      setDraftShape((current) => ({ ...current, end }));
+      draftPointRef.current = end;
+      if (!draftFrameRef.current) draftFrameRef.current = requestAnimationFrame(() => {
+        draftFrameRef.current = null;
+        const nextEnd = draftPointRef.current;
+        setDraftShape((current) => current ? { ...current, end: nextEnd } : current);
+      });
     }
     if (dragRef.current?.pointerId === event.pointerId) {
       if (!dragRef.current.moved && Math.hypot(event.clientX - dragRef.current.startClientX, event.clientY - dragRef.current.startClientY) < 3) return;
@@ -356,7 +380,9 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
     if (drawRef.current?.pointerId === event.pointerId) {
       const start = fromDisplay(drawRef.current.startDisplay, orientation);
       const end = fromDisplay(surfacePoint(event), orientation);
-      onDraw({ type: draftShape.type, start, end });
+      if (draftFrameRef.current) cancelAnimationFrame(draftFrameRef.current);
+      draftFrameRef.current = null;
+      onDraw({ type: drawRef.current.type, start, end });
       drawRef.current = null;
       setDraftShape(null);
     }
@@ -430,7 +456,7 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
             {draftBounds && draftShape.type !== 'line' && draftShape.type !== 'arrow' && <span className={`draft-shape draft-shape--${draftShape.type}`} style={{ left: `${draftBounds.left}%`, top: `${draftBounds.top}%`, width: `${draftBounds.width}%`, height: `${draftBounds.height}%` }} />}
             {draftShape && (draftShape.type === 'line' || draftShape.type === 'arrow') && <svg className="draft-line" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1={draftShape.start.x * 100} y1={draftShape.start.y * 100} x2={draftShape.end.x * 100} y2={draftShape.end.y * 100} /></svg>}
             {canEdit && <SelectionHandles element={elements.find((element) => element.id === selectedId)} orientation={orientation} dimensions={dimensions} onStart={startResize} />}
-            {canEdit && <MarkupPopup element={elements.find((element) => element.id === editingId)} orientation={orientation} onPatch={onPatchElement} onClose={() => setEditingId(null)} />}
+            {canEdit && <MarkupPopup element={elements.find((element) => element.id === editingId)} orientation={orientation} onPreview={onPreviewElement} onCommit={onPatchElement} onClose={() => setEditingId(null)} />}
           </div>
           {rendering && <div className="plan-rendering" role="status">Rendering floor plan…</div>}
         </div>
