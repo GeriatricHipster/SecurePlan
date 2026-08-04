@@ -18,7 +18,7 @@ test('markup editing requires a double click and exposes text, color, size, thic
   assert.match(source, /onDoubleClick=/);
   assert.match(source, /event\.detail >= 2/);
   assert.match(source, /autoFocus value=\{draft\.label/);
-  for (const label of ['Color', 'Horizontal location', 'Vertical location', 'Text size', 'Thickness', 'Length']) {
+  for (const label of ['Color', 'Left / right', 'Up / down', 'Font size', 'Thickness', 'Length']) {
     assert.equal(source.includes(label), true, `missing ${label} control`);
   }
   assert.match(source, /element=\{elements\.find\(\(element\) => element\.id === editingId\)\}/);
@@ -31,4 +31,14 @@ test('typing and drawing avoid per-input network writes and unbounded pointer re
   assert.match(source, /requestAnimationFrame/);
   assert.match(source, /cancelAnimationFrame/);
   assert.doesNotMatch(source, /value=\{element\.label \|\| ''\} onChange=\{\(event\) => onPatch/);
+});
+
+test('mobile markup supports double tap and text renders without a dotted box', async () => {
+  const source = await readFile(sourceUrl, 'utf8');
+  const styles = await readFile(new URL('../../src/styles.css', import.meta.url), 'utf8');
+  assert.match(source, /touchDoubleTap/);
+  assert.match(source, /now - lastTapRef\.current\.at < 450/);
+  const textRule = styles.match(/\.markup-text \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(textRule, /border: 0;/);
+  assert.doesNotMatch(textRule, /dashed/);
 });

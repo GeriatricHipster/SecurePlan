@@ -165,15 +165,16 @@ function MarkupPopup({ element, orientation, onPreview, onCommit, onClose }) {
   const preview = (values) => { setDraft((current) => ({ ...current, ...values })); onPreview(element.id, values); };
   const previewMetadata = (values) => { const next = { ...metadata, ...values }; setDraft((current) => ({ ...current, metadata: next })); onPreview(element.id, { metadata: next }); };
   return <div className="markup-popup" role="dialog" aria-label={`${element.type} formatting`} style={{ left: `${anchor.x * 100}%`, top: `${anchor.y * 100}%` }} onPointerDown={(event) => event.stopPropagation()}>
-    <button type="button" className="markup-popup__close" onClick={onClose} aria-label="Close formatting controls">×</button>
-    {element.type === 'text' && <label>Text<input autoFocus value={draft.label} onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value }))} onBlur={() => draft.label !== element.label && onCommit(element.id, { label: draft.label })} /></label>}
-    <label>Color<input type="color" value={draft.color} onChange={(event) => preview({ color: event.target.value })} onBlur={() => onCommit(element.id, { color: draft.color })} /></label>
-    <label>Horizontal location<input type="range" min="0" max="1" step="0.005" value={draft.x} onChange={(event) => preview({ x: Number(event.target.value) })} onPointerUp={() => onCommit(element.id, { x: draft.x })} onKeyUp={() => onCommit(element.id, { x: draft.x })} /></label>
-    <label>Vertical location<input type="range" min="0" max="1" step="0.005" value={draft.y} onChange={(event) => preview({ y: Number(event.target.value) })} onPointerUp={() => onCommit(element.id, { y: draft.y })} onKeyUp={() => onCommit(element.id, { y: draft.y })} /></label>
-    {element.type === 'text' ? <label>Text size<input type="range" min="10" max="72" value={Number(metadata.fontSize || 18)} onChange={(event) => previewMetadata({ fontSize: Number(event.target.value) })} onPointerUp={() => onCommit(element.id, { metadata: draft.metadata })} onKeyUp={() => onCommit(element.id, { metadata: draft.metadata })} /></label> : <>
-      <label>Thickness<input type="range" min="1" max="20" value={Number(metadata.strokeWidth || 3)} onChange={(event) => previewMetadata({ strokeWidth: Number(event.target.value) })} onPointerUp={() => onCommit(element.id, { metadata: draft.metadata })} onKeyUp={() => onCommit(element.id, { metadata: draft.metadata })} /></label>
-      <label>Length<input type="range" min="0.01" max="0.8" step="0.01" value={length} onChange={(event) => patchLength(Number(event.target.value))} onPointerUp={() => onCommit(element.id, { width: draft.width, height: draft.height })} onKeyUp={() => onCommit(element.id, { width: draft.width, height: draft.height })} /></label>
-    </>}
+    <header className="markup-popup__header"><div><strong>{element.type === 'text' ? 'Edit text' : `Edit ${element.type}`}</strong><small>Changes save when you finish a field</small></div><button type="button" className="markup-popup__close" onClick={onClose} aria-label="Close formatting controls">×</button></header>
+    <div className="markup-popup__grid">
+      {element.type === 'text' && <label className="markup-control markup-control--wide"><span>Text</span><input autoFocus value={draft.label} onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value }))} onBlur={() => draft.label !== element.label && onCommit(element.id, { label: draft.label })} /></label>}
+      <label className="markup-control"><span>Color</span><input type="color" value={draft.color} onChange={(event) => preview({ color: event.target.value })} onBlur={() => onCommit(element.id, { color: draft.color })} /></label>
+      {element.type === 'text' ? <label className="markup-control markup-control--wide"><span>Font size <output>{Number(metadata.fontSize || 18)} px</output></span><input type="range" min="10" max="72" value={Number(metadata.fontSize || 18)} onChange={(event) => previewMetadata({ fontSize: Number(event.target.value) })} onPointerUp={() => onCommit(element.id, { metadata: draft.metadata })} onKeyUp={() => onCommit(element.id, { metadata: draft.metadata })} /></label> : <>
+        <label className="markup-control"><span>Thickness <output>{Number(metadata.strokeWidth || 3)} px</output></span><input type="range" min="1" max="20" value={Number(metadata.strokeWidth || 3)} onChange={(event) => previewMetadata({ strokeWidth: Number(event.target.value) })} onPointerUp={() => onCommit(element.id, { metadata: draft.metadata })} onKeyUp={() => onCommit(element.id, { metadata: draft.metadata })} /></label>
+        <label className="markup-control markup-control--wide"><span>Length <output>{Math.round(length * 100)}%</output></span><input type="range" min="0.01" max="0.8" step="0.01" value={length} onChange={(event) => patchLength(Number(event.target.value))} onPointerUp={() => onCommit(element.id, { width: draft.width, height: draft.height })} onKeyUp={() => onCommit(element.id, { width: draft.width, height: draft.height })} /></label>
+      </>}
+      <fieldset className="markup-position"><legend>Position</legend><label className="markup-control"><span>Left / right <output>{Math.round(draft.x * 100)}%</output></span><input type="range" min="0" max="1" step="0.005" value={draft.x} onChange={(event) => preview({ x: Number(event.target.value) })} onPointerUp={() => onCommit(element.id, { x: draft.x })} onKeyUp={() => onCommit(element.id, { x: draft.x })} /></label><label className="markup-control"><span>Up / down <output>{Math.round(draft.y * 100)}%</output></span><input type="range" min="0" max="1" step="0.005" value={draft.y} onChange={(event) => preview({ y: Number(event.target.value) })} onPointerUp={() => onCommit(element.id, { y: draft.y })} onKeyUp={() => onCommit(element.id, { y: draft.y })} /></label></fieldset>
+    </div>
   </div>;
 }
 
@@ -202,6 +203,7 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
   const resizeRef = useRef(null);
   const draftFrameRef = useRef(null);
   const draftPointRef = useRef(null);
+  const lastTapRef = useRef({ id: null, at: 0 });
   const [dimensions, setDimensions] = useState({ width: 1180, height: 840 });
   const [rendering, setRendering] = useState(true);
   const [draftShape, setDraftShape] = useState(null);
@@ -311,7 +313,10 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
 
   const pointerDownElement = (event, element) => {
     event.stopPropagation();
-    if (event.detail >= 2 && element.category === 'markup') {
+    const now = Date.now();
+    const touchDoubleTap = event.pointerType === 'touch' && lastTapRef.current.id === element.id && now - lastTapRef.current.at < 450;
+    lastTapRef.current = { id: element.id, at: now };
+    if ((event.detail >= 2 || touchDoubleTap) && element.category === 'markup') {
       event.preventDefault();
       dragRef.current = null;
       onSelect(element.id);

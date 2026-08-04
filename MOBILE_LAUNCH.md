@@ -49,7 +49,7 @@ SecurePlan may also show its own install prompt when the browser reports that in
 
 The PWA above is a real installable application: it has a Home Screen icon, opens in an app-style window, and uses the same secured cloud data and real-time collaboration as the web version. It does not require Apple App Store or Google Play approval.
 
-The repository also includes `ios/` and `android/` Capacitor projects. Those projects are intended for native development and eventual store distribution, but source code alone is not a signed store release. Before publishing, the owner still needs Apple and Google developer accounts, signing identities, store listings and screenshots, privacy/data-safety disclosures, account-deletion support, and real-device review testing.
+The repository also includes store-ready `ios/` and `android/` Capacitor project foundations. Source code alone is not a signed store release: the owner still needs Apple and Google developer accounts, private signing identities, store listings and screenshots, privacy/data-safety disclosures, account-deletion support, and real-device review testing. Follow [STORE_SUBMISSION_CHECKLIST.md](./STORE_SUBMISSION_CHECKLIST.md).
 
 ## Build the native iOS and Android projects
 
@@ -94,7 +94,7 @@ This builds the native web bundle and copies it into both platform projects.
 
 ### 4. Open iOS
 
-iOS builds require macOS, current Xcode, and an Apple signing team. Run:
+iOS builds require macOS, Xcode 26 or newer for current submissions, and an Apple signing team. Run:
 
 ```bash
 npm run native:ios

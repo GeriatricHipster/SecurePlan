@@ -2329,22 +2329,22 @@ h3 {
   min-width: 55px;
   min-height: 34px;
   padding: 4px 7px;
-  border: 1px dashed currentColor;
+  border: 0;
   border-radius: 3px;
-  background: rgb(255 255 255 / 88%);
+  background: transparent;
   font-weight: 750;
   text-align: left;
   touch-action: none;
 }
 
 .markup-popup {
-  display: flex;
+  display: block;
   position: absolute;
   z-index: 50;
-  max-width: calc(100% - 24px);
-  align-items: end;
-  gap: 10px;
-  padding: 10px 12px;
+  width: min(440px, calc(100% - 24px));
+  max-height: min(560px, calc(100% - 24px));
+  overflow: auto;
+  padding: 0;
   border: 1px solid #aeb8bd;
   border-radius: 10px;
   background: rgb(255 255 255 / 98%);
@@ -2353,14 +2353,34 @@ h3 {
   transform: translateX(-50%);
 }
 
+.markup-popup__header {
+  display: flex;
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 13px;
+  border-bottom: 1px solid #d8dfe2;
+  background: #f5f7f7;
+}
+
+.markup-popup__header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.markup-popup__header strong { font-size: 13px; }
+.markup-popup__header small { color: #68757d; font-size: 9px; }
+
 .markup-popup__close {
-  position: absolute;
-  top: -10px;
-  right: -10px;
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
   padding: 0;
-  border: 2px solid white;
+  border: 0;
   border-radius: 50%;
   background: #172129;
   color: white;
@@ -2368,18 +2388,58 @@ h3 {
   line-height: 1;
 }
 
-.markup-popup label {
+.markup-popup__grid {
+  display: grid;
+  padding: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 11px;
+}
+
+.markup-control {
   display: flex;
-  min-width: 90px;
+  min-width: 0;
   flex-direction: column;
-  gap: 4px;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.markup-control > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.markup-control output {
+  color: #68757d;
+  font-size: 9px;
+}
+
+.markup-control--wide,
+.markup-position { grid-column: 1 / -1; }
+
+.markup-position {
+  display: grid;
+  padding: 10px;
+  border: 1px solid #d8dfe2;
+  border-radius: 8px;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.markup-position legend {
+  padding: 0 5px;
+  color: #68757d;
   font-size: 10px;
   font-weight: 750;
 }
 
 .markup-popup input[type='text'],
 .markup-popup input:not([type]) {
-  min-width: 150px;
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
 }
 
 .resize-handles {
@@ -3367,6 +3427,46 @@ td button {
 
   .plan-scroll {
     padding: 12px max(12px, env(safe-area-inset-right)) 12px max(12px, env(safe-area-inset-left));
+  }
+
+  .markup-popup {
+    width: min(360px, calc(100% - 16px));
+    max-height: 62%;
+    transform: translate(-50%, -8px);
+  }
+
+  .markup-popup__grid,
+  .markup-position {
+    grid-template-columns: 1fr;
+  }
+
+  .markup-popup__header {
+    padding: 10px 12px;
+  }
+
+  .markup-control input[type='range'] {
+    min-height: 36px;
+  }
+
+  .markup-control input:not([type]) {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  .resize-handle {
+    width: 20px;
+    height: 20px;
+  }
+
+  .component-grid > button,
+  .profile-list > button {
+    min-height: 64px;
+  }
+
+  .canvas-toolbar .icon-button,
+  .editor-actions .button {
+    min-width: 44px;
+    min-height: 44px;
   }
 }
 
