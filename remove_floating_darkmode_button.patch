@@ -1,0 +1,21 @@
+*** Begin Patch
+*** Update File: secureplan-app/src/App.jsx
+@@
+-function ThemeToggle({ theme, onToggle }) {
+-  return (
+-    <button
+-      type="button"
+-      className="theme-toggle-fab button button--secondary"
+-      onClick={onToggle}
+-      aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+-      title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+-    >
+-      <span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span>
+-      <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>
+-    </button>
+-  );
+-}
+@@
+-    <ThemeToggle theme={theme} onToggle={toggleTheme} />
+     <FullScreenToggle />
+*** End Patch
