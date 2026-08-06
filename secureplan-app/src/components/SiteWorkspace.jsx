@@ -112,6 +112,7 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
   const [form, setForm] = useState({ name: '', description: '', files: [], items: [], destinationId: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [mobileFoldersOpen, setMobileFoldersOpen] = useState(false);
   const canEdit = roleCanEdit(user.role);
   const canManage = roleCanManage(user.role);
 
@@ -246,6 +247,11 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
     else startAction(type, data);
   };
 
+  const selectFolder = (id) => {
+    setSelectedFolderId(id);
+    setMobileFoldersOpen(false);
+  };
+
   if (loading) return <main id="main-content" className="page loading-panel"><Spinner label="Opening site…" /></main>;
 
   return (
@@ -261,21 +267,25 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
       </div>
 
       <div className="workspace-layout">
-        <aside className="folder-sidebar" aria-label="Site folders">
+        {mobileFoldersOpen && <button type="button" className="mobile-folder-backdrop" aria-label="Close folder list" onClick={() => setMobileFoldersOpen(false)} />}
+        <aside className={`folder-sidebar ${mobileFoldersOpen ? 'open' : ''}`} aria-label="Site folders">
           <div className="folder-sidebar__header">
             <h2>Quick filter</h2>
-            {canManage && <button type="button" className="icon-button" onClick={() => startAction('folder-create', { parentId: activeFolderId })} aria-label="Create folder">＋</button>}
+            <div className="folder-sidebar__header-actions">
+              {canManage && <button type="button" className="icon-button" onClick={() => startAction('folder-create', { parentId: activeFolderId })} aria-label="Create folder">＋</button>}
+              <button type="button" className="icon-button folder-sidebar__close" onClick={() => setMobileFoldersOpen(false)} aria-label="Close folders">✕</button>
+            </div>
           </div>
           <nav>
-            <button type="button" className={`root-folder ${selectedFolderId === ALL_FOLDERS ? 'selected' : ''}`} onClick={() => setSelectedFolderId(ALL_FOLDERS)}>
+            <button type="button" className={`root-folder ${selectedFolderId === ALL_FOLDERS ? 'selected' : ''}`} onClick={() => selectFolder(ALL_FOLDERS)}>
               <span aria-hidden="true">▦</span><span>All folders</span>
             </button>
-            <button type="button" className={`root-folder ${selectedFolderId == null ? 'selected' : ''}`} onClick={() => setSelectedFolderId(null)}>
+            <button type="button" className={`root-folder ${selectedFolderId == null ? 'selected' : ''}`} onClick={() => selectFolder(null)}>
               <span aria-hidden="true">▦</span><span>Site root</span>
             </button>
             {rootFolders.length ? (
               <ul className="folder-tree">
-                {rootFolders.map((folder) => <FolderNode key={folder.id} folder={folder} folders={folders} selectedId={selectedFolderId} canManage={canManage} onSelect={setSelectedFolderId} onAction={folderAction} />)}
+                {rootFolders.map((folder) => <FolderNode key={folder.id} folder={folder} folders={folders} selectedId={selectedFolderId} canManage={canManage} onSelect={selectFolder} onAction={folderAction} />)}
               </ul>
             ) : <p className="folder-sidebar__empty">No folders yet</p>}
           </nav>
@@ -287,20 +297,16 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
 
         <section className="survey-browser">
           <nav className="breadcrumbs" aria-label="Folder path">
-            <button type="button" onClick={() => setSelectedFolderId(ALL_FOLDERS)}>{site?.name}</button>
-            {breadcrumbs.map((folder) => <React.Fragment key={folder.id}><span aria-hidden="true">/</span><button type="button" onClick={() => setSelectedFolderId(folder.id)}>{folder.name}</button></React.Fragment>)}
+            <button type="button" onClick={() => selectFolder(ALL_FOLDERS)}>{site?.name}</button>
+            {breadcrumbs.map((folder) => <React.Fragment key={folder.id}><span aria-hidden="true">/</span><button type="button" onClick={() => selectFolder(folder.id)}>{folder.name}</button></React.Fragment>)}
           </nav>
-          <nav className="folder-filter-bar" aria-label="Filter surveys by folder">
-            <button type="button" aria-pressed={selectedFolderId === ALL_FOLDERS} onClick={() => setSelectedFolderId(ALL_FOLDERS)}>All folders <span>{surveys.length}</span></button>
-            <button type="button" aria-pressed={selectedFolderId == null} onClick={() => setSelectedFolderId(null)}>Site root <span>{surveyGroups[0]?.surveys.length || 0}</span></button>
-            {folderOrder.map((folder) => <button type="button" key={folder.id} aria-pressed={selectedFolderId === folder.id} onClick={() => setSelectedFolderId(folder.id)} title={pathToFolder(folder.id, folders).map((item) => item.name).join(' / ')}>{folder.name} <span>{surveyGroups.find((group) => group.id === folder.id)?.surveys.length || 0}</span></button>)}
-          </nav>
+          <button type="button" className="mobile-folder-trigger" onClick={() => setMobileFoldersOpen(true)}><span aria-hidden="true">▦</span> Browse folders</button>
           <div className="survey-browser__heading">
             <div>
               <h2>{selectedFolderId === ALL_FOLDERS ? 'All survey folders' : breadcrumbs.at(-1)?.name || 'Site root'}</h2>
               <p>{visibleGroups.length} folder section{visibleGroups.length === 1 ? '' : 's'} · {visibleSurveyCount} survey{visibleSurveyCount === 1 ? '' : 's'}</p>
             </div>
-            {selectedFolderId !== ALL_FOLDERS && <button type="button" className="button button--ghost" onClick={() => setSelectedFolderId(ALL_FOLDERS)}>Show all folders</button>}
+            {selectedFolderId !== ALL_FOLDERS && <button type="button" className="button button--ghost" onClick={() => selectFolder(ALL_FOLDERS)}>Show all folders</button>}
           </div>
 
           <div className="survey-folder-list">{visibleGroups.map((group) => <SurveyFolderSection key={group.id || 'root'} group={group} folders={folders} canEdit={canEdit} canManage={canManage} onCreateSurvey={(folderId) => startAction('survey-create', { folderId })} onFolderAction={folderAction} onOpenSurvey={(item) => navigate(`surveys/${item.id}?site=${siteId}`)} onSurveyAction={surveyAction} />)}</div>
