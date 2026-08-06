@@ -7,6 +7,7 @@ import SitesDashboard from './components/SitesDashboard.jsx';
 import SiteWorkspace from './components/SiteWorkspace.jsx';
 import TeamPage from './components/TeamPage.jsx';
 import InstallAppPrompt from './components/InstallAppPrompt.jsx';
+import FullScreenToggle from './components/FullScreenToggle.jsx';
 const SurveyEditor = lazy(() => import('./components/SurveyEditor.jsx'));
 
 const THEME_STORAGE_KEY = 'secureplan-theme';
@@ -62,6 +63,7 @@ function AppHeader({ user, route, onLogout, theme, onToggleTheme, isOnline }) {
         <span className={`connection-pill ${isOnline ? 'connection-pill--online' : 'connection-pill--offline'}`}>
           {isOnline ? 'Online' : 'Offline'}
         </span>
+        <FullScreenToggle />
         <ThemeButton theme={theme} onToggle={onToggleTheme} />
       </div>
       <details className="account-menu" open={menuOpen} onToggle={(e) => setMenuOpen(e.currentTarget.open)}>
@@ -203,49 +205,30 @@ export default function App() {
   }), [user, theme, toggleTheme, isOnline]);
 
   if (status === 'loading') {
-    return (
-      <>
-        <ThemeButton theme={theme} onToggle={toggleTheme} />
-        <main id="main-content" className="boot-screen"><Brand /><Spinner label="Opening your workspace…" /></main>
-      </>
-    );
+    return <main id="main-content" className="boot-screen"><Brand /><Spinner label="Opening your workspace…" /></main>;
   }
 
   if (status === 'error') {
     return (
-      <>
-        <ThemeButton theme={theme} onToggle={toggleTheme} />
-        <main id="main-content" className="boot-screen">
-          <Brand />
-          <h1>SecurePlan could not start</h1>
-          <p>Check the server connection and try again.</p>
-          <button type="button" className="button button--primary" onClick={boot}>Try again</button>
-        </main>
-      </>
+      <main id="main-content" className="boot-screen">
+        <Brand />
+        <h1>SecurePlan could not start</h1>
+        <p>Check the server connection and try again.</p>
+        <button type="button" className="button button--primary" onClick={boot}>Try again</button>
+      </main>
     );
   }
 
   if (setupRequired) {
-    return (
-      <>
-        <ThemeButton theme={theme} onToggle={toggleTheme} />
-        <OwnerSetup setupCodeRequired={setupCodeRequired} onSubmit={(values) => authenticate(api.setupOwner, values)} />
-      </>
-    );
+    return <OwnerSetup setupCodeRequired={setupCodeRequired} onSubmit={(values) => authenticate(api.setupOwner, values)} />;
   }
 
   if (!user) {
-    return (
-      <>
-        <ThemeButton theme={theme} onToggle={toggleTheme} />
-        <SignIn onLogin={(values) => authenticate(api.login, values)} onRegister={(values) => authenticate(api.register, values)} />
-      </>
-    );
+    return <SignIn onLogin={(values) => authenticate(api.login, values)} onRegister={(values) => authenticate(api.register, values)} />;
   }
 
   return (
     <>
-      <ThemeButton theme={theme} onToggle={toggleTheme} />
       <div className={`app-shell app-shell--${route.page}`}>
         {route.page !== 'survey' && <AppHeader user={user} route={route} onLogout={logout} theme={theme} onToggleTheme={toggleTheme} isOnline={isOnline} />}
         {!isOnline && <div className="offline-banner" role="status">Offline mode is on. Your edits will queue locally and sync when the connection returns.</div>}

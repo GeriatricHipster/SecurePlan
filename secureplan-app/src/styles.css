@@ -4231,3 +4231,63 @@ td button {
     border-width: 2px;
   }
 }
+
+/* Header status/actions (online indicator, dark mode, full screen) */
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 8px;
+}
+
+.connection-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  font-size: .74rem;
+  font-weight: 700;
+  letter-spacing: .01em;
+}
+
+.connection-pill--online {
+  color: var(--green);
+}
+
+.connection-pill--offline {
+  color: var(--red);
+}
+
+.theme-toggle,
+.fullscreen-toggle-fab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.theme-toggle__label {
+  font-weight: 700;
+}
+
+.offline-banner {
+  position: sticky;
+  top: 0;
+  z-index: 55;
+  padding: 11px 16px;
+  background: linear-gradient(90deg, var(--red-dark), var(--red));
+  color: white;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: 0 10px 20px rgb(0 0 0 / 16%);
+}
+
+@media (max-width: 760px) {
+  .header-actions {
+    display: none;
+  }
+}
