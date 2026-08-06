@@ -1,15 +1,24 @@
 import { Capacitor } from '@capacitor/core';
 
 /**
- * SecurePlan Surveyor same-origin API client.
+ * SecurePlan Surveyor same-origin API client with offline caching/queueing.
  *
- * Every endpoint returns JSON shaped as `{ data }` unless noted. Mutations use
- * JSON except survey and photo uploads, which use multipart FormData.
+ * GET requests are cached in IndexedDB so surveys open faster and can be
+ * viewed while offline after they have been loaded once.
+ *
+ * Mutation requests are queued when the network is unavailable and replayed
+ * automatically when the browser comes back online.
  */
 
 const nativeClient = Capacitor.isNativePlatform();
 const configuredApiBase = String(import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, '');
 let nativeSessionToken = null;
+
+const DB_NAME = 'secureplan-offline';
+const DB_VERSION = 1;
+const RESPONSE_STORE = 'responses';
+const QUEUE_STORE = 'queue';
+const APP_ORIGIN = typeof window !== 'undefined' ? window.location.origin : '';
 
 function apiUrl(path) {
   if (!nativeClient) return path;
@@ -26,6 +35,217 @@ function requestHeaders(headers = {}) {
     ...(nativeSessionToken ? { Authorization: `Bearer ${nativeSessionToken}` } : {}),
     ...headers,
   };
+}
+
+function openDb() {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(RESPONSE_STORE)) db.createObjectStore(RESPONSE_STORE);
+      if (!db.objectStoreNames.contains(QUEUE_STORE)) db.createObjectStore(QUEUE_STORE, { keyPath: 'id' });
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error('IndexedDB unavailable'));
+  });
+}
+
+async function dbGet(storeName, key) {
+  const db = await openDb();
+  if (!db) return undefined;
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readonly');
+    const req = tx.objectStore(storeName).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('IndexedDB read failed'));
+  });
+}
+
+async function dbPut(storeName, value, key = undefined) {
+  const db = await openDb();
+  if (!db) return undefined;
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+    const req = key === undefined ? store.put(value) : store.put(value, key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('IndexedDB write failed'));
+  });
+}
+
+async function dbDelete(storeName, key) {
+  const db = await openDb();
+  if (!db) return undefined;
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    const req = tx.objectStore(storeName).delete(key);
+    req.onsuccess = () => resolve(true);
+    req.onerror = () => reject(req.error || new Error('IndexedDB delete failed'));
+  });
+}
+
+async function dbAll(storeName) {
+  const db = await openDb();
+  if (!db) return [];
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readonly');
+    const req = tx.objectStore(storeName).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error || new Error('IndexedDB list failed'));
+  });
+}
+
+function storageKey(path, method = 'GET') {
+  return `${nativeClient ? 'native:' : 'web:'}${method}:${path}`;
+}
+
+function isOfflineError(error) {
+  return !navigator.onLine || error?.name === 'TypeError' || /failed to fetch/i.test(error?.message || '');
+}
+
+function canQueue(path, method) {
+  if (method === 'GET') return false;
+  if (path.startsWith('/api/auth/')) return false;
+  return true;
+}
+
+function bufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function base64ToBuffer(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+async function serializeBody(body) {
+  if (body == null) return null;
+  if (body instanceof FormData) {
+    const entries = [];
+    for (const [key, value] of body.entries()) {
+      if (value instanceof File || value instanceof Blob) {
+        const file = value;
+        entries.push({
+          key,
+          kind: 'file',
+          name: file.name || 'upload.bin',
+          type: file.type || 'application/octet-stream',
+          data: bufferToBase64(await file.arrayBuffer()),
+        });
+      } else {
+        entries.push({ key, kind: 'text', value: String(value) });
+      }
+    }
+    return { kind: 'form', entries };
+  }
+  if (typeof body === 'string') return { kind: 'text', value: body };
+  if (typeof body === 'object') return { kind: 'json', value: body };
+  return { kind: 'text', value: String(body) };
+}
+
+function restoreBody(serialized) {
+  if (!serialized) return undefined;
+  if (serialized.kind === 'json') return serialized.value;
+  if (serialized.kind === 'text') return serialized.value;
+  if (serialized.kind === 'form') {
+    const form = new FormData();
+    for (const entry of serialized.entries || []) {
+      if (entry.kind === 'file') {
+        const blob = new Blob([base64ToBuffer(entry.data)], { type: entry.type || 'application/octet-stream' });
+        form.append(entry.key, new File([blob], entry.name || 'upload.bin', { type: entry.type || blob.type }));
+      } else {
+        form.append(entry.key, entry.value);
+      }
+    }
+    return form;
+  }
+  return undefined;
+}
+
+function previewBody(body) {
+  if (body == null) return null;
+  if (body instanceof FormData) {
+    const preview = {};
+    for (const [key, value] of body.entries()) {
+      preview[key] = value instanceof File ? value.name : String(value);
+    }
+    return preview;
+  }
+  if (typeof body === 'object') return structuredClone(body);
+  return body;
+}
+
+function syntheticQueuedResponse(path, method, body) {
+  const now = new Date().toISOString();
+  const preview = previewBody(body) || {};
+
+  if (method === 'POST' && /\/api\/surveys\/[^/]+\/elements$/.test(path)) {
+    return {
+      id: crypto.randomUUID(),
+      createdAt: now,
+      updatedAt: now,
+      offlineQueued: true,
+      ...preview,
+    };
+  }
+
+  if (method === 'POST' && /\/api\/elements\/[^/]+\/photos$/.test(path)) {
+    return {
+      id: crypto.randomUUID(),
+      createdAt: now,
+      updatedAt: now,
+      caption: preview.caption || '',
+      offlineQueued: true,
+    };
+  }
+
+  if (method === 'POST' && /\/api\/surveys($|\/batch)/.test(path)) {
+    return {
+      id: crypto.randomUUID(),
+      createdAt: now,
+      updatedAt: now,
+      offlineQueued: true,
+      ...preview,
+    };
+  }
+
+  if (method === 'PATCH') {
+    return {
+      offlineQueued: true,
+      ...preview,
+    };
+  }
+
+  if (method === 'DELETE') {
+    return { offlineQueued: true };
+  }
+
+  return {
+    offlineQueued: true,
+    ...preview,
+  };
+}
+
+async function queueMutation(path, method, options) {
+  const queued = {
+    id: crypto.randomUUID(),
+    path,
+    method,
+    headers: options.headers || {},
+    body: await serializeBody(options.body),
+    queuedAt: Date.now(),
+  };
+  await dbPut(QUEUE_STORE, queued);
+  return queued;
 }
 
 async function fetchApi(path, options = {}) {
@@ -45,29 +265,92 @@ async function fetchApi(path, options = {}) {
 }
 
 async function request(path, options = {}) {
-  const response = await fetchApi(path, options);
+  const method = String(options.method || 'GET').toUpperCase();
+  const cacheKey = storageKey(path, method);
 
-  const contentType = response.headers.get('content-type') || '';
-  const payload = contentType.includes('application/json')
-    ? await response.json()
-    : await response.text();
+  if (method === 'GET') {
+    try {
+      const response = await fetchApi(path, options);
+      const contentType = response.headers.get('content-type') || '';
+      const payload = contentType.includes('application/json') ? await response.json() : await response.text();
 
-  if (!response.ok) {
-    const error = new Error(
-      payload?.error?.message || payload?.error || payload?.message || `Request failed (${response.status})`,
-    );
-    error.status = response.status;
-    error.details = payload?.error?.details || payload?.details;
-    error.code = payload?.error?.code;
-    error.requestId = payload?.requestId || response.headers.get('x-request-id');
-    if (error.requestId && response.status >= 500) error.message += ` Reference: ${error.requestId}`;
-    throw error;
+      if (!response.ok) {
+        const error = new Error(
+          payload?.error?.message || payload?.error || payload?.message || `Request failed (${response.status})`,
+        );
+        error.status = response.status;
+        error.details = payload?.error?.details || payload?.details;
+        error.code = payload?.error?.code;
+        error.requestId = payload?.requestId || response.headers.get('x-request-id');
+        if (error.requestId && response.status >= 500) error.message += ` Reference: ${error.requestId}`;
+        throw error;
+      }
+
+      const issuedToken = payload?.data?.sessionToken || payload?.sessionToken;
+      if (nativeClient && issuedToken) nativeSessionToken = issuedToken;
+
+      const value = payload?.data ?? payload;
+      await dbPut(RESPONSE_STORE, { key: cacheKey, value, cachedAt: Date.now() }, cacheKey);
+      return value;
+    } catch (error) {
+      const cached = await dbGet(RESPONSE_STORE, cacheKey).catch(() => undefined);
+      if (cached) return cached.value;
+      throw error;
+    }
   }
 
-  const issuedToken = payload?.data?.sessionToken || payload?.sessionToken;
-  if (nativeClient && issuedToken) nativeSessionToken = issuedToken;
+  try {
+    const response = await fetchApi(path, options);
+    const contentType = response.headers.get('content-type') || '';
+    const payload = contentType.includes('application/json') ? await response.json() : await response.text();
 
-  return payload?.data ?? payload;
+    if (!response.ok) {
+      const error = new Error(
+        payload?.error?.message || payload?.error || payload?.message || `Request failed (${response.status})`,
+      );
+      error.status = response.status;
+      error.details = payload?.error?.details || payload?.details;
+      error.code = payload?.error?.code;
+      error.requestId = payload?.requestId || response.headers.get('x-request-id');
+      if (error.requestId && response.status >= 500) error.message += ` Reference: ${error.requestId}`;
+      throw error;
+    }
+
+    const issuedToken = payload?.data?.sessionToken || payload?.sessionToken;
+    if (nativeClient && issuedToken) nativeSessionToken = issuedToken;
+    return payload?.data ?? payload;
+  } catch (error) {
+    if (canQueue(path, method) && isOfflineError(error)) {
+      await queueMutation(path, method, options);
+      return syntheticQueuedResponse(path, method, options.body);
+    }
+    throw error;
+  }
+}
+
+async function flushOfflineQueue() {
+  const items = (await dbAll(QUEUE_STORE)).sort((a, b) => a.queuedAt - b.queuedAt);
+  for (const item of items) {
+    try {
+      await request(item.path, {
+        method: item.method,
+        headers: item.headers,
+        body: restoreBody(item.body),
+      });
+      await dbDelete(QUEUE_STORE, item.id);
+    } catch (error) {
+      // Stop on the first failure so we keep the queue in order.
+      throw error;
+    }
+  }
+  return { synced: true, remaining: 0 };
+}
+
+if (typeof window !== 'undefined' && !window.__secureplanOfflineSyncHooked) {
+  window.__secureplanOfflineSyncHooked = true;
+  window.addEventListener('online', () => {
+    flushOfflineQueue().catch(() => {});
+  });
 }
 
 const json = (method, body) => ({ method, body });
@@ -82,7 +365,6 @@ export const api = {
     try { return await request('/api/auth/logout', json('POST')); }
     finally { nativeSessionToken = null; }
   },
-
   sites: () => request('/api/sites'),
   site: (id) => request(`/api/sites/${id}`),
   createSite: (values) => request('/api/sites', json('POST', values)),
@@ -90,14 +372,12 @@ export const api = {
   deleteSite: (id, confirmation) => request(`/api/sites/${id}`, json('DELETE', { confirmation })),
   copySite: (id) => request(`/api/sites/${id}/copy`, json('POST')),
   reorderSites: (siteIds) => request('/api/sites/reorder', json('POST', { siteIds })),
-
   folders: (siteId) => request(`/api/folders?siteId=${encodeURIComponent(siteId)}`),
   createFolder: (values) => request('/api/folders', json('POST', values)),
   updateFolder: (id, values) => request(`/api/folders/${id}`, json('PATCH', values)),
   deleteFolder: (id, recursive = true) => request(`/api/folders/${id}?recursive=${recursive ? 'true' : 'false'}`, json('DELETE')),
   copyFolder: (id) => request(`/api/folders/${id}/copy`, json('POST')),
   moveFolder: (id, values) => request(`/api/folders/${id}/move`, json('POST', values)),
-
   surveys: (siteId, folderId) => {
     const query = new URLSearchParams({ siteId });
     if (folderId) query.set('folderId', folderId);
@@ -132,7 +412,6 @@ export const api = {
     withCredentials: !nativeClient,
     httpHeaders: nativeClient && nativeSessionToken ? { Authorization: `Bearer ${nativeSessionToken}` } : undefined,
   }),
-
   elements: (surveyId) => request(`/api/surveys/${surveyId}/elements`),
   createElement: (surveyId, values) => request(`/api/surveys/${surveyId}/elements`, json('POST', values)),
   updateElement: (id, values) => request(`/api/elements/${id}`, json('PATCH', values)),
@@ -152,18 +431,17 @@ export const api = {
     if (!response.ok) throw new Error(`Photo download failed (${response.status}).`);
     return response.blob();
   },
-
   profiles: () => request('/api/profiles'),
   createProfile: (values) => request('/api/profiles', json('POST', values)),
   updateProfile: (id, values) => request(`/api/profiles/${id}`, json('PATCH', values)),
   deleteProfile: (id) => request(`/api/profiles/${id}`, json('DELETE')),
-
   members: () => request('/api/members'),
   updateMember: (id, values) => request(`/api/members/${id}`, json('PATCH', values)),
   removeMember: (id) => request(`/api/members/${id}`, json('DELETE')),
   invitations: () => request('/api/invitations'),
   createInvitation: (values) => request('/api/invitations', json('POST', values)),
   revokeInvitation: (id) => request(`/api/invitations/${id}`, json('DELETE')),
+  flushOfflineQueue,
 };
 
 export const nativeTransport = {

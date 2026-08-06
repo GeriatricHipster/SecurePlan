@@ -37,19 +37,37 @@ function navigate(path) {
   else window.location.hash = target;
 }
 
-function AppHeader({ user, route, onLogout }) {
+function ThemeButton({ theme, onToggle }) {
+  return (
+    <button type="button" className="theme-toggle button button--secondary" onClick={onToggle} title="Toggle dark mode" aria-label="Toggle dark mode">
+      <span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span>
+      <span className="theme-toggle__label">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+    </button>
+  );
+}
+
+function AppHeader({ user, route, onLogout, theme, onToggleTheme, isOnline }) {
   const [menuOpen, setMenuOpen] = useState(false);
+
   return (
     <header className="app-header">
       <button type="button" className="brand-button" onClick={() => navigate('home')} aria-label="Go to home">
         <Brand compact />
       </button>
+
       <nav className="desktop-nav" aria-label="Primary navigation">
         <button type="button" className={route.page === 'home' ? 'active' : ''} onClick={() => navigate('home')}>Home</button>
         <button type="button" className={route.page === 'sites' || route.page === 'site' ? 'active' : ''} onClick={() => navigate('sites')}>Sites</button>
         {['owner', 'admin'].includes(user.role) && <button type="button" className={route.page === 'team' ? 'active' : ''} onClick={() => navigate('team')}>Team</button>}
       </nav>
-      <div className="header-spacer" />
+
+      <div className="header-actions">
+        <span className={`connection-pill ${isOnline ? 'connection-pill--online' : 'connection-pill--offline'}`}>
+          {isOnline ? 'Online' : 'Offline'}
+        </span>
+        <ThemeButton theme={theme} onToggle={onToggleTheme} />
+      </div>
+
       <details className="account-menu" open={menuOpen} onToggle={(e) => setMenuOpen(e.currentTarget.open)}>
         <summary aria-label="Open account menu">
           <span className="avatar">{initials(user.name)}</span>
@@ -70,6 +88,7 @@ function AppHeader({ user, route, onLogout }) {
 
 function MobileNav({ route, user }) {
   if (route.page === 'survey') return null;
+
   return (
     <nav className={`mobile-nav ${['owner', 'admin'].includes(user.role) ? 'mobile-nav--triple' : ''}`} aria-label="Mobile navigation">
       <button type="button" className={route.page === 'home' ? 'active' : ''} onClick={() => navigate('home')}><span aria-hidden="true">⌂</span>Home</button>
@@ -87,6 +106,7 @@ export default function App() {
   const [route, setRoute] = useState(routeFromHash);
   const [toast, setToast] = useState('');
   const [theme, setTheme] = useState(initialTheme);
+  const [isOnline, setIsOnline] = useState(window.navigator.onLine);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -104,6 +124,20 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const onOnline = () => {
+      setIsOnline(true);
+      api.flushOfflineQueue?.().catch(() => {});
+    };
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
+
+  useEffect(() => {
     const pageName = {
       home: 'Home',
       sites: 'Sites',
@@ -111,6 +145,7 @@ export default function App() {
       survey: 'Survey editor',
       team: 'Team',
     }[route.page] || 'SecurePlan';
+
     document.title = `${pageName} · SecurePlan Surveyor`;
 
     const frame = window.requestAnimationFrame(() => {
@@ -119,6 +154,7 @@ export default function App() {
       if (!main.hasAttribute('tabindex')) main.setAttribute('tabindex', '-1');
       main.focus({ preventScroll: true });
     });
+
     return () => window.cancelAnimationFrame(frame);
   }, [route.page, status, user?.id]);
 
@@ -131,6 +167,7 @@ export default function App() {
       setSetupRequired(Boolean(result?.setupRequired ?? result?.needsSetup ?? result?.requiresSetup));
       setSetupCodeRequired(Boolean(result?.setupCodeRequired));
       setStatus('ready');
+      api.flushOfflineQueue?.().catch(() => {});
     } catch (error) {
       setStatus('error');
       setToast(error.message);
@@ -166,7 +203,8 @@ export default function App() {
     navigate,
     theme,
     toggleTheme,
-  }), [user, theme, toggleTheme]);
+    isOnline,
+  }), [user, theme, toggleTheme, isOnline]);
 
   if (status === 'loading') {
     return <main id="main-content" className="boot-screen"><Brand /><Spinner label="Opening your workspace…" /></main>;
@@ -188,7 +226,9 @@ export default function App() {
 
   return (
     <div className={`app-shell app-shell--${route.page}`}>
-      {route.page !== 'survey' && <AppHeader user={user} route={route} onLogout={logout} />}
+      {route.page !== 'survey' && <AppHeader user={user} route={route} onLogout={logout} theme={theme} onToggleTheme={toggleTheme} isOnline={isOnline} />}
+      {!isOnline && <div className="offline-banner" role="status">Offline mode is on. Your edits will queue locally and sync when the connection returns.</div>}
+
       {route.page === 'home' && <HomeDashboard {...context} />}
       {route.page === 'sites' && <SitesDashboard {...context} />}
       {route.page === 'site' && <SiteWorkspace {...context} siteId={route.siteId} />}
@@ -198,6 +238,7 @@ export default function App() {
         </Suspense>
       )}
       {route.page === 'team' && <TeamPage {...context} />}
+
       <MobileNav route={route} user={user} />
       <InstallAppPrompt />
       <div className={`toast ${toast ? 'toast--visible' : ''}`} role="status" aria-live="polite">{toast}</div>
