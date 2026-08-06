@@ -75,7 +75,7 @@ function MarkupElement({ element, orientation, selected, onPointerDown, onSelect
   if (element.type === 'line' || element.type === 'arrow') {
     const markerId = `arrow-${String(element.id).replace(/[^a-zA-Z0-9_-]/g, '')}`;
     return (
-      <svg className={`markup-line ${selected ? 'selected' : ''}`} viewBox="0 0 100 100" preserveAspectRatio="none" role="button" tabIndex="0" aria-pressed={selected} aria-label={element.label} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(element.id); } }}>
+      <svg className={`markup-line ${selected ? 'selected' : ''}`} viewBox="0 0 100 100" preserveAspectRatio="none" role="button" tabIndex="0" aria-pressed={selected} aria-label={element.label} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }} onDoubleClick={(event) => { event.stopPropagation(); onEdit(element.id); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(element.id); } }}>
         {element.type === 'arrow' && <defs><marker id={markerId} markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill={color} /></marker></defs>}
         <line className="markup-line__hit-area" x1={start.x * 100} y1={start.y * 100} x2={end.x * 100} y2={end.y * 100} vectorEffect="non-scaling-stroke" />
         <line className="markup-line__visible" x1={start.x * 100} y1={start.y * 100} x2={end.x * 100} y2={end.y * 100} stroke={color} strokeWidth={strokeWidth} vectorEffect="non-scaling-stroke" markerEnd={element.type === 'arrow' ? `url(#${markerId})` : undefined} />
@@ -87,9 +87,9 @@ function MarkupElement({ element, orientation, selected, onPointerDown, onSelect
   const boxWidth = Math.abs(end.x - start.x) * 100;
   const boxHeight = Math.abs(end.y - start.y) * 100;
   if (element.type === 'text') {
-    return <button type="button" className={`markup-text ${selected ? 'selected' : ''}`} style={{ left: `${left}%`, top: `${top}%`, width: `${boxWidth}%`, minHeight: `${Math.max(3, boxHeight)}%`, color, fontSize: `${Math.max(10, Number(element.metadata?.fontSize || 18))}px` }} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }}>{element.label || 'Callout'}</button>;
+    return <button type="button" className={`markup-text ${selected ? 'selected' : ''}`} style={{ left: `${left}%`, top: `${top}%`, width: `${boxWidth}%`, minHeight: `${Math.max(3, boxHeight)}%`, color, fontSize: `${Math.max(10, Number(element.metadata?.fontSize || 18))}px` }} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }} onDoubleClick={(event) => { event.stopPropagation(); onEdit(element.id); }}>{element.label || 'Callout'}</button>;
   }
-  return <button type="button" aria-label={`${element.label} markup`} className={`markup-shape markup-shape--${element.type} ${selected ? 'selected' : ''}`} style={{ left: `${left}%`, top: `${top}%`, width: `${boxWidth}%`, height: `${boxHeight}%`, borderColor: color, borderWidth: `${strokeWidth}px`, backgroundColor: `${color}18` }} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }} />;
+  return <button type="button" aria-label={`${element.label} markup`} className={`markup-shape markup-shape--${element.type} ${selected ? 'selected' : ''}`} style={{ left: `${left}%`, top: `${top}%`, width: `${boxWidth}%`, height: `${boxHeight}%`, borderColor: color, borderWidth: `${strokeWidth}px`, backgroundColor: `${color}18` }} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }} onDoubleClick={(event) => { event.stopPropagation(); onEdit(element.id); }} />;
 }
 
 function DeviceElement({ element, orientation, selected, onPointerDown, onSelect }) {
@@ -240,7 +240,7 @@ function SelectionHandles({ element, orientation, dimensions, onStart }) {
   return <div className="resize-handles" aria-label={`Resize ${element.label}`}>{points.map(([handle, x, y]) => <button key={handle} type="button" className={`resize-handle resize-handle--${handle}`} style={{ left: `${x * 100}%`, top: `${y * 100}%` }} onPointerDown={(event) => onStart(event, element, handle)} aria-label={`Resize ${element.label} from ${handle}`} />)}</div>;
 }
 
-export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, zoom, onZoom, elements, visibleLayers, selectedId, activeTool, canEdit, onPlace, onDropComponent, onDraw, onPreviewElement, onPatchElement, onResizeElement, onSelect, onMove, onDeleteSelected, notify }) {
+export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, zoom, onZoom, elements, visibleLayers, selectedId, activeTool, canEdit, onPlace, onDropComponent, onDraw, onPreviewElement, onPatchElement, onResizeElement, onSelect, onMove, onDeleteSelected, notify, stageRef }) {
   const canvasRef = useRef(null);
   const surfaceRef = useRef(null);
   const dragRef = useRef(null);
@@ -249,7 +249,7 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
   const resizeRef = useRef(null);
   const draftFrameRef = useRef(null);
   const draftPointRef = useRef(null);
-  const lastTapRef = useRef({ id: null, at: 0, x: 0, y: 0 });
+  const lastTapRef = useRef({ id: null, at: 0 });
   const panRef = useRef(null);
   const tapActionRef = useRef(null);
   const touchPointersRef = useRef(new Map());
@@ -458,12 +458,9 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
     event.stopPropagation();
     if (pinchRef.current || consumedTouchRef.current.has(event.pointerId)) { event.preventDefault(); return; }
     const now = Date.now();
-    const previousTap = lastTapRef.current;
-    const isRepeatTap = previousTap.id === element.id
-      && now - previousTap.at < 450
-      && Math.hypot(event.clientX - previousTap.x, event.clientY - previousTap.y) < 12;
-    lastTapRef.current = { id: element.id, at: now, x: event.clientX, y: event.clientY };
-    if (isRepeatTap && element.category === 'markup') {
+    const touchDoubleTap = event.pointerType === 'touch' && lastTapRef.current.id === element.id && now - lastTapRef.current.at < 450;
+    lastTapRef.current = { id: element.id, at: now };
+    if ((event.detail >= 2 || touchDoubleTap) && element.category === 'markup') {
       event.preventDefault();
       dragRef.current = null;
       onSelect(element.id);
@@ -673,7 +670,7 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
   return (
     <div ref={scrollRef} className="plan-scroll" aria-label="Blueprint workspace">
       <div className="plan-zoom-space" style={{ width: dimensions.width * zoom, height: dimensions.height * zoom }}>
-        <div className={`plan-stage tool-${['device', 'profile'].includes(activeTool.kind) ? activeTool.kind : activeTool.type} ${panning ? 'is-panning' : ''} ${pinching ? 'is-pinching' : ''}`} style={{ width: dimensions.width, height: dimensions.height, transform: `scale(${zoom})` }}>
+        <div ref={stageRef} className={`plan-stage tool-${['device', 'profile'].includes(activeTool.kind) ? activeTool.kind : activeTool.type} ${panning ? 'is-panning' : ''} ${pinching ? 'is-pinching' : ''}`} style={{ width: dimensions.width, height: dimensions.height, transform: `scale(${zoom})` }}>
           <canvas ref={canvasRef} aria-label={`Floor plan page ${pageNumber}`} />
           <div
             ref={surfaceRef}

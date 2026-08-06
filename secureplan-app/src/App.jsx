@@ -10,6 +10,14 @@ import InstallAppPrompt from './components/InstallAppPrompt.jsx';
 
 const SurveyEditor = lazy(() => import('./components/SurveyEditor.jsx'));
 
+const THEME_STORAGE_KEY = 'secureplan-theme';
+
+function initialTheme() {
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  if (stored === 'dark' || stored === 'light') return stored;
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
 function routeFromHash() {
   const hash = window.location.hash.replace(/^#\/?/, '');
   const parts = hash.split('/').filter(Boolean);
@@ -78,6 +86,16 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [route, setRoute] = useState(routeFromHash);
   const [toast, setToast] = useState('');
+  const [theme, setTheme] = useState(initialTheme);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((current) => (current === 'dark' ? 'light' : 'dark'));
+  }, []);
 
   useEffect(() => {
     const onHash = () => setRoute(routeFromHash());
@@ -146,7 +164,9 @@ export default function App() {
     user,
     notify: setToast,
     navigate,
-  }), [user]);
+    theme,
+    toggleTheme,
+  }), [user, theme, toggleTheme]);
 
   if (status === 'loading') {
     return <main id="main-content" className="boot-screen"><Brand /><Spinner label="Opening your workspace…" /></main>;

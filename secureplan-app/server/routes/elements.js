@@ -120,7 +120,7 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate }) {
   const updateElement = async (req, res) => {
     const element = await getElement(db, idValue(req.params.elementId, 'elementId'));
     await assertSiteAccess(db, req.user, element.site_id, 'editor');
-    const values = validateElementInput(req.body, true);
+    const values = validateElementInput(req.body, true, element.type);
     const merged = {
       profileId: values.profileId === undefined ? element.profile_id : values.profileId,
       category: values.category ?? element.category,
@@ -412,7 +412,10 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate }) {
   return router;
 }
 
-function validateElementInput(body = {}, partial) {
+function validateElementInput(body = {}, partial, existingType) {
+  const effectiveType = body.type !== undefined ? body.type : (partial ? existingType : 'device');
+  const isDirectionalMarkup = ['line', 'arrow'].includes(effectiveType);
+  const dimensionRange = isDirectionalMarkup ? { min: -10, max: 10 } : { min: 0.001, max: 10 };
   const result = {
     profileId: body.profileId === undefined
       ? undefined
@@ -446,12 +449,12 @@ function validateElementInput(body = {}, partial) {
       ? partial
         ? undefined
         : 0.04
-      : numberValue(body.width, 'width', { min: 0.001, max: 10 }),
+      : numberValue(body.width, 'width', dimensionRange),
     height: body.height === undefined
       ? partial
         ? undefined
         : 0.04
-      : numberValue(body.height, 'height', { min: 0.001, max: 10 }),
+      : numberValue(body.height, 'height', dimensionRange),
     rotation: body.rotation === undefined
       ? partial
         ? undefined

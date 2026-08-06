@@ -161,7 +161,7 @@ function DeviceLifecyclePanel({ element, canEdit, onPatch }) {
   </section>;
 }
 
-function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, onPatch, onDuplicate, onDelete, onAddNote, onAddPhoto, photoBusy, onClose }) {
+function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, onPatch, onDuplicate, onDelete, onAddNote, onAddPhoto, photoBusy, onClose, onCollapse }) {
   const [form, setForm] = useState({
     label: '', color: '#46545f', size: 42, rotation: 0, doorFunction: 'controlled', fovColor: '#1769aa', fovLength: 0.22, fovSpread: 60, fovRotation: 0,
   });
@@ -195,7 +195,7 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
   if (!element) {
     return (
       <aside className="editor-panel inspector-panel" aria-label="Element properties">
-        <div className="editor-panel__heading"><div><p className="eyebrow">Details</p><h2>Properties</h2></div><button type="button" className="icon-button mobile-only" onClick={onClose} aria-label="Close properties">×</button></div>
+        <div className="editor-panel__heading"><div><p className="eyebrow">Details</p><h2>Properties</h2></div><button type="button" className="icon-button mobile-only" onClick={onClose} aria-label="Close properties">×</button><button type="button" className="icon-button desktop-only" onClick={onCollapse} aria-label="Collapse properties panel" title="Collapse panel">»</button></div>
         <div className="inspector-empty"><span aria-hidden="true">↖</span><h3>Select an element</h3><p>Choose a plotted device or markup to edit its details, notes, and photos.</p></div>
       </aside>
     );
@@ -218,7 +218,7 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
 
   return (
     <aside className="editor-panel inspector-panel" aria-label={`Properties for ${element.label}`}>
-      <div className="editor-panel__heading"><div><p className="eyebrow">Selected element</p><h2>{element.label}</h2></div><button type="button" className="icon-button mobile-only" onClick={onClose} aria-label="Close properties">×</button></div>
+      <div className="editor-panel__heading"><div><p className="eyebrow">Selected element</p><h2>{element.label}</h2></div><button type="button" className="icon-button mobile-only" onClick={onClose} aria-label="Close properties">×</button><button type="button" className="icon-button desktop-only" onClick={onCollapse} aria-label="Collapse properties panel" title="Collapse panel">»</button></div>
       <div className="inspector-scroll">
         <section className="inspector-section">
           <div className="element-identity"><span className="library-symbol" style={{ '--symbol-color': form.color }}><DeviceGlyph type={element.type} symbol={elementSymbol(element)} label={element.label} iconSrc={itemFor(element.category, element.type)?.reportIcon} color={form.color} /></span><div><strong>{categoryFor(element.category)?.name || (element.category === 'markup' ? 'Markup' : 'Custom')}</strong><span>{itemFor(element.category, element.type)?.label || element.type.replaceAll('_', ' ')}</span></div></div>
@@ -352,7 +352,7 @@ function ProfileBuilder({ open, onClose, onCreate }) {
   );
 }
 
-export default function SurveyEditor({ user, surveyId, siteId, navigate, notify }) {
+export default function SurveyEditor({ user, surveyId, siteId, navigate, notify, theme, toggleTheme }) {
   const [survey, setSurvey] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [reloadToken, setReloadToken] = useState(0);
@@ -372,9 +372,11 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify 
   const [presence, setPresence] = useState([]);
   const [syncStatus, setSyncStatus] = useState('connecting');
   const [mobilePanel, setMobilePanel] = useState(null);
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   const [modal, setModal] = useState(null);
   const remoteTimer = useRef(null);
   const selectedIdRef = useRef(null);
+  const planStageRef = useRef(null);
   const canEdit = roleCanEdit(user.role);
   const canAnnotate = roleCanAnnotate(user.role);
   const selected = elements.find((element) => element.id === selectedId) || null;
@@ -648,10 +650,27 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify 
 
   const exportPdf = async () => {
     setPdfBusy(true);
+    const previousZoom = zoom;
+    let planImageDataUrl = null;
     try {
       let site = { name: '' };
       try { site = await api.site(siteId); } catch { /* fall back to a blank site name rather than blocking the export */ }
-      await exportSurveyPdf({ survey, site, elements, planImageDataUrl: null });
+
+      if (planStageRef.current) {
+        try {
+          setZoom(1);
+          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          const { default: html2canvas } = await import('html2canvas');
+          const canvas = await html2canvas(planStageRef.current, { backgroundColor: '#ffffff', useCORS: true, scale: 2 });
+          planImageDataUrl = canvas.toDataURL('image/png');
+        } catch {
+          // If the floor plan image can't be captured for any reason, continue with a text-only export instead of blocking it.
+        } finally {
+          setZoom(previousZoom);
+        }
+      }
+
+      await exportSurveyPdf({ survey, site, elements, planImageDataUrl });
     } catch (error) {
       notify(error.message);
     } finally {
@@ -689,11 +708,12 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify 
         <div className="editor-actions">
           <button type="button" className="button button--ghost" onClick={rotate} disabled={!canEdit} title="Rotate survey clockwise"><span aria-hidden="true">↻</span><span className="button-label">Rotate {orientation}°</span></button>
           <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'schedule' })}><span aria-hidden="true">☷</span><span className="button-label">Schedule</span></button>
+          <button type="button" className="button button--secondary" onClick={toggleTheme} title="Toggle dark mode"><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span><span className="button-label">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button>
           <button type="button" className="button button--secondary" onClick={exportPdf} disabled={pdfBusy} title="Export a PDF summary of plotted devices"><span aria-hidden="true">⬇</span><span className="button-label">{pdfBusy ? 'Exporting…' : 'Export PDF'}</span></button>
         </div>
       </header>
 
-      <div className="editor-layout">
+      <div className={`editor-layout ${inspectorCollapsed ? 'inspector-collapsed' : ''}`}>
         {mobilePanel && <button type="button" className="mobile-editor-backdrop" aria-label="Close editor panel" onClick={() => setMobilePanel(null)} />}
         <div className={`mobile-editor-drawer mobile-editor-drawer--left ${mobilePanel === 'library' ? 'open' : ''}`}><LibraryPanel activeTool={activeTool} profiles={profiles} visibleLayers={visibleLayers} canEdit={canEdit} doorFunction={doorFunction} onDoorFunction={(value) => { setDoorFunction(value); setActiveTool((current) => isDoorType(current.type) ? { ...current, doorFunction: value, color: doorFunctionFor(value).color } : current); }} onTool={(tool) => { setActiveTool(tool); if (tool.type !== 'select') setSelectedId(null); setMobilePanel(null); }} onLayer={(layer) => setVisibleLayers((current) => { const next = new Set(current); if (next.has(layer)) next.delete(layer); else next.add(layer); return next; })} onBuildProfile={() => setModal({ type: 'profile' })} onClose={() => setMobilePanel(null)} /></div>
 
@@ -702,11 +722,12 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify 
             <div className="page-controls"><button type="button" className="icon-button" aria-label="Previous PDF page" disabled={pageInfo.page <= 1} onClick={() => setPageInfo((current) => ({ ...current, page: current.page - 1 }))}>‹</button><span>Page {pageInfo.page} of {pageInfo.pages}</span><button type="button" className="icon-button" aria-label="Next PDF page" disabled={pageInfo.page >= pageInfo.pages} onClick={() => setPageInfo((current) => ({ ...current, page: current.page + 1 }))}>›</button></div>
             <div className="zoom-controls"><button type="button" className="icon-button" aria-label="Zoom out" onClick={() => setZoom((value) => Math.max(MIN_PLAN_ZOOM, Number((value - 0.1).toFixed(2))))}>−</button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button type="button" className="icon-button" aria-label="Zoom in" onClick={() => setZoom((value) => Math.min(MAX_PLAN_ZOOM, Number((value + 0.1).toFixed(2))))}>＋</button><button type="button" className="button button--ghost fit-button" onClick={() => setZoom(FIT_PLAN_ZOOM)}>Fit</button></div>
           </div>
-          <PdfPlan survey={survey} orientation={orientation} pageNumber={pageInfo.page} onPageInfo={setPageInfo} zoom={zoom} onZoom={setZoom} elements={elements} visibleLayers={visibleLayers} selectedId={selectedId} activeTool={activeTool} canEdit={canEdit} onPlace={place} onDropComponent={dropComponent} onDraw={draw} onPreviewElement={previewElement} onPatchElement={patchElement} onResizeElement={resizeElement} onSelect={setSelectedId} onMove={move} onDeleteSelected={() => selected && setModal({ type: 'delete-element' })} notify={notify} />
+          <PdfPlan survey={survey} orientation={orientation} pageNumber={pageInfo.page} onPageInfo={setPageInfo} zoom={zoom} onZoom={setZoom} elements={elements} visibleLayers={visibleLayers} selectedId={selectedId} activeTool={activeTool} canEdit={canEdit} onPlace={place} onDropComponent={dropComponent} onDraw={draw} onPreviewElement={previewElement} onPatchElement={patchElement} onResizeElement={resizeElement} onSelect={setSelectedId} onMove={move} onDeleteSelected={() => selected && setModal({ type: 'delete-element' })} notify={notify} stageRef={planStageRef} />
           <div className="mobile-canvas-hint" aria-hidden="true">1 finger moves · 2 fingers zoom</div>
         </section>
 
-        <div className={`mobile-editor-drawer mobile-editor-drawer--right ${mobilePanel === 'inspector' ? 'open' : ''}`}><InspectorPanel element={selected} notes={notes} notesLoading={notesLoading} canEdit={canEdit} canAnnotate={canAnnotate} onPatch={patchSelected} onDuplicate={duplicateSelected} onDelete={() => setModal({ type: 'delete-element' })} onAddNote={addNote} onAddPhoto={addPhoto} photoBusy={photoBusy} onClose={() => setMobilePanel(null)} /></div>
+        <div className={`mobile-editor-drawer mobile-editor-drawer--right ${mobilePanel === 'inspector' ? 'open' : ''}`}><InspectorPanel element={selected} notes={notes} notesLoading={notesLoading} canEdit={canEdit} canAnnotate={canAnnotate} onPatch={patchSelected} onDuplicate={duplicateSelected} onDelete={() => setModal({ type: 'delete-element' })} onAddNote={addNote} onAddPhoto={addPhoto} photoBusy={photoBusy} onClose={() => setMobilePanel(null)} onCollapse={() => setInspectorCollapsed(true)} /></div>
+        {inspectorCollapsed && <button type="button" className="inspector-reopen-tab desktop-only" onClick={() => setInspectorCollapsed(false)} aria-label="Show properties panel" title="Show properties panel"><span aria-hidden="true">«</span></button>}
       </div>
 
       <nav className="editor-mobile-nav" aria-label="Survey editor panels"><button type="button" className={mobilePanel === 'library' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'library' ? null : 'library')}><span aria-hidden="true">＋</span>Add</button><button type="button" className={activeTool.type === 'select' && !mobilePanel ? 'active' : ''} onClick={() => { setActiveTool({ kind: 'markup', type: 'select', label: 'Select' }); setMobilePanel(null); }}><span aria-hidden="true">✥</span>Move</button><button type="button" className={mobilePanel === 'inspector' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'inspector' ? null : 'inspector')} disabled={!selected}><span aria-hidden="true">☷</span>{selected ? 'Details' : 'Select item'}</button></nav>
