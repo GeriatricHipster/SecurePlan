@@ -654,7 +654,7 @@ h3 {
   gap: 24px;
   padding: 10px clamp(18px, 4vw, 52px);
   border-bottom: 1px solid var(--line);
-  background: rgb(255 255 255 / 94%);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
   backdrop-filter: blur(12px);
 }
 
@@ -971,7 +971,7 @@ h3 {
   padding: 40px 20px;
   border: 1px dashed var(--line-strong);
   border-radius: var(--radius-lg);
-  background: rgb(255 255 255 / 55%);
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
   text-align: center;
 }
 
@@ -1647,7 +1647,7 @@ h3 {
   bottom: 8px;
   padding: 4px 7px;
   border-radius: 6px;
-  background: rgb(255 255 255 / 92%);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
   color: var(--muted);
   font-size: .6rem;
   font-weight: 700;
@@ -2510,7 +2510,7 @@ h3 {
   position: absolute;
   z-index: 30;
   inset: 0;
-  background: rgb(255 255 255 / 82%);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
   color: var(--muted);
   font-size: .85rem;
   font-weight: 700;
@@ -2556,7 +2556,7 @@ h3 {
   max-width: 150px;
   padding: 2px 4px;
   border-radius: 3px;
-  background: rgb(255 255 255 / 88%);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
   color: #172129;
   font-size: 10px;
   font-weight: 750;
@@ -2713,7 +2713,7 @@ h3 {
   padding: 0;
   border: 1px solid #aeb8bd;
   border-radius: 10px;
-  background: rgb(255 255 255 / 98%);
+  background: color-mix(in srgb, var(--surface) 98%, transparent);
   box-shadow: 0 7px 22px rgb(0 0 0 / 25%);
   color: #172129;
   transform: translateX(-50%);
@@ -2992,12 +2992,6 @@ h3 {
   height: 100%;
   overflow: visible;
   pointer-events: none;
-}
-
-.measure-line line {
-  stroke: var(--blue);
-  stroke-dasharray: 5 4;
-  stroke-width: .9;
 }
 
 .measure-label {
@@ -3589,7 +3583,7 @@ td button {
     min-height: 66px;
     padding: 5px max(12px, env(safe-area-inset-right)) max(5px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
     border-top: 1px solid var(--line);
-    background: rgb(255 255 255 / 96%);
+    background: color-mix(in srgb, var(--surface) 96%, transparent);
     box-shadow: 0 -5px 18px rgb(16 24 32 / 8%);
     backdrop-filter: blur(12px);
     grid-template-columns: repeat(2, 1fr);
@@ -3797,7 +3791,7 @@ td button {
     min-height: var(--editor-mobile-nav-height);
     padding: 4px max(8px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
     border-top: 1px solid var(--line);
-    background: rgb(255 255 255 / 98%);
+    background: color-mix(in srgb, var(--surface) 98%, transparent);
     box-shadow: 0 -7px 22px rgb(0 0 0 / 12%);
     grid-template-columns: repeat(3, 1fr);
   }

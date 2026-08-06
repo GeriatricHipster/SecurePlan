@@ -63,7 +63,7 @@ function drawPlaceholder(canvas, orientation) {
   return { width, height };
 }
 
-function MarkupElement({ element, orientation, selected, onPointerDown, onSelect, onEdit }) {
+function MarkupElement({ element, orientation, selected, onPointerDown, onSelect, onEdit, dimensions, pointsPerPixel, scalePaperInches, scaleRealFeet }) {
   const x = Number(getField(element, 'x', 'x', 0.5));
   const y = Number(getField(element, 'y', 'y', 0.5));
   const width = Number(getField(element, 'width', 'width', 0.12));
@@ -72,10 +72,29 @@ function MarkupElement({ element, orientation, selected, onPointerDown, onSelect
   const end = toDisplay({ x: x + width, y: y + height }, orientation);
   const color = elementColor(element);
   const strokeWidth = Math.max(1, Math.min(20, Number(element.metadata?.strokeWidth || 3)));
+  if (element.type === 'measure') {
+    const pixelDistance = Math.hypot((end.x - start.x) * dimensions.width, (end.y - start.y) * dimensions.height);
+    const paperInches = pixelDistance * (pointsPerPixel / 72);
+    const paperRatio = Number(scalePaperInches) > 0 ? Number(scalePaperInches) : 1;
+    const realFeet = paperInches * ((Number(scaleRealFeet) || 0) / paperRatio);
+    const feet = Math.floor(realFeet);
+    let inches = Math.round((realFeet - feet) * 12);
+    let wholeFeet = feet;
+    if (inches >= 12) { wholeFeet += 1; inches = 0; }
+    return (
+      <>
+        <svg className={`markup-line measure-line ${selected ? 'selected' : ''}`} viewBox="0 0 100 100" preserveAspectRatio="none" role="button" tabIndex="0" aria-pressed={selected} aria-label={element.label} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(element.id); } }}>
+          <line className="markup-line__hit-area" x1={start.x * 100} y1={start.y * 100} x2={end.x * 100} y2={end.y * 100} vectorEffect="non-scaling-stroke" />
+          <line className="markup-line__visible" x1={start.x * 100} y1={start.y * 100} x2={end.x * 100} y2={end.y * 100} stroke={color} strokeWidth={strokeWidth} strokeDasharray="5 4" vectorEffect="non-scaling-stroke" />
+        </svg>
+        <span className="measure-label" style={{ left: `${((start.x + end.x) / 2) * 100}%`, top: `${((start.y + end.y) / 2) * 100}%`, background: color }}>{`${wholeFeet}'-${inches}"`}</span>
+      </>
+    );
+  }
   if (element.type === 'line' || element.type === 'arrow') {
     const markerId = `arrow-${String(element.id).replace(/[^a-zA-Z0-9_-]/g, '')}`;
     return (
-      <svg className={`markup-line ${selected ? 'selected' : ''}`} viewBox="0 0 100 100" preserveAspectRatio="none" role="button" tabIndex="0" aria-pressed={selected} aria-label={element.label} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }} onDoubleClick={(event) => { event.stopPropagation(); onEdit(element.id); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(element.id); } }}>
+      <svg className={`markup-line ${selected ? 'selected' : ''}`} viewBox="0 0 100 100" preserveAspectRatio="none" role="button" tabIndex="0" aria-pressed={selected} aria-label={element.label} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(element.id); } }}>
         {element.type === 'arrow' && <defs><marker id={markerId} markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill={color} /></marker></defs>}
         <line className="markup-line__hit-area" x1={start.x * 100} y1={start.y * 100} x2={end.x * 100} y2={end.y * 100} vectorEffect="non-scaling-stroke" />
         <line className="markup-line__visible" x1={start.x * 100} y1={start.y * 100} x2={end.x * 100} y2={end.y * 100} stroke={color} strokeWidth={strokeWidth} vectorEffect="non-scaling-stroke" markerEnd={element.type === 'arrow' ? `url(#${markerId})` : undefined} />
@@ -87,9 +106,9 @@ function MarkupElement({ element, orientation, selected, onPointerDown, onSelect
   const boxWidth = Math.abs(end.x - start.x) * 100;
   const boxHeight = Math.abs(end.y - start.y) * 100;
   if (element.type === 'text') {
-    return <button type="button" className={`markup-text ${selected ? 'selected' : ''}`} style={{ left: `${left}%`, top: `${top}%`, width: `${boxWidth}%`, minHeight: `${Math.max(3, boxHeight)}%`, color, fontSize: `${Math.max(10, Number(element.metadata?.fontSize || 18))}px` }} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }} onDoubleClick={(event) => { event.stopPropagation(); onEdit(element.id); }}>{element.label || 'Callout'}</button>;
+    return <button type="button" className={`markup-text ${selected ? 'selected' : ''}`} style={{ left: `${left}%`, top: `${top}%`, width: `${boxWidth}%`, minHeight: `${Math.max(3, boxHeight)}%`, color, fontSize: `${Math.max(10, Number(element.metadata?.fontSize || 18))}px` }} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }}>{element.label || 'Callout'}</button>;
   }
-  return <button type="button" aria-label={`${element.label} markup`} className={`markup-shape markup-shape--${element.type} ${selected ? 'selected' : ''}`} style={{ left: `${left}%`, top: `${top}%`, width: `${boxWidth}%`, height: `${boxHeight}%`, borderColor: color, borderWidth: `${strokeWidth}px`, backgroundColor: `${color}18` }} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }} onDoubleClick={(event) => { event.stopPropagation(); onEdit(element.id); }} />;
+  return <button type="button" aria-label={`${element.label} markup`} className={`markup-shape markup-shape--${element.type} ${selected ? 'selected' : ''}`} style={{ left: `${left}%`, top: `${top}%`, width: `${boxWidth}%`, height: `${boxHeight}%`, borderColor: color, borderWidth: `${strokeWidth}px`, backgroundColor: `${color}18` }} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }} />;
 }
 
 function DeviceElement({ element, orientation, selected, onPointerDown, onSelect }) {
@@ -234,7 +253,7 @@ function SelectionHandles({ element, orientation, dimensions, onStart }) {
   }
   const start = toDisplay({ x: Number(element.x), y: Number(element.y) }, orientation);
   const end = toDisplay({ x: Number(element.x) + Number(element.width), y: Number(element.y) + Number(element.height) }, orientation);
-  const points = ['line', 'arrow'].includes(element.type)
+  const points = ['line', 'arrow', 'measure'].includes(element.type)
     ? [['start', start.x, start.y], ['end', end.x, end.y]]
     : [['nw', Math.min(start.x, end.x), Math.min(start.y, end.y)], ['ne', Math.max(start.x, end.x), Math.min(start.y, end.y)], ['sw', Math.min(start.x, end.x), Math.max(start.y, end.y)], ['se', Math.max(start.x, end.x), Math.max(start.y, end.y)]];
   return <div className="resize-handles" aria-label={`Resize ${element.label}`}>{points.map(([handle, x, y]) => <button key={handle} type="button" className={`resize-handle resize-handle--${handle}`} style={{ left: `${x * 100}%`, top: `${y * 100}%` }} onPointerDown={(event) => onStart(event, element, handle)} aria-label={`Resize ${element.label} from ${handle}`} />)}</div>;
@@ -249,7 +268,7 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
   const resizeRef = useRef(null);
   const draftFrameRef = useRef(null);
   const draftPointRef = useRef(null);
-  const lastTapRef = useRef({ id: null, at: 0 });
+  const lastTapRef = useRef({ id: null, at: 0, x: 0, y: 0 });
   const panRef = useRef(null);
   const tapActionRef = useRef(null);
   const touchPointersRef = useRef(new Map());
@@ -262,8 +281,6 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
   const [pointsPerPixel, setPointsPerPixel] = useState(1);
   const [rendering, setRendering] = useState(true);
   const [draftShape, setDraftShape] = useState(null);
-  const [measurement, setMeasurement] = useState(null);
-  const measureRef = useRef(null);
   const [editingId, setEditingId] = useState(null);
   const [panning, setPanning] = useState(false);
   const [pinching, setPinching] = useState(false);
@@ -416,18 +433,11 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
       onPlace(fromDisplay(surfacePoint(event), orientation));
       return;
     }
-    if (['line', 'arrow', 'rectangle', 'ellipse'].includes(activeTool.type)) {
+    if (['line', 'arrow', 'rectangle', 'ellipse', 'measure'].includes(activeTool.type)) {
       const startDisplay = surfacePoint(event);
       drawRef.current = { pointerId: event.pointerId, startDisplay, type: activeTool.type };
       event.currentTarget.setPointerCapture(event.pointerId);
       setDraftShape({ type: activeTool.type, start: startDisplay, end: startDisplay });
-      return;
-    }
-    if (activeTool.type === 'measure') {
-      const startDisplay = surfacePoint(event);
-      measureRef.current = { pointerId: event.pointerId, startDisplay };
-      event.currentTarget.setPointerCapture(event.pointerId);
-      setMeasurement({ start: startDisplay, end: startDisplay, ...measureLabel(startDisplay, startDisplay) });
       return;
     }
     if (activeTool.type === 'text') {
@@ -484,9 +494,12 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
     event.stopPropagation();
     if (pinchRef.current || consumedTouchRef.current.has(event.pointerId)) { event.preventDefault(); return; }
     const now = Date.now();
-    const touchDoubleTap = event.pointerType === 'touch' && lastTapRef.current.id === element.id && now - lastTapRef.current.at < 450;
-    lastTapRef.current = { id: element.id, at: now };
-    if ((event.detail >= 2 || touchDoubleTap) && element.category === 'markup') {
+    const previousTap = lastTapRef.current;
+    const isRepeatTap = previousTap.id === element.id
+      && now - previousTap.at < 450
+      && Math.hypot(event.clientX - previousTap.x, event.clientY - previousTap.y) < 12;
+    lastTapRef.current = { id: element.id, at: now, x: event.clientX, y: event.clientY };
+    if (isRepeatTap && element.category === 'markup') {
       event.preventDefault();
       dragRef.current = null;
       onSelect(element.id);
@@ -574,10 +587,6 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
         setDraftShape((current) => current ? { ...current, end: nextEnd } : current);
       });
     }
-    if (measureRef.current?.pointerId === event.pointerId) {
-      const end = surfacePoint(event);
-      setMeasurement({ start: measureRef.current.startDisplay, end, ...measureLabel(measureRef.current.startDisplay, end) });
-    }
     if (dragRef.current?.pointerId === event.pointerId) {
       if (!dragRef.current.moved && Math.hypot(event.clientX - dragRef.current.startClientX, event.clientY - dragRef.current.startClientY) < 3) return;
       const point = fromDisplay(surfacePoint(event), orientation);
@@ -651,10 +660,6 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
       drawRef.current = null;
       setDraftShape(null);
     }
-    if (measureRef.current?.pointerId === event.pointerId) {
-      if (cancelled) setMeasurement(null);
-      measureRef.current = null;
-    }
     if (dragRef.current?.pointerId === event.pointerId) {
       if (dragRef.current.moved) {
         if (cancelled) onMove(dragRef.current.id, dragRef.current.originX, dragRef.current.originY, false);
@@ -694,10 +699,6 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
     onMove(selectedId, canonical.x, canonical.y, true);
   };
 
-  useEffect(() => {
-    if (activeTool.type !== 'measure') setMeasurement(null);
-  }, [activeTool.type]);
-
   const draftBounds = draftShape ? {
     left: Math.min(draftShape.start.x, draftShape.end.x) * 100,
     top: Math.min(draftShape.start.y, draftShape.end.y) * 100,
@@ -726,19 +727,14 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
             onDrop={dropComponent}
           >
             {elements.filter((element) => visibleLayers.has(element.category)).map((element) => element.category === 'markup'
-              ? <MarkupElement key={element.id} element={element} orientation={orientation} selected={selectedId === element.id} onPointerDown={pointerDownElement} onSelect={onSelect} onEdit={setEditingId} />
+              ? <MarkupElement key={element.id} element={element} orientation={orientation} selected={selectedId === element.id} onPointerDown={pointerDownElement} onSelect={onSelect} onEdit={setEditingId} dimensions={dimensions} pointsPerPixel={pointsPerPixel} scalePaperInches={scalePaperInches} scaleRealFeet={scaleRealFeet} />
               : <React.Fragment key={element.id}>
                   <CameraFieldOfView element={element} orientation={orientation} />
                   <DeviceElement element={element} orientation={orientation} selected={selectedId === element.id} onPointerDown={pointerDownElement} onSelect={onSelect} />
                 </React.Fragment>)}
-            {draftBounds && draftShape.type !== 'line' && draftShape.type !== 'arrow' && <span className={`draft-shape draft-shape--${draftShape.type}`} style={{ left: `${draftBounds.left}%`, top: `${draftBounds.top}%`, width: `${draftBounds.width}%`, height: `${draftBounds.height}%` }} />}
-            {draftShape && (draftShape.type === 'line' || draftShape.type === 'arrow') && <svg className="draft-line" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1={draftShape.start.x * 100} y1={draftShape.start.y * 100} x2={draftShape.end.x * 100} y2={draftShape.end.y * 100} /></svg>}
-            {measurement && (
-              <>
-                <svg className="measure-line" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1={measurement.start.x * 100} y1={measurement.start.y * 100} x2={measurement.end.x * 100} y2={measurement.end.y * 100} /></svg>
-                <span className="measure-label" style={{ left: `${((measurement.start.x + measurement.end.x) / 2) * 100}%`, top: `${((measurement.start.y + measurement.end.y) / 2) * 100}%` }}>{measurement.label}</span>
-              </>
-            )}
+            {draftBounds && !['line', 'arrow', 'measure'].includes(draftShape.type) && <span className={`draft-shape draft-shape--${draftShape.type}`} style={{ left: `${draftBounds.left}%`, top: `${draftBounds.top}%`, width: `${draftBounds.width}%`, height: `${draftBounds.height}%` }} />}
+            {draftShape && ['line', 'arrow', 'measure'].includes(draftShape.type) && <svg className="draft-line" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1={draftShape.start.x * 100} y1={draftShape.start.y * 100} x2={draftShape.end.x * 100} y2={draftShape.end.y * 100} /></svg>}
+            {draftShape && draftShape.type === 'measure' && <span className="measure-label" style={{ left: `${((draftShape.start.x + draftShape.end.x) / 2) * 100}%`, top: `${((draftShape.start.y + draftShape.end.y) / 2) * 100}%` }}>{measureLabel(draftShape.start, draftShape.end).label}</span>}
             {canEdit && <SelectionHandles element={elements.find((element) => element.id === selectedId)} orientation={orientation} dimensions={dimensions} onStart={startResize} />}
             {canEdit && <MarkupPopup element={elements.find((element) => element.id === editingId)} orientation={orientation} onPreview={onPreviewElement} onCommit={onPatchElement} onClose={() => setEditingId(null)} />}
           </div>
