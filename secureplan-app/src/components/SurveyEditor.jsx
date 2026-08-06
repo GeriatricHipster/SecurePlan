@@ -63,7 +63,7 @@ function CloudPhoto({ photo, elementLabel }) {
   return <a href={source} target="_blank" rel="noreferrer"><img src={source} alt={photo.caption || `Photo attached to ${elementLabel}`} /><span>{photo.caption || 'View photo'}</span></a>;
 }
 
-function LibraryPanel({ activeTool, profiles, visibleLayers, canEdit, doorFunction, onDoorFunction, onTool, onLayer, onBuildProfile, onClose }) {
+function LibraryPanel({ activeTool, profiles, visibleLayers, canEdit, doorFunction, onDoorFunction, onTool, onLayer, onBuildProfile, onClose, scalePaperInches, scaleRealFeet, onScaleChange }) {
   const startDrag = (event, payload) => {
     event.dataTransfer.effectAllowed = 'copy';
     event.dataTransfer.setData('application/x-secureplan-component', JSON.stringify(payload));
@@ -75,6 +75,16 @@ function LibraryPanel({ activeTool, profiles, visibleLayers, canEdit, doorFuncti
       <div className="markup-tools" role="toolbar" aria-label="Drawing tools">
         {MARKUP_TOOLS.map((tool) => <button key={tool.type} type="button" aria-label={tool.label} title={tool.label} aria-pressed={activeTool.type === tool.type} className={activeTool.type === tool.type ? 'active' : ''} onClick={() => onTool({ kind: 'markup', ...tool })} disabled={!canEdit && tool.type !== 'select'}><span aria-hidden="true">{tool.symbol}</span><small>{tool.label}</small></button>)}
       </div>
+      {activeTool.type === 'measure' && (
+        <div className="measure-scale-config">
+          <p className="measure-scale-config__hint">Set the drawing's print scale to get real-world distances.</p>
+          <div className="measure-scale-config__row">
+            <label><span>Inches on paper</span><input type="number" min="0.001" step="0.001" value={scalePaperInches} onChange={(event) => onScaleChange({ scalePaperInches: event.target.value })} /></label>
+            <span aria-hidden="true">=</span>
+            <label><span>Feet in real life</span><input type="number" min="0.001" step="0.001" value={scaleRealFeet} onChange={(event) => onScaleChange({ scaleRealFeet: event.target.value })} /></label>
+          </div>
+        </div>
+      )}
       <div className="library-scroll">
         {DEVICE_CATEGORIES.map((category) => (
           <details className="component-group" key={category.id} defaultOpen={category.id === 'access_control'}>
@@ -354,6 +364,8 @@ function ProfileBuilder({ open, onClose, onCreate }) {
 
 export default function SurveyEditor({ user, surveyId, siteId, navigate, notify, theme, toggleTheme }) {
   const [survey, setSurvey] = useState(null);
+  const [scaleDraft, setScaleDraft] = useState({ scalePaperInches: 1, scaleRealFeet: 4 });
+  const scaleSaveTimer = useRef(null);
   const [loadError, setLoadError] = useState('');
   const [reloadToken, setReloadToken] = useState(0);
   const [elements, setElements] = useState([]);
@@ -404,7 +416,12 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
       try {
         const [surveyResult, elementResult, profileResult] = await Promise.all([api.survey(surveyId), api.elements(surveyId), api.profiles()]);
         if (!active) return;
-        setSurvey(surveyResult?.survey || surveyResult);
+        const loadedSurvey = surveyResult?.survey || surveyResult;
+        setSurvey(loadedSurvey);
+        setScaleDraft({
+          scalePaperInches: Number(loadedSurvey?.scalePaperInches ?? 1),
+          scaleRealFeet: Number(loadedSurvey?.scaleRealFeet ?? 4),
+        });
         setElements(normalizeList(elementResult).map(normalizeElement));
         const fetchedProfiles = normalizeList(profileResult);
         setProfiles([DEFAULT_PROFILE, ...fetchedProfiles.filter((profile) => !profile.isBuiltin && !profile.is_builtin && profile.name?.toLowerCase() !== 'full door')]);
@@ -678,6 +695,21 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
     }
   };
 
+  const updateScale = (patch) => {
+    setScaleDraft((current) => ({ ...current, ...patch }));
+    if (scaleSaveTimer.current) window.clearTimeout(scaleSaveTimer.current);
+    scaleSaveTimer.current = window.setTimeout(async () => {
+      const paperInches = Number(patch.scalePaperInches ?? scaleDraft.scalePaperInches);
+      const realFeet = Number(patch.scaleRealFeet ?? scaleDraft.scaleRealFeet);
+      if (!(paperInches > 0) || !(realFeet > 0)) return;
+      try {
+        await api.updateSurvey(surveyId, { scalePaperInches: paperInches, scaleRealFeet: realFeet });
+      } catch (error) {
+        notify(error.message);
+      }
+    }, 500);
+  };
+
   const rotate = async () => {
     const next = (orientation + 90) % 360;
     setSurvey((current) => ({ ...current, rotation: next, orientation: next }));
@@ -715,14 +747,14 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
 
       <div className={`editor-layout ${inspectorCollapsed ? 'inspector-collapsed' : ''}`}>
         {mobilePanel && <button type="button" className="mobile-editor-backdrop" aria-label="Close editor panel" onClick={() => setMobilePanel(null)} />}
-        <div className={`mobile-editor-drawer mobile-editor-drawer--left ${mobilePanel === 'library' ? 'open' : ''}`}><LibraryPanel activeTool={activeTool} profiles={profiles} visibleLayers={visibleLayers} canEdit={canEdit} doorFunction={doorFunction} onDoorFunction={(value) => { setDoorFunction(value); setActiveTool((current) => isDoorType(current.type) ? { ...current, doorFunction: value, color: doorFunctionFor(value).color } : current); }} onTool={(tool) => { setActiveTool(tool); if (tool.type !== 'select') setSelectedId(null); setMobilePanel(null); }} onLayer={(layer) => setVisibleLayers((current) => { const next = new Set(current); if (next.has(layer)) next.delete(layer); else next.add(layer); return next; })} onBuildProfile={() => setModal({ type: 'profile' })} onClose={() => setMobilePanel(null)} /></div>
+        <div className={`mobile-editor-drawer mobile-editor-drawer--left ${mobilePanel === 'library' ? 'open' : ''}`}><LibraryPanel activeTool={activeTool} profiles={profiles} visibleLayers={visibleLayers} canEdit={canEdit} doorFunction={doorFunction} onDoorFunction={(value) => { setDoorFunction(value); setActiveTool((current) => isDoorType(current.type) ? { ...current, doorFunction: value, color: doorFunctionFor(value).color } : current); }} onTool={(tool) => { setActiveTool(tool); if (tool.type !== 'select') setSelectedId(null); setMobilePanel(null); }} onLayer={(layer) => setVisibleLayers((current) => { const next = new Set(current); if (next.has(layer)) next.delete(layer); else next.add(layer); return next; })} onBuildProfile={() => setModal({ type: 'profile' })} onClose={() => setMobilePanel(null)} scalePaperInches={scaleDraft.scalePaperInches} scaleRealFeet={scaleDraft.scaleRealFeet} onScaleChange={updateScale} /></div>
 
         <section className="canvas-panel">
           <div className="canvas-toolbar" aria-label="Plan view controls">
             <div className="page-controls"><button type="button" className="icon-button" aria-label="Previous PDF page" disabled={pageInfo.page <= 1} onClick={() => setPageInfo((current) => ({ ...current, page: current.page - 1 }))}>‹</button><span>Page {pageInfo.page} of {pageInfo.pages}</span><button type="button" className="icon-button" aria-label="Next PDF page" disabled={pageInfo.page >= pageInfo.pages} onClick={() => setPageInfo((current) => ({ ...current, page: current.page + 1 }))}>›</button></div>
             <div className="zoom-controls"><button type="button" className="icon-button" aria-label="Zoom out" onClick={() => setZoom((value) => Math.max(MIN_PLAN_ZOOM, Number((value - 0.1).toFixed(2))))}>−</button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button type="button" className="icon-button" aria-label="Zoom in" onClick={() => setZoom((value) => Math.min(MAX_PLAN_ZOOM, Number((value + 0.1).toFixed(2))))}>＋</button><button type="button" className="button button--ghost fit-button" onClick={() => setZoom(FIT_PLAN_ZOOM)}>Fit</button></div>
           </div>
-          <PdfPlan survey={survey} orientation={orientation} pageNumber={pageInfo.page} onPageInfo={setPageInfo} zoom={zoom} onZoom={setZoom} elements={elements} visibleLayers={visibleLayers} selectedId={selectedId} activeTool={activeTool} canEdit={canEdit} onPlace={place} onDropComponent={dropComponent} onDraw={draw} onPreviewElement={previewElement} onPatchElement={patchElement} onResizeElement={resizeElement} onSelect={setSelectedId} onMove={move} onDeleteSelected={() => selected && setModal({ type: 'delete-element' })} notify={notify} stageRef={planStageRef} />
+          <PdfPlan survey={survey} orientation={orientation} pageNumber={pageInfo.page} onPageInfo={setPageInfo} zoom={zoom} onZoom={setZoom} elements={elements} visibleLayers={visibleLayers} selectedId={selectedId} activeTool={activeTool} canEdit={canEdit} onPlace={place} onDropComponent={dropComponent} onDraw={draw} onPreviewElement={previewElement} onPatchElement={patchElement} onResizeElement={resizeElement} onSelect={setSelectedId} onMove={move} onDeleteSelected={() => selected && setModal({ type: 'delete-element' })} notify={notify} stageRef={planStageRef} scalePaperInches={scaleDraft.scalePaperInches} scaleRealFeet={scaleDraft.scaleRealFeet} />
           <div className="mobile-canvas-hint" aria-hidden="true">1 finger moves · 2 fingers zoom</div>
         </section>
 

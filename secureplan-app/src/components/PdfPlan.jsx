@@ -240,7 +240,7 @@ function SelectionHandles({ element, orientation, dimensions, onStart }) {
   return <div className="resize-handles" aria-label={`Resize ${element.label}`}>{points.map(([handle, x, y]) => <button key={handle} type="button" className={`resize-handle resize-handle--${handle}`} style={{ left: `${x * 100}%`, top: `${y * 100}%` }} onPointerDown={(event) => onStart(event, element, handle)} aria-label={`Resize ${element.label} from ${handle}`} />)}</div>;
 }
 
-export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, zoom, onZoom, elements, visibleLayers, selectedId, activeTool, canEdit, onPlace, onDropComponent, onDraw, onPreviewElement, onPatchElement, onResizeElement, onSelect, onMove, onDeleteSelected, notify, stageRef }) {
+export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, zoom, onZoom, elements, visibleLayers, selectedId, activeTool, canEdit, onPlace, onDropComponent, onDraw, onPreviewElement, onPatchElement, onResizeElement, onSelect, onMove, onDeleteSelected, notify, stageRef, scalePaperInches, scaleRealFeet }) {
   const canvasRef = useRef(null);
   const surfaceRef = useRef(null);
   const dragRef = useRef(null);
@@ -259,8 +259,11 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
   const pinchAnchorFrameRef = useRef(null);
   const pinchUpdateRef = useRef(null);
   const [dimensions, setDimensions] = useState({ width: 1180, height: 840 });
+  const [pointsPerPixel, setPointsPerPixel] = useState(1);
   const [rendering, setRendering] = useState(true);
   const [draftShape, setDraftShape] = useState(null);
+  const [measurement, setMeasurement] = useState(null);
+  const measureRef = useRef(null);
   const [editingId, setEditingId] = useState(null);
   const [panning, setPanning] = useState(false);
   const [pinching, setPinching] = useState(false);
@@ -290,6 +293,7 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
         await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
         if (!cancelled) {
           setDimensions({ width: canvas.width, height: canvas.height });
+          setPointsPerPixel(Math.max(base.width, base.height) / Math.max(viewport.width, viewport.height));
           setRendering(false);
           onPageInfo?.({ page: safePage, pages: document.numPages });
         }
@@ -376,6 +380,21 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
     event.preventDefault();
   };
 
+  const measureLabel = (start, end) => {
+    const pixelDx = (end.x - start.x) * dimensions.width;
+    const pixelDy = (end.y - start.y) * dimensions.height;
+    const pixelDistance = Math.hypot(pixelDx, pixelDy);
+    const paperInches = pixelDistance * (pointsPerPixel / 72);
+    const paperRatio = Number(scalePaperInches) > 0 ? Number(scalePaperInches) : 1;
+    const realFeetPerPaperInch = (Number(scaleRealFeet) || 0) / paperRatio;
+    const realFeet = paperInches * realFeetPerPaperInch;
+    const feet = Math.floor(realFeet);
+    let inches = Math.round((realFeet - feet) * 12);
+    let wholeFeet = feet;
+    if (inches >= 12) { wholeFeet += 1; inches = 0; }
+    return { distanceFeet: realFeet, label: `${wholeFeet}'-${inches}"` };
+  };
+
   const pointerDownSurface = (event) => {
     if (pinchRef.current || consumedTouchRef.current.has(event.pointerId)) return;
     if (activeTool.type === 'select' && event.button === 0) {
@@ -402,6 +421,13 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
       drawRef.current = { pointerId: event.pointerId, startDisplay, type: activeTool.type };
       event.currentTarget.setPointerCapture(event.pointerId);
       setDraftShape({ type: activeTool.type, start: startDisplay, end: startDisplay });
+      return;
+    }
+    if (activeTool.type === 'measure') {
+      const startDisplay = surfacePoint(event);
+      measureRef.current = { pointerId: event.pointerId, startDisplay };
+      event.currentTarget.setPointerCapture(event.pointerId);
+      setMeasurement({ start: startDisplay, end: startDisplay, ...measureLabel(startDisplay, startDisplay) });
       return;
     }
     if (activeTool.type === 'text') {
@@ -548,6 +574,10 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
         setDraftShape((current) => current ? { ...current, end: nextEnd } : current);
       });
     }
+    if (measureRef.current?.pointerId === event.pointerId) {
+      const end = surfacePoint(event);
+      setMeasurement({ start: measureRef.current.startDisplay, end, ...measureLabel(measureRef.current.startDisplay, end) });
+    }
     if (dragRef.current?.pointerId === event.pointerId) {
       if (!dragRef.current.moved && Math.hypot(event.clientX - dragRef.current.startClientX, event.clientY - dragRef.current.startClientY) < 3) return;
       const point = fromDisplay(surfacePoint(event), orientation);
@@ -621,6 +651,10 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
       drawRef.current = null;
       setDraftShape(null);
     }
+    if (measureRef.current?.pointerId === event.pointerId) {
+      if (cancelled) setMeasurement(null);
+      measureRef.current = null;
+    }
     if (dragRef.current?.pointerId === event.pointerId) {
       if (dragRef.current.moved) {
         if (cancelled) onMove(dragRef.current.id, dragRef.current.originX, dragRef.current.originY, false);
@@ -660,6 +694,10 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
     onMove(selectedId, canonical.x, canonical.y, true);
   };
 
+  useEffect(() => {
+    if (activeTool.type !== 'measure') setMeasurement(null);
+  }, [activeTool.type]);
+
   const draftBounds = draftShape ? {
     left: Math.min(draftShape.start.x, draftShape.end.x) * 100,
     top: Math.min(draftShape.start.y, draftShape.end.y) * 100,
@@ -695,6 +733,12 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
                 </React.Fragment>)}
             {draftBounds && draftShape.type !== 'line' && draftShape.type !== 'arrow' && <span className={`draft-shape draft-shape--${draftShape.type}`} style={{ left: `${draftBounds.left}%`, top: `${draftBounds.top}%`, width: `${draftBounds.width}%`, height: `${draftBounds.height}%` }} />}
             {draftShape && (draftShape.type === 'line' || draftShape.type === 'arrow') && <svg className="draft-line" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1={draftShape.start.x * 100} y1={draftShape.start.y * 100} x2={draftShape.end.x * 100} y2={draftShape.end.y * 100} /></svg>}
+            {measurement && (
+              <>
+                <svg className="measure-line" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1={measurement.start.x * 100} y1={measurement.start.y * 100} x2={measurement.end.x * 100} y2={measurement.end.y * 100} /></svg>
+                <span className="measure-label" style={{ left: `${((measurement.start.x + measurement.end.x) / 2) * 100}%`, top: `${((measurement.start.y + measurement.end.y) / 2) * 100}%` }}>{measurement.label}</span>
+              </>
+            )}
             {canEdit && <SelectionHandles element={elements.find((element) => element.id === selectedId)} orientation={orientation} dimensions={dimensions} onStart={startResize} />}
             {canEdit && <MarkupPopup element={elements.find((element) => element.id === editingId)} orientation={orientation} onPreview={onPreviewElement} onCommit={onPatchElement} onClose={() => setEditingId(null)} />}
           </div>

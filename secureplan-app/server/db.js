@@ -73,6 +73,8 @@ export function createDatabase(config) {
       order_index INTEGER NOT NULL DEFAULT 0,
       version INTEGER NOT NULL DEFAULT 1,
       copied_from TEXT,
+      scale_paper_inches REAL NOT NULL DEFAULT 1,
+      scale_real_feet REAL NOT NULL DEFAULT 4,
       created_by TEXT NOT NULL REFERENCES users(id),
       updated_by TEXT NOT NULL REFERENCES users(id),
       created_at TEXT NOT NULL,
@@ -166,6 +168,14 @@ export function createDatabase(config) {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS survey_assignments (
+      survey_id TEXT NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      added_by TEXT REFERENCES users(id),
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (survey_id, user_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_site_members_user ON site_members(user_id);
     CREATE INDEX IF NOT EXISTS idx_folders_site_parent ON folders(site_id, parent_id, order_index);
     CREATE INDEX IF NOT EXISTS idx_surveys_site_folder ON surveys(site_id, folder_id, order_index);
@@ -173,6 +183,7 @@ export function createDatabase(config) {
     CREATE INDEX IF NOT EXISTS idx_notes_element ON element_notes(element_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_photos_element ON element_photos(element_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_activity_survey ON activity_log(survey_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_survey_assignments_user ON survey_assignments(user_id);
   `);
 
   // Lightweight forward migrations for databases created by an earlier preview build.
@@ -185,6 +196,8 @@ export function createDatabase(config) {
   }
   const surveyColumns = new Set(db.prepare('PRAGMA table_info(surveys)').all().map((column) => column.name));
   if (!surveyColumns.has('description')) db.exec('ALTER TABLE surveys ADD COLUMN description TEXT');
+  if (!surveyColumns.has('scale_paper_inches')) db.exec('ALTER TABLE surveys ADD COLUMN scale_paper_inches REAL NOT NULL DEFAULT 1');
+  if (!surveyColumns.has('scale_real_feet')) db.exec('ALTER TABLE surveys ADD COLUMN scale_real_feet REAL NOT NULL DEFAULT 4');
 
   seedBuiltInProfiles(db);
   return createAsyncSqliteAdapter(db);
