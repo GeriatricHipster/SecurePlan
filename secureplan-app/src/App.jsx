@@ -7,7 +7,6 @@ import SitesDashboard from './components/SitesDashboard.jsx';
 import SiteWorkspace from './components/SiteWorkspace.jsx';
 import TeamPage from './components/TeamPage.jsx';
 import InstallAppPrompt from './components/InstallAppPrompt.jsx';
-
 const SurveyEditor = lazy(() => import('./components/SurveyEditor.jsx'));
 
 const THEME_STORAGE_KEY = 'secureplan-theme';
@@ -54,20 +53,17 @@ function AppHeader({ user, route, onLogout, theme, onToggleTheme, isOnline }) {
       <button type="button" className="brand-button" onClick={() => navigate('home')} aria-label="Go to home">
         <Brand compact />
       </button>
-
       <nav className="desktop-nav" aria-label="Primary navigation">
         <button type="button" className={route.page === 'home' ? 'active' : ''} onClick={() => navigate('home')}>Home</button>
         <button type="button" className={route.page === 'sites' || route.page === 'site' ? 'active' : ''} onClick={() => navigate('sites')}>Sites</button>
         {['owner', 'admin'].includes(user.role) && <button type="button" className={route.page === 'team' ? 'active' : ''} onClick={() => navigate('team')}>Team</button>}
       </nav>
-
       <div className="header-actions">
         <span className={`connection-pill ${isOnline ? 'connection-pill--online' : 'connection-pill--offline'}`}>
           {isOnline ? 'Online' : 'Offline'}
         </span>
         <ThemeButton theme={theme} onToggle={onToggleTheme} />
       </div>
-
       <details className="account-menu" open={menuOpen} onToggle={(e) => setMenuOpen(e.currentTarget.open)}>
         <summary aria-label="Open account menu">
           <span className="avatar">{initials(user.name)}</span>
@@ -88,7 +84,6 @@ function AppHeader({ user, route, onLogout, theme, onToggleTheme, isOnline }) {
 
 function MobileNav({ route, user }) {
   if (route.page === 'survey') return null;
-
   return (
     <nav className={`mobile-nav ${['owner', 'admin'].includes(user.role) ? 'mobile-nav--triple' : ''}`} aria-label="Mobile navigation">
       <button type="button" className={route.page === 'home' ? 'active' : ''} onClick={() => navigate('home')}><span aria-hidden="true">⌂</span>Home</button>
@@ -147,7 +142,6 @@ export default function App() {
     }[route.page] || 'SecurePlan';
 
     document.title = `${pageName} · SecurePlan Surveyor`;
-
     const frame = window.requestAnimationFrame(() => {
       const main = document.getElementById('main-content');
       if (!main) return;
@@ -191,7 +185,9 @@ export default function App() {
   };
 
   const logout = async () => {
-    try { await api.logout(); } finally {
+    try {
+      await api.logout();
+    } finally {
       setUser(null);
       navigate('home');
     }
@@ -207,41 +203,65 @@ export default function App() {
   }), [user, theme, toggleTheme, isOnline]);
 
   if (status === 'loading') {
-    return <main id="main-content" className="boot-screen"><Brand /><Spinner label="Opening your workspace…" /></main>;
+    return (
+      <>
+        <ThemeButton theme={theme} onToggle={toggleTheme} />
+        <main id="main-content" className="boot-screen"><Brand /><Spinner label="Opening your workspace…" /></main>
+      </>
+    );
   }
 
   if (status === 'error') {
     return (
-      <main id="main-content" className="boot-screen">
-        <Brand />
-        <h1>SecurePlan could not start</h1>
-        <p>Check the server connection and try again.</p>
-        <button type="button" className="button button--primary" onClick={boot}>Try again</button>
-      </main>
+      <>
+        <ThemeButton theme={theme} onToggle={toggleTheme} />
+        <main id="main-content" className="boot-screen">
+          <Brand />
+          <h1>SecurePlan could not start</h1>
+          <p>Check the server connection and try again.</p>
+          <button type="button" className="button button--primary" onClick={boot}>Try again</button>
+        </main>
+      </>
     );
   }
 
-  if (setupRequired) return <OwnerSetup setupCodeRequired={setupCodeRequired} onSubmit={(values) => authenticate(api.setupOwner, values)} />;
-  if (!user) return <SignIn onLogin={(values) => authenticate(api.login, values)} onRegister={(values) => authenticate(api.register, values)} />;
+  if (setupRequired) {
+    return (
+      <>
+        <ThemeButton theme={theme} onToggle={toggleTheme} />
+        <OwnerSetup setupCodeRequired={setupCodeRequired} onSubmit={(values) => authenticate(api.setupOwner, values)} />
+      </>
+    );
+  }
+
+  if (!user) {
+    return (
+      <>
+        <ThemeButton theme={theme} onToggle={toggleTheme} />
+        <SignIn onLogin={(values) => authenticate(api.login, values)} onRegister={(values) => authenticate(api.register, values)} />
+      </>
+    );
+  }
 
   return (
-    <div className={`app-shell app-shell--${route.page}`}>
-      {route.page !== 'survey' && <AppHeader user={user} route={route} onLogout={logout} theme={theme} onToggleTheme={toggleTheme} isOnline={isOnline} />}
-      {!isOnline && <div className="offline-banner" role="status">Offline mode is on. Your edits will queue locally and sync when the connection returns.</div>}
-
-      {route.page === 'home' && <HomeDashboard {...context} />}
-      {route.page === 'sites' && <SitesDashboard {...context} />}
-      {route.page === 'site' && <SiteWorkspace {...context} siteId={route.siteId} />}
-      {route.page === 'survey' && (
-        <Suspense fallback={<main id="main-content" className="editor-loading"><Spinner label="Loading survey tools…" /></main>}>
-          <SurveyEditor {...context} surveyId={route.surveyId} siteId={route.siteId} />
-        </Suspense>
-      )}
-      {route.page === 'team' && <TeamPage {...context} />}
-
-      <MobileNav route={route} user={user} />
-      <InstallAppPrompt />
-      <div className={`toast ${toast ? 'toast--visible' : ''}`} role="status" aria-live="polite">{toast}</div>
-    </div>
+    <>
+      <ThemeButton theme={theme} onToggle={toggleTheme} />
+      <div className={`app-shell app-shell--${route.page}`}>
+        {route.page !== 'survey' && <AppHeader user={user} route={route} onLogout={logout} theme={theme} onToggleTheme={toggleTheme} isOnline={isOnline} />}
+        {!isOnline && <div className="offline-banner" role="status">Offline mode is on. Your edits will queue locally and sync when the connection returns.</div>}
+        {route.page === 'home' && <HomeDashboard {...context} />}
+        {route.page === 'sites' && <SitesDashboard {...context} />}
+        {route.page === 'site' && <SiteWorkspace {...context} siteId={route.siteId} />}
+        {route.page === 'survey' && (
+          <Suspense fallback={<main id="main-content" className="editor-loading"><Spinner label="Loading survey tools…" /></main>}>
+            <SurveyEditor {...context} surveyId={route.surveyId} siteId={route.siteId} />
+          </Suspense>
+        )}
+        {route.page === 'team' && <TeamPage {...context} />}
+        <MobileNav route={route} user={user} />
+        <InstallAppPrompt />
+        <div className={`toast ${toast ? 'toast--visible' : ''}`} role="status" aria-live="polite">{toast}</div>
+      </div>
+    </>
   );
 }

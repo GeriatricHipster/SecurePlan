@@ -1,0 +1,106 @@
+/* Dark mode contrast and global theme toggle fix */
+
+.theme-toggle {
+  position: fixed;
+  z-index: 1005;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: var(--shadow-md);
+}
+
+[data-theme="dark"] body,
+[data-theme="dark"] .app-shell,
+[data-theme="dark"] .page,
+[data-theme="dark"] .panel,
+[data-theme="dark"] .site-card,
+[data-theme="dark"] .survey-card,
+[data-theme="dark"] .survey-folder-section,
+[data-theme="dark"] .home-action-card,
+[data-theme="dark"] .stat-tile,
+[data-theme="dark"] .door-function-config,
+[data-theme="dark"] .component-grid > button,
+[data-theme="dark"] .profile-list > button,
+[data-theme="dark"] .folder-inline-empty,
+[data-theme="dark"] .account-menu__popover,
+[data-theme="dark"] .menu__popover {
+  color: var(--ink);
+}
+
+[data-theme="dark"] .site-card,
+[data-theme="dark"] .survey-card,
+[data-theme="dark"] .panel,
+[data-theme="dark"] .survey-folder-section,
+[data-theme="dark"] .home-action-card,
+[data-theme="dark"] .stat-tile,
+[data-theme="dark"] .component-grid > button,
+[data-theme="dark"] .profile-list > button,
+[data-theme="dark"] .door-function-config,
+[data-theme="dark"] .folder-inline-empty,
+[data-theme="dark"] .field input:not([type="range"]):not([type="color"]):not([type="checkbox"]):not([type="file"]),
+[data-theme="dark"] .field select,
+[data-theme="dark"] .field textarea,
+[data-theme="dark"] .search-box input {
+  background: var(--surface);
+  border-color: var(--line-strong);
+}
+
+[data-theme="dark"] .site-card__body > strong,
+[data-theme="dark"] .site-card__title-row strong,
+[data-theme="dark"] .survey-card__body > strong,
+[data-theme="dark"] .survey-folder-section__header h3,
+[data-theme="dark"] .home-action-card h3,
+[data-theme="dark"] .stat-tile__value,
+[data-theme="dark"] .element-identity strong,
+[data-theme="dark"] .section-title h3,
+[data-theme="dark"] .field__label,
+[data-theme="dark"] .door-function-config label,
+[data-theme="dark"] .brand__words strong,
+[data-theme="dark"] .mobile-nav button,
+[data-theme="dark"] .editor-mobile-nav button,
+[data-theme="dark"] .app-header,
+[data-theme="dark"] .app-header button,
+[data-theme="dark"] .account-menu__name {
+  color: var(--ink);
+}
+
+[data-theme="dark"] .site-card__address,
+[data-theme="dark"] .site-card__meta,
+[data-theme="dark"] .survey-card__body > span:not(.survey-card__edited),
+[data-theme="dark"] .survey-folder-section__header p,
+[data-theme="dark"] .home-action-card p,
+[data-theme="dark"] .stat-tile__note,
+[data-theme="dark"] .edit-attribution,
+[data-theme="dark"] .cloud-note,
+[data-theme="dark"] .field__hint,
+[data-theme="dark"] .range-control output,
+[data-theme="dark"] .door-function-key span,
+[data-theme="dark"] .door-function-config__hint,
+[data-theme="dark"] .profile-list small,
+[data-theme="dark"] .account-menu__popover small,
+[data-theme="dark"] .mobile-nav button,
+[data-theme="dark"] .editor-mobile-nav button,
+[data-theme="dark"] .role-badge,
+[data-theme="dark"] .connection-pill {
+  color: var(--ink-soft);
+}
+
+[data-theme="dark"] .survey-card__preview small {
+  background: rgb(28 35 40 / 92%);
+  color: var(--ink-soft);
+}
+
+[data-theme="dark"] .button--secondary,
+[data-theme="dark"] .button--ghost,
+[data-theme="dark"] .button,
+[data-theme="dark"] .desktop-nav button,
+[data-theme="dark"] .mobile-nav button,
+[data-theme="dark"] .editor-mobile-nav button {
+  border-color: var(--line-strong);
+}
+
+[data-theme="dark"] .offline-banner {
+  color: var(--ink);
+}
