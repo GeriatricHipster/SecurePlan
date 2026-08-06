@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
 import multer from 'multer';
-import { assertSiteAccess } from '../lib/auth.js';
-import { badRequest } from '../lib/errors.js';
+import { assertSiteAccess, assertSurveyAssignment, hasRole } from '../lib/auth.js';
+import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { cloneSurvey } from '../lib/clone.js';
 import { deleteStoredFile, cleanTemporaryUpload, storePdf, storedFileDelivery, validatePdfUpload } from '../lib/storage.js';
 import { getFolder, getSite, getSurvey } from '../lib/resources.js';
@@ -25,7 +25,7 @@ export function createSurveysRouter({ db, config, auth, emitSurveyUpdate, emitSi
   router.get('/surveys', async (req, res) => {
     const siteId = idValue(req.query.siteId, 'siteId');
     await getSite(db, siteId);
-    await assertSiteAccess(db, req.user, siteId);
+    const role = await assertSiteAccess(db, req.user, siteId);
     const folderId = optionalNullableString(req.query.folderId, 'folderId', 80);
     const params = [siteId];
     let folderClause = '';
@@ -33,12 +33,17 @@ export function createSurveysRouter({ db, config, auth, emitSurveyUpdate, emitSi
       folderClause = "AND COALESCE(s.folder_id, '') = COALESCE(?, '')";
       params.push(folderId || null);
     }
+    let assignmentClause = '';
+    if (role === 'viewer') {
+      assignmentClause = 'AND EXISTS (SELECT 1 FROM survey_assignments sa WHERE sa.survey_id = s.id AND sa.user_id = ?)';
+      params.push(req.user.id);
+    }
     const rows = await db
       .prepare(
         `SELECT s.*, u.name AS updated_by_name, u.email AS updated_by_email,
                 (SELECT COUNT(*) FROM elements e WHERE e.survey_id = s.id) AS element_count
            FROM surveys s LEFT JOIN users u ON u.id = s.updated_by
-          WHERE s.site_id = ? ${folderClause}
+          WHERE s.site_id = ? ${folderClause} ${assignmentClause}
           ORDER BY s.order_index, s.name COLLATE NOCASE`,
       )
       .all(...params);
@@ -48,7 +53,8 @@ export function createSurveysRouter({ db, config, auth, emitSurveyUpdate, emitSi
 
   router.get('/surveys/:surveyId', async (req, res) => {
     const survey = await getSurvey(db, idValue(req.params.surveyId, 'surveyId'));
-    await assertSiteAccess(db, req.user, survey.site_id);
+    const role = await assertSiteAccess(db, req.user, survey.site_id);
+    await assertSurveyAssignment(db, req.user, role, survey.id);
     const activity = (await db
       .prepare(
         `SELECT a.id, a.action, a.details_json, a.created_at,
@@ -218,11 +224,18 @@ export function createSurveysRouter({ db, config, auth, emitSurveyUpdate, emitSi
       req.body?.orderIndex === undefined
         ? survey.order_index
         : numberValue(req.body.orderIndex, 'orderIndex', { integer: true, min: 0, max: 100000 });
+    const scalePaperInches = req.body?.scalePaperInches === undefined
+      ? survey.scale_paper_inches
+      : numberValue(req.body.scalePaperInches, 'scalePaperInches', { min: 0.001, max: 1000 });
+    const scaleRealFeet = req.body?.scaleRealFeet === undefined
+      ? survey.scale_real_feet
+      : numberValue(req.body.scaleRealFeet, 'scaleRealFeet', { min: 0.001, max: 100000 });
     const now = new Date().toISOString();
     await db.prepare(
-      `UPDATE surveys SET name = ?, description = ?, order_index = ?, updated_by = ?, updated_at = ?, version = version + 1
+      `UPDATE surveys SET name = ?, description = ?, order_index = ?, scale_paper_inches = ?, scale_real_feet = ?,
+              updated_by = ?, updated_at = ?, version = version + 1
         WHERE id = ?`,
-    ).run(name, description, orderIndex, req.user.id, now, survey.id);
+    ).run(name, description, orderIndex, scalePaperInches, scaleRealFeet, req.user.id, now, survey.id);
     await logActivity(db, {
       siteId: survey.site_id,
       surveyId: survey.id,
@@ -330,7 +343,8 @@ export function createSurveysRouter({ db, config, auth, emitSurveyUpdate, emitSi
 
   router.get('/surveys/:surveyId/file', async (req, res) => {
     const survey = await getSurvey(db, idValue(req.params.surveyId, 'surveyId'));
-    await assertSiteAccess(db, req.user, survey.site_id);
+    const role = await assertSiteAccess(db, req.user, survey.site_id);
+    await assertSurveyAssignment(db, req.user, role, survey.id);
     if (!survey.storage_key) throw badRequest('This demo survey does not have a PDF yet.');
     res.set({
       'Cache-Control': 'private, no-store, max-age=0',
@@ -359,6 +373,54 @@ export function createSurveysRouter({ db, config, auth, emitSurveyUpdate, emitSi
     emitSurveyUpdate(survey.id, 'survey.deleted', req.user, { surveyId: survey.id });
     emitSiteUpdate(survey.site_id, 'survey.deleted', req.user, { surveyId: survey.id });
     res.json({ data: { deletedId: survey.id }, success: true });
+  });
+
+  router.get('/surveys/:surveyId/assignable-viewers', async (req, res) => {
+    const survey = await getSurvey(db, idValue(req.params.surveyId, 'surveyId'));
+    await assertSiteAccess(db, req.user, survey.site_id, 'admin');
+    const rows = await db
+      .prepare("SELECT id, name, email FROM users WHERE role = 'viewer' AND disabled_at IS NULL ORDER BY name COLLATE NOCASE")
+      .all();
+    res.json({ data: rows, viewers: rows });
+  });
+
+  router.get('/surveys/:surveyId/assignments', async (req, res) => {
+    const survey = await getSurvey(db, idValue(req.params.surveyId, 'surveyId'));
+    await assertSiteAccess(db, req.user, survey.site_id, 'admin');
+    const rows = await db
+      .prepare(
+        `SELECT u.id, u.name, u.email FROM survey_assignments sa
+           JOIN users u ON u.id = sa.user_id
+          WHERE sa.survey_id = ? AND u.disabled_at IS NULL
+          ORDER BY u.name COLLATE NOCASE`,
+      )
+      .all(survey.id);
+    res.json({ data: rows, assignments: rows });
+  });
+
+  router.post('/surveys/:surveyId/assignments', async (req, res) => {
+    const survey = await getSurvey(db, idValue(req.params.surveyId, 'surveyId'));
+    await assertSiteAccess(db, req.user, survey.site_id, 'admin');
+    const userId = idValue(req.body?.userId, 'userId');
+    const target = await db.prepare('SELECT id, role FROM users WHERE id = ? AND disabled_at IS NULL').get(userId);
+    if (!target) throw notFound('User');
+    if (target.role !== 'viewer') throw badRequest('Only viewer-role users can be assigned to specific surveys.', { field: 'userId' });
+    const now = new Date().toISOString();
+    await db.prepare(
+      `INSERT INTO survey_assignments (survey_id, user_id, added_by, created_at)
+       VALUES (?, ?, ?, ?) ON CONFLICT (survey_id, user_id) DO NOTHING`,
+    ).run(survey.id, userId, req.user.id, now);
+    emitSurveyUpdate(survey.id, 'assignment.created', req.user, { userId });
+    res.status(201).json({ data: { surveyId: survey.id, userId }, success: true });
+  });
+
+  router.delete('/surveys/:surveyId/assignments/:userId', async (req, res) => {
+    const survey = await getSurvey(db, idValue(req.params.surveyId, 'surveyId'));
+    await assertSiteAccess(db, req.user, survey.site_id, 'admin');
+    const userId = idValue(req.params.userId, 'userId');
+    await db.prepare('DELETE FROM survey_assignments WHERE survey_id = ? AND user_id = ?').run(survey.id, userId);
+    emitSurveyUpdate(survey.id, 'assignment.removed', req.user, { userId });
+    res.json({ data: { surveyId: survey.id, userId }, success: true });
   });
 
   return router;

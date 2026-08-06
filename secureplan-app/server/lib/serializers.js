@@ -64,6 +64,8 @@ export function serializeSurvey(row) {
     orderIndex: Number(row.order_index || 0),
     version: Number(row.version || 1),
     copiedFrom: row.copied_from,
+    scalePaperInches: Number(row.scale_paper_inches || 1),
+    scaleRealFeet: Number(row.scale_real_feet || 4),
     elementCount: Number(row.element_count || 0),
     createdBy: row.created_by,
     updatedBy: row.updated_by,

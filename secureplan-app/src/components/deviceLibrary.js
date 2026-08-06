@@ -100,6 +100,7 @@ export const MARKUP_TOOLS = [
   { type: 'rectangle', label: 'Rectangle', symbol: '□' },
   { type: 'ellipse', label: 'Ellipse', symbol: '○' },
   { type: 'text', label: 'Text callout', symbol: 'T' },
+  { type: 'measure', label: 'Measure', symbol: '↔' },
 ];
 
 export const DEVICE_WORKFLOW_STATUSES = [

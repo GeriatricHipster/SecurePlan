@@ -202,6 +202,8 @@ const POSTGRES_SCHEMA = `
     order_index INTEGER NOT NULL DEFAULT 0,
     version INTEGER NOT NULL DEFAULT 1,
     copied_from TEXT,
+    scale_paper_inches REAL NOT NULL DEFAULT 1,
+    scale_real_feet REAL NOT NULL DEFAULT 4,
     created_by TEXT NOT NULL REFERENCES users(id),
     updated_by TEXT NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL,
@@ -295,6 +297,14 @@ const POSTGRES_SCHEMA = `
     created_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS survey_assignments (
+    survey_id TEXT NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    added_by TEXT REFERENCES users(id),
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (survey_id, user_id)
+  );
+
   CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users(LOWER(email));
   CREATE INDEX IF NOT EXISTS idx_site_members_user ON site_members(user_id);
   CREATE INDEX IF NOT EXISTS idx_folders_site_parent ON folders(site_id, parent_id, order_index);
@@ -303,5 +313,8 @@ const POSTGRES_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_notes_element ON element_notes(element_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_photos_element ON element_photos(element_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_activity_survey ON activity_log(survey_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_survey_assignments_user ON survey_assignments(user_id);
   ALTER TABLE surveys ADD COLUMN IF NOT EXISTS description TEXT;
+  ALTER TABLE surveys ADD COLUMN IF NOT EXISTS scale_paper_inches REAL NOT NULL DEFAULT 1;
+  ALTER TABLE surveys ADD COLUMN IF NOT EXISTS scale_real_feet REAL NOT NULL DEFAULT 4;
 `;
