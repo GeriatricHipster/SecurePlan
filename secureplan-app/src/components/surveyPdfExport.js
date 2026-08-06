@@ -41,9 +41,19 @@ export async function exportSurveyPdf({
   doc.text(`Total plotted devices: ${total}`, margin, 150);
 
   let y = 170;
+  const iconSize = 14;
   counts.forEach((row) => {
-    doc.text(`${row.label}: ${row.count}`, margin, y);
-    y += 16;
+    if (row.reportIcon) {
+      try {
+        doc.addImage(row.reportIcon, 'PNG', margin, y - iconSize + 3, iconSize, iconSize, undefined, 'FAST');
+      } catch (error) {
+        // If a given icon fails to decode, fall back to text-only for this row rather than aborting the export.
+      }
+      doc.text(`${row.label}: ${row.count}`, margin + iconSize + 8, y);
+    } else {
+      doc.text(`${row.label}: ${row.count}`, margin, y);
+    }
+    y += Math.max(16, iconSize + 4);
     if (y > pageHeight - 72) {
       doc.addPage();
       y = 50;

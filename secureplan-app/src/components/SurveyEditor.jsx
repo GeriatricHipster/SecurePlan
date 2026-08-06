@@ -6,6 +6,7 @@ import PdfPlan from './PdfPlan.jsx';
 import { DEFAULT_ICON_COLOR, DEFAULT_PROFILE, DEVICE_CATEGORIES, DEVICE_WORKFLOW_STATUSES, DOOR_FUNCTIONS, MARKUP_TOOLS, cameraFieldsFor, categoryFor, devicePlacementDefaults, doorFunctionFor, elementColor, elementSymbol, isCameraType, isDoorType, itemFor, workflowStatusFor } from './deviceLibrary.js';
 import { FIT_PLAN_ZOOM, MAX_PLAN_ZOOM, MIN_PLAN_ZOOM } from './planGestures.js';
 import DeviceGlyph from './DeviceGlyph.jsx';
+import { exportSurveyPdf } from './surveyPdfExport.js';
 
 const LAYER_IDS = [...DEVICE_CATEGORIES.map((category) => category.id), 'custom', 'markup'];
 
@@ -367,6 +368,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify 
   const [notes, setNotes] = useState([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [presence, setPresence] = useState([]);
   const [syncStatus, setSyncStatus] = useState('connecting');
   const [mobilePanel, setMobilePanel] = useState(null);
@@ -644,6 +646,19 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify 
     finally { setPhotoBusy(false); }
   };
 
+  const exportPdf = async () => {
+    setPdfBusy(true);
+    try {
+      let site = { name: '' };
+      try { site = await api.site(siteId); } catch { /* fall back to a blank site name rather than blocking the export */ }
+      await exportSurveyPdf({ survey, site, elements, planImageDataUrl: null });
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
   const rotate = async () => {
     const next = (orientation + 90) % 360;
     setSurvey((current) => ({ ...current, rotation: next, orientation: next }));
@@ -674,6 +689,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify 
         <div className="editor-actions">
           <button type="button" className="button button--ghost" onClick={rotate} disabled={!canEdit} title="Rotate survey clockwise"><span aria-hidden="true">↻</span><span className="button-label">Rotate {orientation}°</span></button>
           <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'schedule' })}><span aria-hidden="true">☷</span><span className="button-label">Schedule</span></button>
+          <button type="button" className="button button--secondary" onClick={exportPdf} disabled={pdfBusy} title="Export a PDF summary of plotted devices"><span aria-hidden="true">⬇</span><span className="button-label">{pdfBusy ? 'Exporting…' : 'Export PDF'}</span></button>
         </div>
       </header>
 
@@ -701,20 +717,3 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify 
     </main>
   );
 }
-
-import { exportSurveyPdf } from './surveyPdfExport.js';
-
-<button
-  type="button"
-  className="button button--primary"
-  onClick={() =>
-    exportSurveyPdf({
-      survey,
-      site,
-      elements,
-      planImageDataUrl,
-    })
-  }
->
-  Export PDF
-</button>

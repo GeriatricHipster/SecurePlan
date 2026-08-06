@@ -213,13 +213,16 @@ export function surveyDeviceCounts(elements = []) {
     counts.set(type, (counts.get(type) || 0) + 1);
   }
 
-  return [...counts.entries()].map(([type, count]) => ({
-    type,
-    label: itemFor('access_control', type)?.label
-      || itemFor('cctv', type)?.label
-      || itemFor('intrusion', type)?.label
-      || itemFor('doors', type)?.label
-      || type,
-    count,
-  }));
+  return [...counts.entries()].map(([type, count]) => {
+    const item = itemFor('access_control', type)
+      || itemFor('cctv', type)
+      || itemFor('intrusion', type)
+      || itemFor('doors', type);
+    return {
+      type,
+      label: item?.label || type,
+      count,
+      reportIcon: item?.reportIcon || null,
+    };
+  });
 }

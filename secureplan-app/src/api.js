@@ -84,6 +84,7 @@ export const api = {
   },
 
   sites: () => request('/api/sites'),
+  site: (id) => request(`/api/sites/${id}`),
   createSite: (values) => request('/api/sites', json('POST', values)),
   updateSite: (id, values) => request(`/api/sites/${id}`, json('PATCH', values)),
   deleteSite: (id, confirmation) => request(`/api/sites/${id}`, json('DELETE', { confirmation })),
