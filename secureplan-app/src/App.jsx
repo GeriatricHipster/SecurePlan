@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from
 import { api } from './api.js';
 import { OwnerSetup, SignIn } from './components/AuthScreens.jsx';
 import { Brand, Spinner, initials } from './components/Common.jsx';
+import HomeDashboard from './components/HomeDashboard.jsx';
 import SitesDashboard from './components/SitesDashboard.jsx';
 import SiteWorkspace from './components/SiteWorkspace.jsx';
 import TeamPage from './components/TeamPage.jsx';
@@ -13,12 +14,13 @@ function routeFromHash() {
   const hash = window.location.hash.replace(/^#\/?/, '');
   const parts = hash.split('/').filter(Boolean);
   if (parts[0] === 'sites' && parts[1]) return { page: 'site', siteId: parts[1] };
+  if (parts[0] === 'sites') return { page: 'sites' };
   if (parts[0] === 'surveys' && parts[1]) {
     const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
     return { page: 'survey', surveyId: parts[1].split('?')[0], siteId: params.get('site') || '' };
   }
   if (parts[0] === 'team') return { page: 'team' };
-  return { page: 'sites' };
+  return { page: 'home' };
 }
 
 function navigate(path) {
@@ -31,10 +33,11 @@ function AppHeader({ user, route, onLogout }) {
   const [menuOpen, setMenuOpen] = useState(false);
   return (
     <header className="app-header">
-      <button type="button" className="brand-button" onClick={() => navigate('sites')} aria-label="Go to sites">
+      <button type="button" className="brand-button" onClick={() => navigate('home')} aria-label="Go to home">
         <Brand compact />
       </button>
       <nav className="desktop-nav" aria-label="Primary navigation">
+        <button type="button" className={route.page === 'home' ? 'active' : ''} onClick={() => navigate('home')}>Home</button>
         <button type="button" className={route.page === 'sites' || route.page === 'site' ? 'active' : ''} onClick={() => navigate('sites')}>Sites</button>
         {['owner', 'admin'].includes(user.role) && <button type="button" className={route.page === 'team' ? 'active' : ''} onClick={() => navigate('team')}>Team</button>}
       </nav>
@@ -60,7 +63,8 @@ function AppHeader({ user, route, onLogout }) {
 function MobileNav({ route, user }) {
   if (route.page === 'survey') return null;
   return (
-    <nav className={`mobile-nav ${!['owner', 'admin'].includes(user.role) ? 'mobile-nav--single' : ''}`} aria-label="Mobile navigation">
+    <nav className={`mobile-nav ${['owner', 'admin'].includes(user.role) ? 'mobile-nav--triple' : ''}`} aria-label="Mobile navigation">
+      <button type="button" className={route.page === 'home' ? 'active' : ''} onClick={() => navigate('home')}><span aria-hidden="true">⌂</span>Home</button>
       <button type="button" className={route.page === 'sites' || route.page === 'site' ? 'active' : ''} onClick={() => navigate('sites')}><span aria-hidden="true">▦</span>Sites</button>
       {['owner', 'admin'].includes(user.role) && <button type="button" className={route.page === 'team' ? 'active' : ''} onClick={() => navigate('team')}><span aria-hidden="true">♟</span>Team</button>}
     </nav>
@@ -83,6 +87,7 @@ export default function App() {
 
   useEffect(() => {
     const pageName = {
+      home: 'Home',
       sites: 'Sites',
       site: 'Site workspace',
       survey: 'Survey editor',
@@ -127,13 +132,13 @@ export default function App() {
     const authenticated = result?.user || result;
     setUser(authenticated);
     setSetupRequired(false);
-    navigate('sites');
+    navigate('home');
   };
 
   const logout = async () => {
     try { await api.logout(); } finally {
       setUser(null);
-      navigate('sites');
+      navigate('home');
     }
   };
 
@@ -164,6 +169,7 @@ export default function App() {
   return (
     <div className={`app-shell app-shell--${route.page}`}>
       {route.page !== 'survey' && <AppHeader user={user} route={route} onLogout={logout} />}
+      {route.page === 'home' && <HomeDashboard {...context} />}
       {route.page === 'sites' && <SitesDashboard {...context} />}
       {route.page === 'site' && <SiteWorkspace {...context} siteId={route.siteId} />}
       {route.page === 'survey' && (
