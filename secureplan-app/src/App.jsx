@@ -64,8 +64,8 @@ function AppHeader({ user, route, onLogout, theme, onToggleTheme, isOnline }) {
           {isOnline ? 'Online' : 'Offline'}
         </span>
         <FullScreenToggle />
-        <ThemeButton theme={theme} onToggle={onToggleTheme} />
       </div>
+      <ThemeButton theme={theme} onToggle={onToggleTheme} />
       <details className="account-menu" open={menuOpen} onToggle={(e) => setMenuOpen(e.currentTarget.open)}>
         <summary aria-label="Open account menu">
           <span className="avatar">{initials(user.name)}</span>

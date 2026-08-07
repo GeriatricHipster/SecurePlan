@@ -3861,6 +3861,14 @@ td button {
     display: none;
   }
 
+  .theme-toggle__label {
+    display: none;
+  }
+
+  .theme-toggle {
+    padding: 8px 10px;
+  }
+
   .brand--compact .brand__words strong {
     font-size: .95rem;
   }
