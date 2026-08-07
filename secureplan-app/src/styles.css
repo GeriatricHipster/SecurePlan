@@ -2784,15 +2784,44 @@ h3 {
   left: 50%;
   min-width: max-content;
   max-width: 150px;
-  padding: 2px 4px;
+  padding: 2px 5px;
   border-radius: 3px;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  color: #172129;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
   font-size: 10px;
   font-weight: 750;
   line-height: 1.2;
   transform: translateX(-50%);
   white-space: nowrap;
+  cursor: text;
+}
+
+.plan-element__label--empty {
+  color: var(--muted);
+  font-weight: 600;
+  font-style: italic;
+}
+
+.plan-element__label-input {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 70px;
+  max-width: 180px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--focus);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.2;
+  font-family: inherit;
+  text-align: center;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 20%, transparent);
 }
 
 .plan-element__components {

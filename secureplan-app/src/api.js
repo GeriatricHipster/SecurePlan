@@ -370,6 +370,7 @@ export const api = {
   activity: (params = {}) => {
     const search = new URLSearchParams();
     if (params.siteId) search.set('siteId', params.siteId);
+    if (params.surveyId) search.set('surveyId', params.surveyId);
     if (params.limit) search.set('limit', params.limit);
     const suffix = search.toString();
     return request(`/api/activity${suffix ? `?${suffix}` : ''}`);

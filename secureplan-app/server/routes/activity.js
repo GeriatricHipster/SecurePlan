@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { assertSiteAccess } from '../lib/auth.js';
+import { assertSiteAccess, assertSurveyAssignment } from '../lib/auth.js';
+import { getSurvey } from '../lib/resources.js';
 import { idValue } from '../lib/validation.js';
 
 export function createActivityRouter({ db, auth }) {
@@ -8,8 +9,17 @@ export function createActivityRouter({ db, auth }) {
 
   router.get('/activity', async (req, res) => {
     const siteId = req.query.siteId ? idValue(req.query.siteId, 'siteId') : null;
-    const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
-    if (siteId) await assertSiteAccess(db, req.user, siteId);
+    const surveyId = req.query.surveyId ? idValue(req.query.surveyId, 'surveyId') : null;
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 20));
+    let effectiveSiteId = siteId;
+    if (surveyId) {
+      const survey = await getSurvey(db, surveyId);
+      effectiveSiteId = survey.site_id;
+      const role = await assertSiteAccess(db, req.user, survey.site_id);
+      await assertSurveyAssignment(db, req.user, role, surveyId);
+    } else if (siteId) {
+      await assertSiteAccess(db, req.user, siteId);
+    }
     const { id: userId, role, workspace_access: workspaceAccess } = req.user;
 
     const rows = await db
@@ -24,6 +34,7 @@ export function createActivityRouter({ db, auth }) {
            LEFT JOIN survey_assignments sa ON sa.survey_id = a.survey_id AND sa.user_id = ?
           WHERE (? IN ('owner','admin') OR ? = 1 OR sm.user_id IS NOT NULL)
             AND (? IS NULL OR a.site_id = ?)
+            AND (? IS NULL OR a.survey_id = ?)
             AND (
               (CASE WHEN ? IN ('owner','admin') OR ? = 1 THEN ? ELSE sm.role END) != 'viewer'
               OR a.survey_id IS NULL
@@ -32,7 +43,7 @@ export function createActivityRouter({ db, auth }) {
           ORDER BY a.created_at DESC
           LIMIT ?`,
       )
-      .all(userId, userId, role, workspaceAccess, siteId, siteId, role, workspaceAccess, role, limit);
+      .all(userId, userId, role, workspaceAccess, effectiveSiteId, effectiveSiteId, surveyId, surveyId, role, workspaceAccess, role, limit);
 
     const activity = rows.map((row) => ({
       id: row.id,

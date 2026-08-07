@@ -146,7 +146,40 @@ function MarkupElement({ element, orientation, selected, onPointerDown, onSelect
   return <button type="button" aria-label={`${element.label} markup`} className={`markup-shape markup-shape--${element.type} ${selected ? 'selected' : ''}`} style={{ left: `${left}%`, top: `${top}%`, width: `${boxWidth}%`, height: `${boxHeight}%`, borderColor: color, borderWidth: `${strokeWidth}px`, backgroundColor: `${color}18` }} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }} />;
 }
 
-function DeviceElement({ element, orientation, selected, onPointerDown, onSelect }) {
+function DeviceLabelEditor({ element, onPreview, onCommit, onDone }) {
+  const [value, setValue] = useState(element.label || '');
+  const saveTimer = useRef(null);
+  const flush = (nextValue) => {
+    if (saveTimer.current) { window.clearTimeout(saveTimer.current); saveTimer.current = null; }
+    if (nextValue !== (element.label || '')) onCommit(element.id, { label: nextValue });
+  };
+  return (
+    <input
+      type="text"
+      autoFocus
+      className="plan-element__label-input"
+      value={value}
+      placeholder="Device name"
+      onFocus={(event) => event.target.select()}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+      onChange={(event) => {
+        const next = event.target.value;
+        setValue(next);
+        onPreview(element.id, { label: next });
+        if (saveTimer.current) window.clearTimeout(saveTimer.current);
+        saveTimer.current = window.setTimeout(() => onCommit(element.id, { label: next }), 500);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); }
+        else if (event.key === 'Escape') { event.preventDefault(); event.currentTarget.blur(); }
+      }}
+      onBlur={(event) => { flush(event.target.value); onDone(); }}
+    />
+  );
+}
+
+function DeviceElement({ element, orientation, selected, onPointerDown, onSelect, canEdit, editingId, onEdit, onPreview, onCommit }) {
   const point = toDisplay({ x: Number(element.x), y: Number(element.y) }, orientation);
   const size = Number(element.metadata?.size || element.size || 42);
   const rotation = Number(element.rotation || 0) + Number(orientation || 0);
@@ -177,6 +210,7 @@ function DeviceElement({ element, orientation, selected, onPointerDown, onSelect
       }}
       onPointerDown={(event) => onPointerDown(event, element)}
       onClick={(event) => { event.stopPropagation(); onSelect(element.id); }}
+      onDoubleClick={(event) => { if (canEdit) { event.stopPropagation(); onSelect(element.id); onEdit(element.id); } }}
       aria-label={`${element.label || element.type}${selected ? ', selected' : ''}`}
       aria-pressed={selected}
     >
@@ -200,7 +234,16 @@ function DeviceElement({ element, orientation, selected, onPointerDown, onSelect
         </span>
       )}
 
-      <span className="plan-element__label">{element.label}</span>
+      {editingId === element.id
+        ? <DeviceLabelEditor element={element} onPreview={onPreview} onCommit={onCommit} onDone={() => onEdit(null)} />
+        : (
+          <span
+            className={`plan-element__label ${!element.label ? 'plan-element__label--empty' : ''}`}
+            onClick={(event) => { if (canEdit && selected) { event.stopPropagation(); onEdit(element.id); } }}
+          >
+            {element.label || 'Click to name'}
+          </span>
+        )}
       <span
         className="plan-element__status"
         style={{ '--status-color': workflow.color }}
@@ -294,7 +337,7 @@ function SelectionHandles({ element, orientation, dimensions, onStart }) {
   return <div className="resize-handles" aria-label={`Resize ${element.label}`}>{points.map(([handle, x, y]) => <button key={handle} type="button" className={`resize-handle resize-handle--${handle}`} style={{ left: `${x * 100}%`, top: `${y * 100}%` }} onPointerDown={(event) => onStart(event, element, handle)} aria-label={`Resize ${element.label} from ${handle}`} />)}</div>;
 }
 
-export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, zoom, onZoom, elements, visibleLayers, selectedId, activeTool, canEdit, onPlace, onDropComponent, onDraw, onPreviewElement, onPatchElement, onResizeElement, onSelect, onMove, onDeleteSelected, notify, stageRef, scalePaperInches, scaleRealFeet }) {
+export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, zoom, onZoom, elements, visibleLayers, selectedId, activeTool, canEdit, onPlace, onDropComponent, onNestElement, onDraw, onPreviewElement, onPatchElement, onResizeElement, onSelect, onMove, onDeleteSelected, onCopySelected, onPaste, notify, stageRef, scalePaperInches, scaleRealFeet }) {
   const canvasRef = useRef(null);
   const surfaceRef = useRef(null);
   const dragRef = useRef(null);
@@ -728,7 +771,7 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
       && now - previousTap.at < 450
       && Math.hypot(event.clientX - previousTap.x, event.clientY - previousTap.y) < 12;
     lastTapRef.current = { id: element.id, at: now, x: event.clientX, y: event.clientY };
-    if (isRepeatTap && element.category === 'markup') {
+    if (isRepeatTap && canEdit) {
       event.preventDefault();
       dragRef.current = null;
       onSelect(element.id);
@@ -893,8 +936,18 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
       if (dragRef.current.moved) {
         if (cancelled) onMove(dragRef.current.id, dragRef.current.originX, dragRef.current.originY, false);
         else {
-          const point = fromDisplay(surfacePoint(event), orientation);
-          onMove(dragRef.current.id, Math.max(0, Math.min(1, point.x - dragRef.current.dx)), Math.max(0, Math.min(1, point.y - dragRef.current.dy)), true);
+          const sourceElement = elements.find((item) => item.id === dragRef.current.id);
+          const nestTargetId = onNestElement && sourceElement && sourceElement.category !== 'markup'
+            ? document.elementsFromPoint(event.clientX, event.clientY)
+                .map((node) => node.closest?.('[data-element-id]')?.dataset.elementId)
+                .find((id) => id && id !== dragRef.current.id)
+            : null;
+          if (nestTargetId) {
+            onNestElement(dragRef.current.id, nestTargetId);
+          } else {
+            const point = fromDisplay(surfacePoint(event), orientation);
+            onMove(dragRef.current.id, Math.max(0, Math.min(1, point.x - dragRef.current.dx)), Math.max(0, Math.min(1, point.y - dragRef.current.dy)), true);
+          }
         }
       }
       dragRef.current = null;
@@ -908,6 +961,19 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
   };
 
   const keyDown = (event) => {
+    const meta = event.metaKey || event.ctrlKey;
+    if (meta && !event.shiftKey && !event.altKey && (event.key === 'c' || event.key === 'C')) {
+      if (!selectedId || !canEdit || !onCopySelected) return;
+      event.preventDefault();
+      onCopySelected();
+      return;
+    }
+    if (meta && !event.shiftKey && !event.altKey && (event.key === 'v' || event.key === 'V')) {
+      if (!canEdit || !onPaste) return;
+      event.preventDefault();
+      onPaste();
+      return;
+    }
     if (!selectedId || !canEdit) return;
     if (event.key === 'Delete' || event.key === 'Backspace') {
       event.preventDefault();
@@ -959,7 +1025,7 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
               ? <MarkupElement key={element.id} element={element} orientation={orientation} selected={selectedId === element.id} onPointerDown={pointerDownElement} onSelect={onSelect} onEdit={setEditingId} editingId={editingId} onPreview={onPreviewElement} onCommit={onPatchElement} dimensions={dimensions} pointsPerPixel={pointsPerPixel} scalePaperInches={scalePaperInches} scaleRealFeet={scaleRealFeet} />
               : <React.Fragment key={element.id}>
                   <CameraFieldOfView element={element} orientation={orientation} />
-                  <DeviceElement element={element} orientation={orientation} selected={selectedId === element.id} onPointerDown={pointerDownElement} onSelect={onSelect} />
+                  <DeviceElement element={element} orientation={orientation} selected={selectedId === element.id} onPointerDown={pointerDownElement} onSelect={onSelect} canEdit={canEdit} editingId={editingId} onEdit={setEditingId} onPreview={onPreviewElement} onCommit={onPatchElement} />
                 </React.Fragment>)}
             {draftBounds && !['line', 'arrow', 'measure'].includes(draftShape.type) && <span className={`draft-shape draft-shape--${draftShape.type}`} style={{ left: `${draftBounds.left}%`, top: `${draftBounds.top}%`, width: `${draftBounds.width}%`, height: `${draftBounds.height}%` }} />}
             {draftShape && ['line', 'arrow', 'measure'].includes(draftShape.type) && <svg className="draft-line" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1={draftShape.start.x * 100} y1={draftShape.start.y * 100} x2={draftShape.end.x * 100} y2={draftShape.end.y * 100} /></svg>}

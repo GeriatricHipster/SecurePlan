@@ -610,6 +610,38 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
     finally { setActiveTool(previousTool.kind === 'markup' ? previousTool : { kind: 'markup', type: 'select', label: 'Select' }); }
   };
 
+  const nestElement = async (sourceId, targetId) => {
+    if (!canEdit || sourceId === targetId) return;
+    const source = elements.find((element) => element.id === sourceId && element.category !== 'markup');
+    const target = elements.find((element) => element.id === targetId && element.category !== 'markup');
+    if (!source || !target) return;
+    const targetMetadata = metadataOf(target);
+    const components = Array.isArray(targetMetadata.components) ? targetMetadata.components : [];
+    const component = {
+      category: source.category,
+      type: source.type,
+      label: source.label,
+      symbol: elementSymbol(source),
+      color: source.color,
+      ...(source.metadata?.doorFunction ? { doorFunction: source.metadata.doorFunction } : {}),
+    };
+    if (components.some((item) => item.category === component.category && item.type === component.type)) {
+      notify(`${source.label} is already part of ${target.label}.`);
+      return;
+    }
+    try {
+      const metadata = { ...targetMetadata, components: [...components, component] };
+      const updated = await api.updateElement(target.id, { metadata });
+      await api.deleteElement(source.id);
+      setElements((current) => current
+        .filter((element) => element.id !== source.id)
+        .map((element) => element.id === target.id ? normalizeElement({ ...element, ...updated, metadata }) : element));
+      setSelectedId(target.id);
+      touch();
+      notify(`${source.label} nested into ${target.label}.`);
+    } catch (error) { notify(error.message); }
+  };
+
   const draw = async ({ type, start, end }) => {
     let x = start.x; let y = start.y; let width = end.x - start.x; let height = end.y - start.y;
     if (!['line', 'arrow'].includes(type)) { x = Math.min(start.x, end.x); y = Math.min(start.y, end.y); width = Math.abs(end.x - start.x); height = Math.abs(end.y - start.y); }
@@ -662,6 +694,27 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
       const { id, createdAt, created_at, updatedAt, updated_at, ...copy } = selected;
       await createOne({ ...copy, label: `${selected.label} copy`, x: Math.min(1, selected.x + 0.025), y: Math.min(1, selected.y + 0.025) });
       notify('Element duplicated.');
+    } catch (error) { notify(error.message); }
+  };
+
+  const clipboardRef = useRef(null);
+
+  const copySelected = () => {
+    if (!selected) return;
+    const { id, createdAt, created_at, updatedAt, updated_at, ...copy } = selected;
+    clipboardRef.current = copy;
+    notify(`Copied ${selected.label}. Press Ctrl/Cmd+V to paste.`);
+  };
+
+  const pasteClipboard = async () => {
+    if (!clipboardRef.current || !canEdit) return;
+    try {
+      const copy = clipboardRef.current;
+      const x = Math.min(1, Number(copy.x) + 0.025);
+      const y = Math.min(1, Number(copy.y) + 0.025);
+      await createOne({ ...copy, x, y });
+      clipboardRef.current = { ...copy, x, y };
+      notify(`Pasted ${copy.label}.`);
     } catch (error) { notify(error.message); }
   };
 
@@ -777,7 +830,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
             <div className="page-controls"><button type="button" className="icon-button" aria-label="Previous PDF page" disabled={pageInfo.page <= 1} onClick={() => setPageInfo((current) => ({ ...current, page: current.page - 1 }))}><ChevronLeft aria-hidden="true" size={18} /></button><span>Page {pageInfo.page} of {pageInfo.pages}</span><button type="button" className="icon-button" aria-label="Next PDF page" disabled={pageInfo.page >= pageInfo.pages} onClick={() => setPageInfo((current) => ({ ...current, page: current.page + 1 }))}><ChevronRight aria-hidden="true" size={18} /></button></div>
             <div className="zoom-controls"><button type="button" className="icon-button" aria-label="Zoom out" onClick={() => setZoom((value) => Math.max(MIN_PLAN_ZOOM, Number((value - 0.1).toFixed(2))))}><Minus aria-hidden="true" size={16} /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button type="button" className="icon-button" aria-label="Zoom in" onClick={() => setZoom((value) => Math.min(MAX_PLAN_ZOOM, Number((value + 0.1).toFixed(2))))}><Plus aria-hidden="true" size={16} /></button><button type="button" className="button button--ghost fit-button" onClick={() => setZoom(FIT_PLAN_ZOOM)}>Fit</button></div>
           </div>
-          <PdfPlan survey={survey} orientation={orientation} pageNumber={pageInfo.page} onPageInfo={setPageInfo} zoom={zoom} onZoom={setZoom} elements={elements} visibleLayers={visibleLayers} selectedId={selectedId} activeTool={activeTool} canEdit={canEdit} onPlace={place} onDropComponent={dropComponent} onDraw={draw} onPreviewElement={previewElement} onPatchElement={patchElement} onResizeElement={resizeElement} onSelect={setSelectedId} onMove={move} onDeleteSelected={() => selected && setModal({ type: 'delete-element' })} notify={notify} stageRef={planStageRef} scalePaperInches={scaleDraft.scalePaperInches} scaleRealFeet={scaleDraft.scaleRealFeet} />
+          <PdfPlan survey={survey} orientation={orientation} pageNumber={pageInfo.page} onPageInfo={setPageInfo} zoom={zoom} onZoom={setZoom} elements={elements} visibleLayers={visibleLayers} selectedId={selectedId} activeTool={activeTool} canEdit={canEdit} onPlace={place} onDropComponent={dropComponent} onNestElement={nestElement} onDraw={draw} onPreviewElement={previewElement} onPatchElement={patchElement} onResizeElement={resizeElement} onSelect={setSelectedId} onMove={move} onDeleteSelected={() => selected && setModal({ type: 'delete-element' })} onCopySelected={copySelected} onPaste={pasteClipboard} notify={notify} stageRef={planStageRef} scalePaperInches={scaleDraft.scalePaperInches} scaleRealFeet={scaleDraft.scaleRealFeet} />
           <div className="mobile-canvas-hint" aria-hidden="true">1 finger moves · 2 fingers zoom</div>
         </section>
 
