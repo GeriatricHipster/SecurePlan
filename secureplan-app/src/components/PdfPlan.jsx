@@ -412,6 +412,200 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
     return { distanceFeet: realFeet, label: `${wholeFeet}'-${inches}"` };
   };
 
+  const loadImage = (src) => new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+
+  const captureFloorPlanImage = async () => {
+    const background = canvasRef.current;
+    if (!background || !background.width || !background.height) return null;
+    const output = document.createElement('canvas');
+    output.width = background.width;
+    output.height = background.height;
+    const ctx = output.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, output.width, output.height);
+    ctx.drawImage(background, 0, 0);
+
+    const W = output.width;
+    const H = output.height;
+    const visible = elements.filter((element) => visibleLayers.has(element.category === 'markup' ? 'markup' : element.category));
+
+    // Camera fields of view drawn first, underneath devices, matching on-screen layering.
+    for (const element of visible) {
+      if (element.category === 'markup' || !isCameraType(element.type)) continue;
+      const origin = toDisplay({ x: Number(element.x), y: Number(element.y) }, orientation);
+      const fovs = cameraFieldsFor(element);
+      for (const fov of fovs) {
+        const length = Math.max(0.03, Math.min(0.75, Number(fov.length ?? 0.22)));
+        const spread = Math.max(5, Math.min(180, Number(fov.spread ?? 60)));
+        const direction = (Number(fov.rotation || 0) + Number(orientation || 0) - 90) * Math.PI / 180;
+        const halfSpread = (spread * Math.PI) / 360;
+        const color = /^#[0-9a-f]{6}$/i.test(fov.color || '') ? fov.color : elementColor(element);
+        const ox = origin.x * W; const oy = origin.y * H;
+        const lx = (origin.x + Math.cos(direction - halfSpread) * length) * W;
+        const ly = (origin.y + Math.sin(direction - halfSpread) * length) * H;
+        const rx = (origin.x + Math.cos(direction + halfSpread) * length) * W;
+        const ry = (origin.y + Math.sin(direction + halfSpread) * length) * H;
+        ctx.beginPath();
+        ctx.moveTo(ox, oy);
+        ctx.lineTo(lx, ly);
+        ctx.lineTo(rx, ry);
+        ctx.closePath();
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // Markup: lines, arrows, measurements, shapes, text.
+    for (const element of visible) {
+      if (element.category !== 'markup') continue;
+      const x = Number(element.x ?? 0.5); const y = Number(element.y ?? 0.5);
+      const width = Number(element.width ?? 0.12); const height = Number(element.height ?? 0.08);
+      const start = toDisplay({ x, y }, orientation);
+      const end = toDisplay({ x: x + width, y: y + height }, orientation);
+      const color = elementColor(element);
+      const strokeWidth = Math.max(1, Math.min(20, Number(element.metadata?.strokeWidth || 3)));
+
+      if (element.type === 'line' || element.type === 'arrow' || element.type === 'measure') {
+        const sx = start.x * W; const sy = start.y * H; const ex = end.x * W; const ey = end.y * H;
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = strokeWidth;
+        if (element.type === 'measure') ctx.setLineDash([8, 6]);
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        if (element.type === 'arrow') {
+          const angle = Math.atan2(ey - sy, ex - sx);
+          const headLength = 8 + strokeWidth * 2;
+          ctx.beginPath();
+          ctx.moveTo(ex, ey);
+          ctx.lineTo(ex - headLength * Math.cos(angle - Math.PI / 6), ey - headLength * Math.sin(angle - Math.PI / 6));
+          ctx.lineTo(ex - headLength * Math.cos(angle + Math.PI / 6), ey - headLength * Math.sin(angle + Math.PI / 6));
+          ctx.closePath();
+          ctx.fillStyle = color;
+          ctx.fill();
+        }
+        if (element.type === 'measure') {
+          const label = measureLabel(start, end).label;
+          const midX = (sx + ex) / 2; const midY = (sy + ey) / 2;
+          ctx.font = '600 13px Inter, sans-serif';
+          const textWidth = ctx.measureText(label).width;
+          ctx.fillStyle = color;
+          const pillX = midX - textWidth / 2 - 8; const pillY = midY - 12; const pillW = textWidth + 16; const pillH = 24; const pillR = 12;
+          ctx.beginPath();
+          ctx.moveTo(pillX + pillR, pillY);
+          ctx.arcTo(pillX + pillW, pillY, pillX + pillW, pillY + pillH, pillR);
+          ctx.arcTo(pillX + pillW, pillY + pillH, pillX, pillY + pillH, pillR);
+          ctx.arcTo(pillX, pillY + pillH, pillX, pillY, pillR);
+          ctx.arcTo(pillX, pillY, pillX + pillW, pillY, pillR);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(label, midX, midY + 1);
+        }
+        continue;
+      }
+
+      const left = Math.min(start.x, end.x) * W; const top = Math.min(start.y, end.y) * H;
+      const boxW = Math.abs(end.x - start.x) * W; const boxH = Math.abs(end.y - start.y) * H;
+
+      if (element.type === 'text') {
+        ctx.font = `${Math.max(10, Number(element.metadata?.fontSize || 18))}px Inter, sans-serif`;
+        ctx.fillStyle = color;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText(element.label || 'Callout', left, top);
+        continue;
+      }
+
+      ctx.lineWidth = strokeWidth;
+      ctx.strokeStyle = color;
+      ctx.fillStyle = `${color}18`;
+      if (element.type === 'ellipse') {
+        ctx.beginPath();
+        ctx.ellipse(left + boxW / 2, top + boxH / 2, Math.max(1, boxW / 2), Math.max(1, boxH / 2), 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.rect(left, top, boxW, boxH);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+
+    // Devices drawn on top, matching on-screen layering.
+    for (const element of visible) {
+      if (element.category === 'markup') continue;
+      const point = toDisplay({ x: Number(element.x), y: Number(element.y) }, orientation);
+      const size = Number(element.metadata?.size || element.size || 42);
+      const rotation = (Number(element.rotation || 0) + Number(orientation || 0)) * Math.PI / 180;
+      const color = elementColor(element);
+      const outlineColor = doorOutlineColorFor(element.metadata?.doorFunction || element.type);
+      const cx = point.x * W; const cy = point.y * H; const radius = size / 2;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = outlineColor;
+      ctx.stroke();
+
+      const iconSrc = itemFor(element.category, element.type)?.reportIcon;
+      ctx.translate(cx, cy);
+      ctx.rotate(rotation);
+      if (iconSrc) {
+        const img = await loadImage(iconSrc);
+        if (img) {
+          const iconSize = radius * 1.3;
+          ctx.drawImage(img, -iconSize / 2, -iconSize / 2, iconSize, iconSize);
+        }
+      } else {
+        ctx.fillStyle = color;
+        ctx.font = `700 ${Math.max(9, radius * 0.55)}px Inter, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(elementSymbol(element), 0, 0);
+      }
+      ctx.restore();
+
+      const workflow = workflowStatusFor(element);
+      ctx.beginPath();
+      ctx.arc(cx + radius * 0.72, cy + radius * 0.72, radius * 0.22, 0, Math.PI * 2);
+      ctx.fillStyle = workflow.color;
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+
+      if (element.label) {
+        ctx.font = '600 11px Inter, sans-serif';
+        ctx.fillStyle = '#1c272e';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(element.label, cx, cy + radius + 6);
+      }
+    }
+
+    return output.toDataURL('image/png');
+  };
+
+  useEffect(() => {
+    if (stageRef?.current) stageRef.current.captureFloorPlanImage = captureFloorPlanImage;
+  });
+
   const pointerDownSurface = (event) => {
     if (pinchRef.current || consumedTouchRef.current.has(event.pointerId)) return;
     if (activeTool.type === 'select' && event.button === 0) {

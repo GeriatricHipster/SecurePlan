@@ -667,23 +667,16 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
 
   const exportPdf = async () => {
     setPdfBusy(true);
-    const previousZoom = zoom;
     let planImageDataUrl = null;
     try {
       let site = { name: '' };
       try { site = await api.site(siteId); } catch { /* fall back to a blank site name rather than blocking the export */ }
 
-      if (planStageRef.current) {
+      if (planStageRef.current?.captureFloorPlanImage) {
         try {
-          setZoom(1);
-          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-          const { default: html2canvas } = await import('html2canvas');
-          const canvas = await html2canvas(planStageRef.current, { backgroundColor: '#ffffff', useCORS: true, scale: 2 });
-          planImageDataUrl = canvas.toDataURL('image/png');
+          planImageDataUrl = await planStageRef.current.captureFloorPlanImage();
         } catch {
           // If the floor plan image can't be captured for any reason, continue with a text-only export instead of blocking it.
-        } finally {
-          setZoom(previousZoom);
         }
       }
 
