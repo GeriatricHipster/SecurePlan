@@ -652,7 +652,7 @@ h3 {
   min-height: 65px;
   align-items: center;
   gap: 24px;
-  padding: 10px clamp(18px, 4vw, 52px);
+  padding: calc(10px + env(safe-area-inset-top)) max(clamp(18px, 4vw, 52px), env(safe-area-inset-right)) 10px max(clamp(18px, 4vw, 52px), env(safe-area-inset-left));
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--surface) 94%, transparent);
   backdrop-filter: blur(12px);
@@ -3854,7 +3854,7 @@ td button {
 @media (max-width: 640px) {
   .app-header {
     min-height: 60px;
-    padding: 8px 13px;
+    padding: calc(8px + env(safe-area-inset-top)) max(13px, env(safe-area-inset-right)) 8px max(13px, env(safe-area-inset-left));
   }
 
   .account-menu__name {
@@ -4280,7 +4280,7 @@ td button {
   position: sticky;
   top: 0;
   z-index: 55;
-  padding: 11px 16px;
+  padding: calc(11px + env(safe-area-inset-top)) 16px 11px;
   background: linear-gradient(90deg, var(--red-dark), var(--red));
   color: white;
   font-weight: 700;
