@@ -2933,6 +2933,19 @@ h3 {
   touch-action: none;
 }
 
+.markup-text--editing {
+  z-index: 30;
+  overflow: hidden;
+  resize: none;
+  touch-action: manipulation;
+  font-family: inherit;
+  font-weight: 750;
+  line-height: 1.3;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  box-shadow: 0 0 0 2px var(--blue), var(--shadow-sm);
+  cursor: text;
+}
+
 .markup-popup {
   display: block;
   position: absolute;

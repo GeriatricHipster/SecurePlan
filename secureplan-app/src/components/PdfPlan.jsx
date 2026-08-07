@@ -63,7 +63,39 @@ function drawPlaceholder(canvas, orientation) {
   return { width, height };
 }
 
-function MarkupElement({ element, orientation, selected, onPointerDown, onSelect, onEdit, dimensions, pointsPerPixel, scalePaperInches, scaleRealFeet }) {
+function InlineTextEditor({ element, left, top, boxWidth, boxHeight, color, onPreview, onCommit, onDone }) {
+  const [value, setValue] = useState(element.label || '');
+  const saveTimer = useRef(null);
+  const flush = (nextValue) => {
+    if (saveTimer.current) { window.clearTimeout(saveTimer.current); saveTimer.current = null; }
+    if (nextValue !== (element.label || '')) onCommit(element.id, { label: nextValue });
+  };
+  return (
+    <textarea
+      autoFocus
+      className="markup-text markup-text--editing"
+      style={{ left: `${left}%`, top: `${top}%`, width: `${boxWidth}%`, minHeight: `${Math.max(3, boxHeight)}%`, color, fontSize: `${Math.max(10, Number(element.metadata?.fontSize || 18))}px` }}
+      value={value}
+      placeholder="Callout"
+      onFocus={(event) => event.target.select()}
+      onPointerDown={(event) => event.stopPropagation()}
+      onChange={(event) => {
+        const next = event.target.value;
+        setValue(next);
+        onPreview(element.id, { label: next });
+        if (saveTimer.current) window.clearTimeout(saveTimer.current);
+        saveTimer.current = window.setTimeout(() => onCommit(element.id, { label: next }), 500);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); event.currentTarget.blur(); }
+        else if (event.key === 'Escape') { event.preventDefault(); event.currentTarget.blur(); }
+      }}
+      onBlur={(event) => { flush(event.target.value); onDone(); }}
+    />
+  );
+}
+
+function MarkupElement({ element, orientation, selected, onPointerDown, onSelect, onEdit, editingId, onPreview, onCommit, dimensions, pointsPerPixel, scalePaperInches, scaleRealFeet }) {
   const x = Number(getField(element, 'x', 'x', 0.5));
   const y = Number(getField(element, 'y', 'y', 0.5));
   const width = Number(getField(element, 'width', 'width', 0.12));
@@ -106,6 +138,9 @@ function MarkupElement({ element, orientation, selected, onPointerDown, onSelect
   const boxWidth = Math.abs(end.x - start.x) * 100;
   const boxHeight = Math.abs(end.y - start.y) * 100;
   if (element.type === 'text') {
+    if (editingId === element.id) {
+      return <InlineTextEditor element={element} left={left} top={top} boxWidth={boxWidth} boxHeight={boxHeight} color={color} onPreview={onPreview} onCommit={onCommit} onDone={() => onEdit(null)} />;
+    }
     return <button type="button" className={`markup-text ${selected ? 'selected' : ''}`} style={{ left: `${left}%`, top: `${top}%`, width: `${boxWidth}%`, minHeight: `${Math.max(3, boxHeight)}%`, color, fontSize: `${Math.max(10, Number(element.metadata?.fontSize || 18))}px` }} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }}>{element.label || 'Callout'}</button>;
   }
   return <button type="button" aria-label={`${element.label} markup`} className={`markup-shape markup-shape--${element.type} ${selected ? 'selected' : ''}`} style={{ left: `${left}%`, top: `${top}%`, width: `${boxWidth}%`, height: `${boxHeight}%`, borderColor: color, borderWidth: `${strokeWidth}px`, backgroundColor: `${color}18` }} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }} />;
@@ -205,7 +240,6 @@ function CameraFieldOfView({ element, orientation }) {
 function MarkupPopup({ element, orientation, onPreview, onCommit, onClose }) {
   const [draft, setDraft] = useState(null);
   const [anchor, setAnchor] = useState(null);
-  const labelSaveTimer = useRef(null);
   useEffect(() => {
     if (!element) { setDraft(null); setAnchor(null); return; }
     setDraft({
@@ -231,15 +265,9 @@ function MarkupPopup({ element, orientation, onPreview, onCommit, onClose }) {
   };
   const preview = (values) => { setDraft((current) => ({ ...current, ...values })); onPreview(element.id, values); };
   const previewMetadata = (values) => { const next = { ...metadata, ...values }; setDraft((current) => ({ ...current, metadata: next })); onPreview(element.id, { metadata: next }); };
-  const flushLabel = () => {
-    if (labelSaveTimer.current) { window.clearTimeout(labelSaveTimer.current); labelSaveTimer.current = null; }
-    if (draft.label !== element.label) onCommit(element.id, { label: draft.label });
-  };
-  const handleClose = () => { flushLabel(); onClose(); };
   return <div className="markup-popup" role="dialog" aria-label={`${element.type} formatting`} style={{ left: `${anchor.x * 100}%`, top: `${anchor.y * 100}%` }} onPointerDown={(event) => event.stopPropagation()}>
-    <header className="markup-popup__header"><div><strong>{element.type === 'text' ? 'Edit text' : `Edit ${element.type}`}</strong><small>Changes save when you finish a field</small></div><button type="button" className="markup-popup__close" onClick={handleClose} aria-label="Close formatting controls">×</button></header>
+    <header className="markup-popup__header"><div><strong>Edit {element.type}</strong><small>{element.type === 'text' ? 'Type directly in the text box on the plan' : 'Changes save when you finish a field'}</small></div><button type="button" className="markup-popup__close" onClick={onClose} aria-label="Close formatting controls">×</button></header>
     <div className="markup-popup__grid">
-      {element.type === 'text' && <label className="markup-control markup-control--wide"><span>Text</span><input autoFocus value={draft.label} onChange={(event) => { const value = event.target.value; setDraft((current) => ({ ...current, label: value })); if (labelSaveTimer.current) window.clearTimeout(labelSaveTimer.current); labelSaveTimer.current = window.setTimeout(() => onCommit(element.id, { label: value }), 500); }} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} onBlur={flushLabel} /></label>}
       <label className="markup-control"><span>Color</span><input type="color" value={draft.color} onChange={(event) => preview({ color: event.target.value })} onBlur={() => onCommit(element.id, { color: draft.color })} /></label>
       {element.type === 'text' ? <label className="markup-control markup-control--wide"><span>Font size <output>{Number(metadata.fontSize || 18)} px</output></span><input type="range" min="10" max="72" value={Number(metadata.fontSize || 18)} onChange={(event) => previewMetadata({ fontSize: Number(event.target.value) })} onPointerUp={() => onCommit(element.id, { metadata: draft.metadata })} onKeyUp={() => onCommit(element.id, { metadata: draft.metadata })} /></label> : <>
         <label className="markup-control"><span>Thickness <output>{Number(metadata.strokeWidth || 3)} px</output></span><input type="range" min="1" max="20" value={Number(metadata.strokeWidth || 3)} onChange={(event) => previewMetadata({ strokeWidth: Number(event.target.value) })} onPointerUp={() => onCommit(element.id, { metadata: draft.metadata })} onKeyUp={() => onCommit(element.id, { metadata: draft.metadata })} /></label>
@@ -928,7 +956,7 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
             onDrop={dropComponent}
           >
             {elements.filter((element) => visibleLayers.has(element.category)).map((element) => element.category === 'markup'
-              ? <MarkupElement key={element.id} element={element} orientation={orientation} selected={selectedId === element.id} onPointerDown={pointerDownElement} onSelect={onSelect} onEdit={setEditingId} dimensions={dimensions} pointsPerPixel={pointsPerPixel} scalePaperInches={scalePaperInches} scaleRealFeet={scaleRealFeet} />
+              ? <MarkupElement key={element.id} element={element} orientation={orientation} selected={selectedId === element.id} onPointerDown={pointerDownElement} onSelect={onSelect} onEdit={setEditingId} editingId={editingId} onPreview={onPreviewElement} onCommit={onPatchElement} dimensions={dimensions} pointsPerPixel={pointsPerPixel} scalePaperInches={scalePaperInches} scaleRealFeet={scaleRealFeet} />
               : <React.Fragment key={element.id}>
                   <CameraFieldOfView element={element} orientation={orientation} />
                   <DeviceElement element={element} orientation={orientation} selected={selectedId === element.id} onPointerDown={pointerDownElement} onSelect={onSelect} />
