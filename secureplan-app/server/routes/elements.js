@@ -414,7 +414,7 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate }) {
 
 function validateElementInput(body = {}, partial, existingType) {
   const effectiveType = body.type !== undefined ? body.type : (partial ? existingType : 'device');
-  const isDirectionalMarkup = ['line', 'arrow'].includes(effectiveType);
+  const isDirectionalMarkup = ['line', 'arrow', 'measure'].includes(effectiveType);
   const dimensionRange = isDirectionalMarkup ? { min: -10, max: 10 } : { min: 0.001, max: 10 };
   const result = {
     profileId: body.profileId === undefined

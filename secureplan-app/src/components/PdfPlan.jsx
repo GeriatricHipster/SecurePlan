@@ -204,23 +204,25 @@ function CameraFieldOfView({ element, orientation }) {
 
 function MarkupPopup({ element, orientation, onPreview, onCommit, onClose }) {
   const [draft, setDraft] = useState(null);
+  const [anchor, setAnchor] = useState(null);
+  const labelSaveTimer = useRef(null);
   useEffect(() => {
-    if (!element) { setDraft(null); return; }
+    if (!element) { setDraft(null); setAnchor(null); return; }
     setDraft({
       label: element.label || '', color: elementColor(element), x: Number(element.x), y: Number(element.y),
       width: Number(element.width), height: Number(element.height), metadata: element.metadata || {},
     });
+    const start = toDisplay({ x: Number(element.x), y: Number(element.y) }, orientation);
+    const end = toDisplay({ x: Number(element.x) + Number(element.width), y: Number(element.y) + Number(element.height) }, orientation);
+    setAnchor({
+      x: Math.max(0.18, Math.min(0.82, (start.x + end.x) / 2)),
+      y: Math.max(0.08, Math.min(0.88, Math.max(start.y, end.y) + 0.045)),
+    });
   }, [element?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!element || element.category !== 'markup') return null;
-  if (!draft) return null;
+  if (!draft || !anchor) return null;
   const metadata = draft.metadata || {};
   const length = Math.max(0.01, Math.min(0.8, Math.hypot(Number(draft.width), Number(draft.height))));
-  const start = toDisplay({ x: Number(element.x), y: Number(element.y) }, orientation);
-  const end = toDisplay({ x: Number(element.x) + Number(element.width), y: Number(element.y) + Number(element.height) }, orientation);
-  const anchor = {
-    x: Math.max(0.18, Math.min(0.82, (start.x + end.x) / 2)),
-    y: Math.max(0.08, Math.min(0.88, Math.max(start.y, end.y) + 0.045)),
-  };
   const patchLength = (next) => {
     const angle = Math.atan2(Number(draft.height), Number(draft.width));
     const values = { width: Math.cos(angle) * next, height: Math.sin(angle) * next };
@@ -229,10 +231,15 @@ function MarkupPopup({ element, orientation, onPreview, onCommit, onClose }) {
   };
   const preview = (values) => { setDraft((current) => ({ ...current, ...values })); onPreview(element.id, values); };
   const previewMetadata = (values) => { const next = { ...metadata, ...values }; setDraft((current) => ({ ...current, metadata: next })); onPreview(element.id, { metadata: next }); };
+  const flushLabel = () => {
+    if (labelSaveTimer.current) { window.clearTimeout(labelSaveTimer.current); labelSaveTimer.current = null; }
+    if (draft.label !== element.label) onCommit(element.id, { label: draft.label });
+  };
+  const handleClose = () => { flushLabel(); onClose(); };
   return <div className="markup-popup" role="dialog" aria-label={`${element.type} formatting`} style={{ left: `${anchor.x * 100}%`, top: `${anchor.y * 100}%` }} onPointerDown={(event) => event.stopPropagation()}>
-    <header className="markup-popup__header"><div><strong>{element.type === 'text' ? 'Edit text' : `Edit ${element.type}`}</strong><small>Changes save when you finish a field</small></div><button type="button" className="markup-popup__close" onClick={onClose} aria-label="Close formatting controls">×</button></header>
+    <header className="markup-popup__header"><div><strong>{element.type === 'text' ? 'Edit text' : `Edit ${element.type}`}</strong><small>Changes save when you finish a field</small></div><button type="button" className="markup-popup__close" onClick={handleClose} aria-label="Close formatting controls">×</button></header>
     <div className="markup-popup__grid">
-      {element.type === 'text' && <label className="markup-control markup-control--wide"><span>Text</span><input autoFocus value={draft.label} onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value }))} onBlur={() => draft.label !== element.label && onCommit(element.id, { label: draft.label })} /></label>}
+      {element.type === 'text' && <label className="markup-control markup-control--wide"><span>Text</span><input autoFocus value={draft.label} onChange={(event) => { const value = event.target.value; setDraft((current) => ({ ...current, label: value })); if (labelSaveTimer.current) window.clearTimeout(labelSaveTimer.current); labelSaveTimer.current = window.setTimeout(() => onCommit(element.id, { label: value }), 500); }} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} onBlur={flushLabel} /></label>}
       <label className="markup-control"><span>Color</span><input type="color" value={draft.color} onChange={(event) => preview({ color: event.target.value })} onBlur={() => onCommit(element.id, { color: draft.color })} /></label>
       {element.type === 'text' ? <label className="markup-control markup-control--wide"><span>Font size <output>{Number(metadata.fontSize || 18)} px</output></span><input type="range" min="10" max="72" value={Number(metadata.fontSize || 18)} onChange={(event) => previewMetadata({ fontSize: Number(event.target.value) })} onPointerUp={() => onCommit(element.id, { metadata: draft.metadata })} onKeyUp={() => onCommit(element.id, { metadata: draft.metadata })} /></label> : <>
         <label className="markup-control"><span>Thickness <output>{Number(metadata.strokeWidth || 3)} px</output></span><input type="range" min="1" max="20" value={Number(metadata.strokeWidth || 3)} onChange={(event) => previewMetadata({ strokeWidth: Number(event.target.value) })} onPointerUp={() => onCommit(element.id, { metadata: draft.metadata })} onKeyUp={() => onCommit(element.id, { metadata: draft.metadata })} /></label>
