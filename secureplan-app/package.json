@@ -25,6 +25,7 @@
     "express-rate-limit": "^8.6.1",
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.2.1",
+    "lucide-react": "^1.29.0",
     "multer": "^2.2.0",
     "pdfjs-dist": "^6.2.108",
     "pg": "^8.22.0",

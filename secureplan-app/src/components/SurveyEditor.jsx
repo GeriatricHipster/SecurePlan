@@ -7,6 +7,21 @@ import { DEFAULT_ICON_COLOR, DEFAULT_PROFILE, DEVICE_CATEGORIES, DEVICE_WORKFLOW
 import { FIT_PLAN_ZOOM, MAX_PLAN_ZOOM, MIN_PLAN_ZOOM } from './planGestures.js';
 import DeviceGlyph from './DeviceGlyph.jsx';
 import { exportSurveyPdf } from './surveyPdfExport.js';
+import {
+  ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  Circle, Cloud, Download, Layers, ListChecks, Minus, Moon, Move, MousePointer2,
+  Plus, RotateCw, Ruler, Slash, Square, Sun, Type, X,
+} from 'lucide-react';
+
+const TOOL_ICONS = {
+  select: MousePointer2,
+  line: Slash,
+  arrow: ArrowUpRight,
+  rectangle: Square,
+  ellipse: Circle,
+  text: Type,
+  measure: Ruler,
+};
 
 const LAYER_IDS = [...DEVICE_CATEGORIES.map((category) => category.id), 'custom', 'markup'];
 
@@ -73,7 +88,7 @@ function LibraryPanel({ activeTool, profiles, visibleLayers, canEdit, doorFuncti
     <aside className="editor-panel library-panel" aria-label="Component library">
       <div className="editor-panel__heading"><div><p className="eyebrow">Plotting</p><h2>Components</h2></div><button type="button" className="icon-button mobile-only" onClick={onClose} aria-label="Close component library">×</button></div>
       <div className="markup-tools" role="toolbar" aria-label="Drawing tools">
-        {MARKUP_TOOLS.map((tool) => <button key={tool.type} type="button" aria-label={tool.label} title={tool.label} aria-pressed={activeTool.type === tool.type} className={activeTool.type === tool.type ? 'active' : ''} onClick={() => onTool({ kind: 'markup', ...tool })} disabled={!canEdit && tool.type !== 'select'}><span aria-hidden="true">{tool.symbol}</span><small>{tool.label}</small></button>)}
+        {MARKUP_TOOLS.map((tool) => { const Icon = TOOL_ICONS[tool.type] || MousePointer2; return <button key={tool.type} type="button" aria-label={tool.label} title={tool.label} aria-pressed={activeTool.type === tool.type} className={activeTool.type === tool.type ? 'active' : ''} onClick={() => onTool({ kind: 'markup', ...tool })} disabled={!canEdit && tool.type !== 'select'}><Icon aria-hidden="true" size={18} strokeWidth={2} /><small>{tool.label}</small></button>; })}
       </div>
       {activeTool.type === 'measure' && (
         <div className="measure-scale-config">
@@ -115,11 +130,11 @@ function LibraryPanel({ activeTool, profiles, visibleLayers, canEdit, doorFuncti
               const payload = { kind: 'profile', ...profile, components };
               return <button type="button" draggable={canEdit} onDragStart={(event) => startDrag(event, payload)} key={profile.id} className={active ? 'active' : ''} aria-pressed={active} disabled={!canEdit} onClick={() => onTool(payload)}><span className="profile-stack" aria-hidden="true">{components.slice(0, 4).map((component, index) => <i key={`${component.type}-${index}`}>{component.symbol || itemFor(component.category, component.type)?.symbol || '?'}</i>)}</span><span><strong>{profile.name}</strong><small>{components.map((component) => component.symbol || itemFor(component.category, component.type)?.symbol).filter(Boolean).join(' · ') || profile.description}</small></span></button>;
             })}
-            {canEdit && <button type="button" className="new-profile-button" onClick={onBuildProfile}><span aria-hidden="true">＋</span>Create icon profile</button>}
+            {canEdit && <button type="button" className="new-profile-button" onClick={onBuildProfile}><Plus aria-hidden="true" size={16} />Create icon profile</button>}
           </div>
         </details>
         <details className="component-group layer-group">
-          <summary><span aria-hidden="true">◫</span><strong>Layers</strong><span>{visibleLayers.size}/{LAYER_IDS.length}</span></summary>
+          <summary><Layers aria-hidden="true" size={16} /><strong>Layers</strong><span>{visibleLayers.size}/{LAYER_IDS.length}</span></summary>
           <div className="layer-list">
             {LAYER_IDS.map((layer) => <label key={layer}><input type="checkbox" checked={visibleLayers.has(layer)} onChange={() => onLayer(layer)} /><span className="category-dot" style={{ backgroundColor: categoryFor(layer)?.color || (layer === 'markup' ? '#46545f' : '#13795b') }} /><span>{categoryFor(layer)?.name || (layer === 'markup' ? 'Markup' : 'Custom')}</span></label>)}
           </div>
@@ -205,8 +220,8 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
   if (!element) {
     return (
       <aside className="editor-panel inspector-panel" aria-label="Element properties">
-        <div className="editor-panel__heading"><div><p className="eyebrow">Details</p><h2>Properties</h2></div><button type="button" className="icon-button mobile-only" onClick={onClose} aria-label="Close properties">×</button><button type="button" className="icon-button desktop-only" onClick={onCollapse} aria-label="Collapse properties panel" title="Collapse panel">»</button></div>
-        <div className="inspector-empty"><span aria-hidden="true">↖</span><h3>Select an element</h3><p>Choose a plotted device or markup to edit its details, notes, and photos.</p></div>
+        <div className="editor-panel__heading"><div><p className="eyebrow">Details</p><h2>Properties</h2></div><button type="button" className="icon-button mobile-only" onClick={onClose} aria-label="Close properties"><X aria-hidden="true" size={18} /></button><button type="button" className="icon-button desktop-only" onClick={onCollapse} aria-label="Collapse properties panel" title="Collapse panel"><ChevronsRight aria-hidden="true" size={16} /></button></div>
+        <div className="inspector-empty"><MousePointer2 aria-hidden="true" size={28} /><h3>Select an element</h3><p>Choose a plotted device or markup to edit its details, notes, and photos.</p></div>
       </aside>
     );
   }
@@ -228,7 +243,7 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
 
   return (
     <aside className="editor-panel inspector-panel" aria-label={`Properties for ${element.label}`}>
-      <div className="editor-panel__heading"><div><p className="eyebrow">Selected element</p><h2>{element.label}</h2></div><button type="button" className="icon-button mobile-only" onClick={onClose} aria-label="Close properties">×</button><button type="button" className="icon-button desktop-only" onClick={onCollapse} aria-label="Collapse properties panel" title="Collapse panel">»</button></div>
+      <div className="editor-panel__heading"><div><p className="eyebrow">Selected element</p><h2>{element.label}</h2></div><button type="button" className="icon-button mobile-only" onClick={onClose} aria-label="Close properties"><X aria-hidden="true" size={18} /></button><button type="button" className="icon-button desktop-only" onClick={onCollapse} aria-label="Collapse properties panel" title="Collapse panel"><ChevronsRight aria-hidden="true" size={16} /></button></div>
       <div className="inspector-scroll">
         <section className="inspector-section">
           <div className="element-identity"><span className="library-symbol" style={{ '--symbol-color': form.color }}><DeviceGlyph type={element.type} symbol={elementSymbol(element)} label={element.label} iconSrc={itemFor(element.category, element.type)?.reportIcon} color={form.color} /></span><div><strong>{categoryFor(element.category)?.name || (element.category === 'markup' ? 'Markup' : 'Custom')}</strong><span>{itemFor(element.category, element.type)?.label || element.type.replaceAll('_', ' ')}</span></div></div>
@@ -285,7 +300,7 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
         <section className="inspector-section">
           <div className="section-title"><h3>Cloud photos</h3><span>{photos.length}</span></div>
           {photos.length > 0 && <div className="photo-grid">{photos.map((photo) => <CloudPhoto key={photo.id} photo={photo} elementLabel={element.label} />)}</div>}
-          {canAnnotate && <div className="photo-upload"><Field label="Photo caption"><input value={photoCaption} onChange={(e) => setPhotoCaption(e.target.value)} placeholder="Optional field note" /></Field><label className={`button button--secondary upload-button ${photoBusy ? 'disabled' : ''}`}><input type="file" accept="image/jpeg,image/png,image/webp,image/heic" capture="environment" disabled={photoBusy} onChange={(e) => { const file = e.target.files?.[0]; if (file) onAddPhoto(file, photoCaption).then(() => setPhotoCaption('')); e.target.value = ''; }} /><span>{photoBusy ? 'Uploading to cloud…' : 'Take or upload photo'}</span></label><p className="cloud-note"><span aria-hidden="true">☁</span> Photos are uploaded to the workspace and are not stored in this app on your device.</p></div>}
+          {canAnnotate && <div className="photo-upload"><Field label="Photo caption"><input value={photoCaption} onChange={(e) => setPhotoCaption(e.target.value)} placeholder="Optional field note" /></Field><label className={`button button--secondary upload-button ${photoBusy ? 'disabled' : ''}`}><input type="file" accept="image/jpeg,image/png,image/webp,image/heic" capture="environment" disabled={photoBusy} onChange={(e) => { const file = e.target.files?.[0]; if (file) onAddPhoto(file, photoCaption).then(() => setPhotoCaption('')); e.target.value = ''; }} /><span>{photoBusy ? 'Uploading to cloud…' : 'Take or upload photo'}</span></label><p className="cloud-note"><Cloud aria-hidden="true" size={14} /> Photos are uploaded to the workspace and are not stored in this app on your device.</p></div>}
         </section>
       </div>
     </aside>
@@ -726,15 +741,15 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
   return (
     <main id="main-content" className="survey-editor">
       <header className="editor-header">
-        <button type="button" className="icon-button" onClick={() => navigate(siteId ? `sites/${siteId}` : 'sites')} aria-label="Back to site"><span aria-hidden="true">←</span></button>
+        <button type="button" className="icon-button" onClick={() => navigate(siteId ? `sites/${siteId}` : 'sites')} aria-label="Back to site"><ArrowLeft aria-hidden="true" size={18} /></button>
         <div className="editor-title"><h1>{survey.name}</h1><span>Last edited by {lastEditor} · {formatWhen(survey.updatedAt || survey.updated_at)}</span></div>
         <div className="editor-header__spacer" />
         <Presence users={presence.length ? presence : [user]} status={syncStatus} />
         <div className="editor-actions">
-          <button type="button" className="button button--ghost" onClick={rotate} disabled={!canEdit} title="Rotate survey clockwise"><span aria-hidden="true">↻</span><span className="button-label">Rotate {orientation}°</span></button>
-          <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'schedule' })}><span aria-hidden="true">☷</span><span className="button-label">Schedule</span></button>
-          <button type="button" className="button button--secondary" onClick={toggleTheme} title="Toggle dark mode"><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span><span className="button-label">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button>
-          <button type="button" className="button button--secondary" onClick={exportPdf} disabled={pdfBusy} title="Export a PDF summary of plotted devices"><span aria-hidden="true">⬇</span><span className="button-label">{pdfBusy ? 'Exporting…' : 'Export PDF'}</span></button>
+          <button type="button" className="button button--ghost" onClick={rotate} disabled={!canEdit} title="Rotate survey clockwise"><RotateCw aria-hidden="true" size={16} /><span className="button-label">Rotate {orientation}°</span></button>
+          <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'schedule' })}><ListChecks aria-hidden="true" size={16} /><span className="button-label">Schedule</span></button>
+          <button type="button" className="button button--secondary" onClick={toggleTheme} title="Toggle dark mode">{theme === 'dark' ? <Sun aria-hidden="true" size={16} /> : <Moon aria-hidden="true" size={16} />}<span className="button-label">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button>
+          <button type="button" className="button button--secondary" onClick={exportPdf} disabled={pdfBusy} title="Export a PDF summary of plotted devices"><Download aria-hidden="true" size={16} /><span className="button-label">{pdfBusy ? 'Exporting…' : 'Export PDF'}</span></button>
         </div>
       </header>
 
@@ -744,18 +759,18 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
 
         <section className="canvas-panel">
           <div className="canvas-toolbar" aria-label="Plan view controls">
-            <div className="page-controls"><button type="button" className="icon-button" aria-label="Previous PDF page" disabled={pageInfo.page <= 1} onClick={() => setPageInfo((current) => ({ ...current, page: current.page - 1 }))}>‹</button><span>Page {pageInfo.page} of {pageInfo.pages}</span><button type="button" className="icon-button" aria-label="Next PDF page" disabled={pageInfo.page >= pageInfo.pages} onClick={() => setPageInfo((current) => ({ ...current, page: current.page + 1 }))}>›</button></div>
-            <div className="zoom-controls"><button type="button" className="icon-button" aria-label="Zoom out" onClick={() => setZoom((value) => Math.max(MIN_PLAN_ZOOM, Number((value - 0.1).toFixed(2))))}>−</button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button type="button" className="icon-button" aria-label="Zoom in" onClick={() => setZoom((value) => Math.min(MAX_PLAN_ZOOM, Number((value + 0.1).toFixed(2))))}>＋</button><button type="button" className="button button--ghost fit-button" onClick={() => setZoom(FIT_PLAN_ZOOM)}>Fit</button></div>
+            <div className="page-controls"><button type="button" className="icon-button" aria-label="Previous PDF page" disabled={pageInfo.page <= 1} onClick={() => setPageInfo((current) => ({ ...current, page: current.page - 1 }))}><ChevronLeft aria-hidden="true" size={18} /></button><span>Page {pageInfo.page} of {pageInfo.pages}</span><button type="button" className="icon-button" aria-label="Next PDF page" disabled={pageInfo.page >= pageInfo.pages} onClick={() => setPageInfo((current) => ({ ...current, page: current.page + 1 }))}><ChevronRight aria-hidden="true" size={18} /></button></div>
+            <div className="zoom-controls"><button type="button" className="icon-button" aria-label="Zoom out" onClick={() => setZoom((value) => Math.max(MIN_PLAN_ZOOM, Number((value - 0.1).toFixed(2))))}><Minus aria-hidden="true" size={16} /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button type="button" className="icon-button" aria-label="Zoom in" onClick={() => setZoom((value) => Math.min(MAX_PLAN_ZOOM, Number((value + 0.1).toFixed(2))))}><Plus aria-hidden="true" size={16} /></button><button type="button" className="button button--ghost fit-button" onClick={() => setZoom(FIT_PLAN_ZOOM)}>Fit</button></div>
           </div>
           <PdfPlan survey={survey} orientation={orientation} pageNumber={pageInfo.page} onPageInfo={setPageInfo} zoom={zoom} onZoom={setZoom} elements={elements} visibleLayers={visibleLayers} selectedId={selectedId} activeTool={activeTool} canEdit={canEdit} onPlace={place} onDropComponent={dropComponent} onDraw={draw} onPreviewElement={previewElement} onPatchElement={patchElement} onResizeElement={resizeElement} onSelect={setSelectedId} onMove={move} onDeleteSelected={() => selected && setModal({ type: 'delete-element' })} notify={notify} stageRef={planStageRef} scalePaperInches={scaleDraft.scalePaperInches} scaleRealFeet={scaleDraft.scaleRealFeet} />
           <div className="mobile-canvas-hint" aria-hidden="true">1 finger moves · 2 fingers zoom</div>
         </section>
 
         <div className={`mobile-editor-drawer mobile-editor-drawer--right ${mobilePanel === 'inspector' ? 'open' : ''}`}><InspectorPanel element={selected} notes={notes} notesLoading={notesLoading} canEdit={canEdit} canAnnotate={canAnnotate} onPatch={patchSelected} onDuplicate={duplicateSelected} onDelete={() => setModal({ type: 'delete-element' })} onAddNote={addNote} onAddPhoto={addPhoto} photoBusy={photoBusy} onClose={() => setMobilePanel(null)} onCollapse={() => setInspectorCollapsed(true)} /></div>
-        {inspectorCollapsed && <button type="button" className="inspector-reopen-tab desktop-only" onClick={() => setInspectorCollapsed(false)} aria-label="Show properties panel" title="Show properties panel"><span aria-hidden="true">«</span></button>}
+        {inspectorCollapsed && <button type="button" className="inspector-reopen-tab desktop-only" onClick={() => setInspectorCollapsed(false)} aria-label="Show properties panel" title="Show properties panel"><ChevronsLeft aria-hidden="true" size={16} /></button>}
       </div>
 
-      <nav className="editor-mobile-nav" aria-label="Survey editor panels"><button type="button" className={mobilePanel === 'library' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'library' ? null : 'library')}><span aria-hidden="true">＋</span>Add</button><button type="button" className={activeTool.type === 'select' && !mobilePanel ? 'active' : ''} onClick={() => { setActiveTool({ kind: 'markup', type: 'select', label: 'Select' }); setMobilePanel(null); }}><span aria-hidden="true">✥</span>Move</button><button type="button" className={mobilePanel === 'inspector' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'inspector' ? null : 'inspector')} disabled={!selected}><span aria-hidden="true">☷</span>{selected ? 'Details' : 'Select item'}</button></nav>
+      <nav className="editor-mobile-nav" aria-label="Survey editor panels"><button type="button" className={mobilePanel === 'library' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'library' ? null : 'library')}><Plus aria-hidden="true" size={18} />Add</button><button type="button" className={activeTool.type === 'select' && !mobilePanel ? 'active' : ''} onClick={() => { setActiveTool({ kind: 'markup', type: 'select', label: 'Select' }); setMobilePanel(null); }}><Move aria-hidden="true" size={18} />Move</button><button type="button" className={mobilePanel === 'inspector' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'inspector' ? null : 'inspector')} disabled={!selected}><ListChecks aria-hidden="true" size={18} />{selected ? 'Details' : 'Select item'}</button></nav>
 
       <Modal open={modal?.type === 'schedule'} title="Device schedule" description={`${elements.filter((element) => element.category !== 'markup').length} plotted security components`} onClose={() => setModal(null)} wide><Schedule elements={elements} onSelect={setSelectedId} onClose={() => setModal(null)} /></Modal>
       <ProfileBuilder open={modal?.type === 'profile'} onClose={() => setModal(null)} onCreate={createProfile} />

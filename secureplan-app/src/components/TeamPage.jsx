@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api, normalizeList } from '../api.js';
 import { ConfirmDialog, EmptyState, Field, Menu, MenuButton, Modal, Spinner, formatWhen, initials } from './Common.jsx';
+import { Plus } from 'lucide-react';
 
 const roles = [
   { value: 'viewer', label: 'Viewer', help: 'View plans, notes, and schedules.' },
@@ -116,7 +117,7 @@ export default function TeamPage({ user, notify }) {
           <h1>Team & invitations</h1>
           <p>Control who can enter the workspace and what they are allowed to change.</p>
         </div>
-        {canManage && <button type="button" className="button button--primary" onClick={openInvite}><span aria-hidden="true">＋</span> Create invite</button>}
+        {canManage && <button type="button" className="button button--primary" onClick={openInvite}><Plus aria-hidden="true" size={16} /> Create invite</button>}
       </div>
 
       <section className="panel team-panel">

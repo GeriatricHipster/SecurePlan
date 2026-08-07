@@ -1,4 +1,5 @@
 import React from 'react';
+import { Maximize2, Minimize2 } from 'lucide-react';
 
 export default function FullScreenToggle() {
   const [isFullscreen, setIsFullscreen] = React.useState(Boolean(document.fullscreenElement));
@@ -29,7 +30,7 @@ export default function FullScreenToggle() {
       aria-label={isFullscreen ? 'Exit full screen' : 'Enter full screen'}
       title={isFullscreen ? 'Exit full screen' : 'Full screen'}
     >
-      <span aria-hidden="true">⤢</span>
+      {isFullscreen ? <Minimize2 aria-hidden="true" size={16} /> : <Maximize2 aria-hidden="true" size={16} />}
       <span>{isFullscreen ? 'Exit' : 'Full Screen'}</span>
     </button>
   );

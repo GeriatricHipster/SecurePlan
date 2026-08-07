@@ -366,6 +366,7 @@ export const api = {
     finally { nativeSessionToken = null; }
   },
   sites: () => request('/api/sites'),
+  search: (query) => request(`/api/search?q=${encodeURIComponent(query)}`),
   site: (id) => request(`/api/sites/${id}`),
   createSite: (values) => request('/api/sites', json('POST', values)),
   updateSite: (id, values) => request(`/api/sites/${id}`, json('PATCH', values)),

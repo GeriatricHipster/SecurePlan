@@ -1,4 +1,5 @@
 import React, { useEffect, useId, useRef } from 'react';
+import { MoreHorizontal, X } from 'lucide-react';
 
 export function Brand({ compact = false }) {
   return (
@@ -100,7 +101,7 @@ export function Modal({ open, title, description, onClose, children, wide = fals
           {description && <p id={descriptionId}>{description}</p>}
         </div>
         <button type="button" className="icon-button" onClick={onClose} aria-label={`Close ${title}`}>
-          <span aria-hidden="true">×</span>
+          <X aria-hidden="true" size={18} />
         </button>
       </div>
       <div className="modal__body">{children}</div>
@@ -126,7 +127,7 @@ export function Menu({ label = 'More actions', children }) {
   return (
     <details className="menu">
       <summary className="icon-button" aria-label={label} title={label}>
-        <span aria-hidden="true">•••</span>
+        <MoreHorizontal aria-hidden="true" size={18} />
       </summary>
       <div className="menu__popover">{children}</div>
     </details>

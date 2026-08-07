@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Brand, Field } from './Common.jsx';
+import { Check } from 'lucide-react';
 
 function AuthLayout({ eyebrow, title, copy, children }) {
   return (
@@ -11,9 +12,9 @@ function AuthLayout({ eyebrow, title, copy, children }) {
           <h1>Turn floor plans into coordinated security system surveys.</h1>
           <p>Plot devices, attach field conditions, and work from one live plan on desktop, tablet, or phone.</p>
           <ul className="feature-list">
-            <li><span aria-hidden="true">✓</span> Collaborative blueprint markup</li>
-            <li><span aria-hidden="true">✓</span> Access control, CCTV, intrusion, and doors</li>
-            <li><span aria-hidden="true">✓</span> Cloud photos, notes, schedules, and history</li>
+            <li><Check aria-hidden="true" size={16} /> Collaborative blueprint markup</li>
+            <li><Check aria-hidden="true" size={16} /> Access control, CCTV, intrusion, and doors</li>
+            <li><Check aria-hidden="true" size={16} /> Cloud photos, notes, schedules, and history</li>
           </ul>
         </div>
         <p className="auth-visual__footer">Secure by design · Built for survey teams</p>

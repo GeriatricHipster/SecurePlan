@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api, normalizeList } from '../api.js';
 import { ConfirmDialog, EmptyState, Field, Menu, MenuButton, Modal, Spinner, formatWhen, initials, roleCanManage } from './Common.jsx';
+import { Plus, Search } from 'lucide-react';
 
 function SiteCard({ site, index, total, canManage, canDelete, onOpen, onEdit, onCopy, onDelete, onMove }) {
   const count = site.surveyCount ?? site.survey_count ?? site.surveys?.length ?? 0;
@@ -147,12 +148,12 @@ export default function SitesDashboard({ user, navigate, notify }) {
           <h1>Sites</h1>
           <p>Organize buildings, plans, surveys, and field documentation.</p>
         </div>
-        {canManage && <button type="button" className="button button--primary" onClick={openCreate}><span aria-hidden="true">＋</span> New site</button>}
+        {canManage && <button type="button" className="button button--primary" onClick={openCreate}><Plus aria-hidden="true" size={16} /> New site</button>}
       </div>
 
       <div className="toolbar-row">
         <label className="search-box">
-          <span aria-hidden="true">⌕</span>
+          <Search aria-hidden="true" size={16} />
           <span className="sr-only">Search sites</span>
           <input type="search" placeholder="Search sites or addresses" value={search} onChange={(event) => setSearch(event.target.value)} />
         </label>

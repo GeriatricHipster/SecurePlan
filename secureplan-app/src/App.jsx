@@ -1,13 +1,14 @@
-import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api.js';
 import { OwnerSetup, SignIn } from './components/AuthScreens.jsx';
-import { Brand, Spinner, initials } from './components/Common.jsx';
+import { Brand, Modal, Spinner, initials } from './components/Common.jsx';
 import HomeDashboard from './components/HomeDashboard.jsx';
 import SitesDashboard from './components/SitesDashboard.jsx';
 import SiteWorkspace from './components/SiteWorkspace.jsx';
 import TeamPage from './components/TeamPage.jsx';
 import InstallAppPrompt from './components/InstallAppPrompt.jsx';
 import FullScreenToggle from './components/FullScreenToggle.jsx';
+import { ChevronDown, FileText, Home as HomeIcon, LayoutGrid, MapPin, Moon, Search, Sun, Users } from 'lucide-react';
 const SurveyEditor = lazy(() => import('./components/SurveyEditor.jsx'));
 
 const THEME_STORAGE_KEY = 'secureplan-theme';
@@ -37,10 +38,94 @@ function navigate(path) {
   else window.location.hash = target;
 }
 
+function SearchButton() {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState({ sites: [], surveys: [] });
+  const [loading, setLoading] = useState(false);
+  const debounceRef = useRef(null);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (open) requestAnimationFrame(() => inputRef.current?.focus());
+    if (!open) { setQuery(''); setResults({ sites: [], surveys: [] }); }
+  }, [open]);
+
+  useEffect(() => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    const trimmed = query.trim();
+    if (trimmed.length < 2) { setResults({ sites: [], surveys: [] }); setLoading(false); return; }
+    setLoading(true);
+    debounceRef.current = window.setTimeout(async () => {
+      try {
+        const response = await api.search(trimmed);
+        setResults({ sites: response?.sites || [], surveys: response?.surveys || [] });
+      } catch {
+        setResults({ sites: [], surveys: [] });
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+    return () => window.clearTimeout(debounceRef.current);
+  }, [query]);
+
+  const goToSite = (site) => { setOpen(false); navigate(`sites/${site.id}`); };
+  const goToSurvey = (survey) => { setOpen(false); navigate(`surveys/${survey.id}?site=${survey.siteId}`); };
+
+  const trimmed = query.trim();
+  const hasResults = results.sites.length > 0 || results.surveys.length > 0;
+
+  return (
+    <>
+      <button type="button" className="icon-button" onClick={() => setOpen(true)} aria-label="Search sites and surveys" title="Search">
+        <Search aria-hidden="true" size={18} />
+      </button>
+      <Modal open={open} title="Search" onClose={() => setOpen(false)}>
+        <div className="search-modal">
+          <input
+            ref={inputRef}
+            type="search"
+            className="search-modal__input"
+            placeholder="Search sites and surveys…"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          {trimmed.length > 0 && trimmed.length < 2 && <p className="search-modal__hint">Keep typing — at least 2 characters.</p>}
+          {loading && <div className="search-modal__loading"><Spinner label="Searching…" /></div>}
+          {!loading && trimmed.length >= 2 && !hasResults && <p className="search-modal__hint">No matches for "{trimmed}".</p>}
+          {!loading && results.sites.length > 0 && (
+            <div className="search-modal__group">
+              <h3>Sites</h3>
+              {results.sites.map((site) => (
+                <button type="button" key={site.id} className="search-modal__result" onClick={() => goToSite(site)}>
+                  <MapPin aria-hidden="true" size={16} />
+                  <span>{site.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {!loading && results.surveys.length > 0 && (
+            <div className="search-modal__group">
+              <h3>Surveys</h3>
+              {results.surveys.map((survey) => (
+                <button type="button" key={survey.id} className="search-modal__result" onClick={() => goToSurvey(survey)}>
+                  <FileText aria-hidden="true" size={16} />
+                  <span>{survey.name}</span>
+                  {survey.siteName && <small>{survey.siteName}</small>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </Modal>
+    </>
+  );
+}
+
 function ThemeButton({ theme, onToggle }) {
   return (
     <button type="button" className="theme-toggle button button--secondary" onClick={onToggle} title="Toggle dark mode" aria-label="Toggle dark mode">
-      <span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span>
+      {theme === 'dark' ? <Sun aria-hidden="true" size={16} /> : <Moon aria-hidden="true" size={16} />}
       <span className="theme-toggle__label">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
     </button>
   );
@@ -65,12 +150,13 @@ function AppHeader({ user, route, onLogout, theme, onToggleTheme, isOnline }) {
         </span>
         <FullScreenToggle />
       </div>
+      <SearchButton />
       <ThemeButton theme={theme} onToggle={onToggleTheme} />
       <details className="account-menu" open={menuOpen} onToggle={(e) => setMenuOpen(e.currentTarget.open)}>
         <summary aria-label="Open account menu">
           <span className="avatar">{initials(user.name)}</span>
           <span className="account-menu__name">{user.name}</span>
-          <span aria-hidden="true">⌄</span>
+          <ChevronDown aria-hidden="true" size={16} />
         </summary>
         <div className="account-menu__popover">
           <strong>{user.name}</strong>
@@ -88,9 +174,9 @@ function MobileNav({ route, user }) {
   if (route.page === 'survey') return null;
   return (
     <nav className={`mobile-nav ${['owner', 'admin'].includes(user.role) ? 'mobile-nav--triple' : ''}`} aria-label="Mobile navigation">
-      <button type="button" className={route.page === 'home' ? 'active' : ''} onClick={() => navigate('home')}><span aria-hidden="true">⌂</span>Home</button>
-      <button type="button" className={route.page === 'sites' || route.page === 'site' ? 'active' : ''} onClick={() => navigate('sites')}><span aria-hidden="true">▦</span>Sites</button>
-      {['owner', 'admin'].includes(user.role) && <button type="button" className={route.page === 'team' ? 'active' : ''} onClick={() => navigate('team')}><span aria-hidden="true">♟</span>Team</button>}
+      <button type="button" className={route.page === 'home' ? 'active' : ''} onClick={() => navigate('home')}><HomeIcon aria-hidden="true" size={20} />Home</button>
+      <button type="button" className={route.page === 'sites' || route.page === 'site' ? 'active' : ''} onClick={() => navigate('sites')}><LayoutGrid aria-hidden="true" size={20} />Sites</button>
+      {['owner', 'admin'].includes(user.role) && <button type="button" className={route.page === 'team' ? 'active' : ''} onClick={() => navigate('team')}><Users aria-hidden="true" size={20} />Team</button>}
     </nav>
   );
 }

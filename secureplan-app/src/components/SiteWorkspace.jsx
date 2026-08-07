@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { api, normalizeList } from '../api.js';
 import { ConfirmDialog, Field, Menu, MenuButton, Modal, Spinner, formatWhen, initials, roleCanEdit, roleCanManage } from './Common.jsx';
 import { ALL_FOLDERS, folderParent, orderedFolders, surveyFolder, surveyFolderGroups } from './siteWorkspaceModel.js';
+import { ArrowLeft, ChevronDown, ChevronRight, Folder, FolderOpen, LayoutGrid, Plus, X } from 'lucide-react';
 
 function FolderNode({ folder, folders, selectedId, depth = 0, canManage, onSelect, onAction }) {
   const children = folders.filter((candidate) => String(folderParent(candidate) ?? '') === String(folder.id));
@@ -11,11 +12,11 @@ function FolderNode({ folder, folders, selectedId, depth = 0, canManage, onSelec
       <div className={`folder-row ${selectedId === folder.id ? 'selected' : ''}`} style={{ '--folder-depth': depth }}>
         {children.length ? (
           <button type="button" className="folder-row__toggle" onClick={() => setExpanded((value) => !value)} aria-label={`${expanded ? 'Collapse' : 'Expand'} ${folder.name}`} aria-expanded={expanded}>
-            <span aria-hidden="true">{expanded ? '⌄' : '›'}</span>
+            {expanded ? <ChevronDown aria-hidden="true" size={16} /> : <ChevronRight aria-hidden="true" size={16} />}
           </button>
         ) : <span className="folder-row__spacer" />}
         <button type="button" className="folder-row__name" onClick={() => onSelect(folder.id)}>
-          <span aria-hidden="true">▰</span><span>{folder.name}</span>
+          <Folder aria-hidden="true" size={16} /><span>{folder.name}</span>
         </button>
         {canManage && (
           <Menu label={`Actions for ${folder.name}`}>
@@ -77,15 +78,15 @@ function SurveyFolderSection({ group, folders, canEdit, canManage, onCreateSurve
   return (
     <section className="survey-folder-section" data-folder-id={group.id || 'root'}>
       <header className="survey-folder-section__header">
-        <span className="survey-folder-section__icon" aria-hidden="true">▰</span>
+        <Folder className="survey-folder-section__icon" aria-hidden="true" size={18} />
         <div><h3>{group.folder?.name || 'Site root'}</h3><p>{folderPath}</p></div>
         <span className="count-badge">{group.surveys.length} survey{group.surveys.length === 1 ? '' : 's'}</span>
         <div className="survey-folder-section__actions">
-          {canEdit && <button type="button" className="button button--secondary" onClick={() => onCreateSurvey(group.id)}><span aria-hidden="true">＋</span> Survey</button>}
+          {canEdit && <button type="button" className="button button--secondary" onClick={() => onCreateSurvey(group.id)}><Plus aria-hidden="true" size={16} /> Survey</button>}
           {group.folder && canManage && <Menu label={`Actions for ${group.folder.name}`}><MenuButton onClick={() => onFolderAction('folder-create', { parentId: group.folder.id })}>New subfolder</MenuButton><MenuButton onClick={() => onFolderAction('folder-edit', { folder: group.folder })}>Rename</MenuButton><MenuButton onClick={() => onFolderAction('folder-copy', { folder: group.folder })}>Make a copy</MenuButton><MenuButton onClick={() => onFolderAction('folder-move', { folder: group.folder })}>Move</MenuButton><MenuButton danger onClick={() => onFolderAction('folder-delete', { folder: group.folder })}>Delete</MenuButton></Menu>}
         </div>
       </header>
-      {group.surveys.length ? <div className="survey-grid">{group.surveys.map((survey) => <SurveyCard key={survey.id} survey={survey} canEdit={canEdit} onOpen={onOpenSurvey} onAction={onSurveyAction} />)}</div> : <div className="folder-inline-empty"><span aria-hidden="true">⌑</span><p><strong>No surveys yet</strong><small>Upload a floor plan or create a blank survey in this folder.</small></p>{canEdit && <button type="button" onClick={() => onCreateSurvey(group.id)}>Create survey</button>}</div>}
+      {group.surveys.length ? <div className="survey-grid">{group.surveys.map((survey) => <SurveyCard key={survey.id} survey={survey} canEdit={canEdit} onOpen={onOpenSurvey} onAction={onSurveyAction} />)}</div> : <div className="folder-inline-empty"><FolderOpen aria-hidden="true" size={28} /><p><strong>No surveys yet</strong><small>Upload a floor plan or create a blank survey in this folder.</small></p>{canEdit && <button type="button" onClick={() => onCreateSurvey(group.id)}>Create survey</button>}</div>}
     </section>
   );
 }
@@ -257,13 +258,13 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
   return (
     <main id="main-content" className="workspace-page">
       <div className="workspace-heading">
-        <button type="button" className="back-button" onClick={() => navigate('sites')}><span aria-hidden="true">←</span> Sites</button>
+        <button type="button" className="back-button" onClick={() => navigate('sites')}><ArrowLeft aria-hidden="true" size={16} /> Sites</button>
         <div>
           <p className="eyebrow">Site workspace</p>
           <h1>{site?.name}</h1>
           {site?.address && <p>{site.address}</p>}
         </div>
-        {canEdit && <div className="workspace-heading__actions">{canManage && <button type="button" className="button button--secondary" onClick={() => startAction('folder-create', { parentId: activeFolderId })}>New folder</button>}<button type="button" className="button button--primary" onClick={() => startAction('survey-create', { folderId: activeFolderId })}><span aria-hidden="true">＋</span> New survey</button></div>}
+        {canEdit && <div className="workspace-heading__actions">{canManage && <button type="button" className="button button--secondary" onClick={() => startAction('folder-create', { parentId: activeFolderId })}>New folder</button>}<button type="button" className="button button--primary" onClick={() => startAction('survey-create', { folderId: activeFolderId })}><Plus aria-hidden="true" size={16} /> New survey</button></div>}
       </div>
 
       <div className="workspace-layout">
@@ -272,16 +273,16 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
           <div className="folder-sidebar__header">
             <h2>Quick filter</h2>
             <div className="folder-sidebar__header-actions">
-              {canManage && <button type="button" className="icon-button" onClick={() => startAction('folder-create', { parentId: activeFolderId })} aria-label="Create folder">＋</button>}
-              <button type="button" className="icon-button folder-sidebar__close" onClick={() => setMobileFoldersOpen(false)} aria-label="Close folders">✕</button>
+              {canManage && <button type="button" className="icon-button" onClick={() => startAction('folder-create', { parentId: activeFolderId })} aria-label="Create folder"><Plus aria-hidden="true" size={18} /></button>}
+              <button type="button" className="icon-button folder-sidebar__close" onClick={() => setMobileFoldersOpen(false)} aria-label="Close folders"><X aria-hidden="true" size={18} /></button>
             </div>
           </div>
           <nav>
             <button type="button" className={`root-folder ${selectedFolderId === ALL_FOLDERS ? 'selected' : ''}`} onClick={() => selectFolder(ALL_FOLDERS)}>
-              <span aria-hidden="true">▦</span><span>All folders</span>
+              <LayoutGrid aria-hidden="true" size={16} /><span>All folders</span>
             </button>
             <button type="button" className={`root-folder ${selectedFolderId == null ? 'selected' : ''}`} onClick={() => selectFolder(null)}>
-              <span aria-hidden="true">▦</span><span>Site root</span>
+              <LayoutGrid aria-hidden="true" size={16} /><span>Site root</span>
             </button>
             {rootFolders.length ? (
               <ul className="folder-tree">
@@ -300,7 +301,7 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
             <button type="button" onClick={() => selectFolder(ALL_FOLDERS)}>{site?.name}</button>
             {breadcrumbs.map((folder) => <React.Fragment key={folder.id}><span aria-hidden="true">/</span><button type="button" onClick={() => selectFolder(folder.id)}>{folder.name}</button></React.Fragment>)}
           </nav>
-          <button type="button" className="mobile-folder-trigger" onClick={() => setMobileFoldersOpen(true)}><span aria-hidden="true">▦</span> Browse folders</button>
+          <button type="button" className="mobile-folder-trigger" onClick={() => setMobileFoldersOpen(true)}><LayoutGrid aria-hidden="true" size={16} /> Browse folders</button>
           <div className="survey-browser__heading">
             <div>
               <h2>{selectedFolderId === ALL_FOLDERS ? 'All survey folders' : breadcrumbs.at(-1)?.name || 'Site root'}</h2>
