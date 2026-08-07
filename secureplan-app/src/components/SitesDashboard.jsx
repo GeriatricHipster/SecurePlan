@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api, normalizeList } from '../api.js';
 import { ConfirmDialog, EmptyState, Field, Menu, MenuButton, Modal, Spinner, formatWhen, initials, roleCanManage } from './Common.jsx';
-import { Plus, Search } from 'lucide-react';
+import { LayoutGrid, Plus, Search } from 'lucide-react';
 
 function SiteCard({ site, index, total, canManage, canDelete, onOpen, onEdit, onCopy, onDelete, onMove }) {
   const count = site.surveyCount ?? site.survey_count ?? site.surveys?.length ?? 0;
@@ -168,7 +168,7 @@ export default function SitesDashboard({ user, navigate, notify }) {
           })}
         </div>
       ) : (
-        <EmptyState title={search ? 'No sites match your search' : 'Create your first site'} icon="▦" action={!search && canManage ? <button type="button" className="button button--primary" onClick={openCreate}>Create a site</button> : undefined}>
+        <EmptyState title={search ? 'No sites match your search' : 'Create your first site'} icon={LayoutGrid} action={search ? <button type="button" className="button button--secondary" onClick={() => setSearch('')}>Clear search</button> : (canManage ? <button type="button" className="button button--primary" onClick={openCreate}>Create a site</button> : undefined)}>
           {search ? 'Try another site name or address.' : 'A site holds folders, floor plans, surveys, and your team’s markup.'}
         </EmptyState>
       )}

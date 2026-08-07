@@ -899,6 +899,193 @@ h3 {
   font-size: .82rem;
 }
 
+.home-progress {
+  margin-bottom: 30px;
+}
+
+.home-progress__heading {
+  margin-bottom: 14px;
+}
+
+.home-progress__heading h2 {
+  margin: 0 0 4px;
+  color: var(--ink);
+  font-size: 1.15rem;
+}
+
+.home-progress__heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: .85rem;
+}
+
+.home-progress__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.progress-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  text-align: left;
+}
+
+.progress-row:hover {
+  border-color: var(--line-strong);
+}
+
+.progress-row__heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.progress-row__name {
+  color: var(--ink);
+  font-weight: 700;
+  font-size: .95rem;
+}
+
+.progress-row__percent {
+  flex-shrink: 0;
+  color: var(--ink-soft);
+  font-weight: 700;
+  font-size: .85rem;
+}
+
+.progress-bar {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.progress-bar__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--red-dark), var(--red));
+  transition: width .3s ease;
+}
+
+.progress-row__meta {
+  color: var(--muted);
+  font-size: .78rem;
+}
+
+.welcome-modal__intro {
+  margin: 0 0 16px;
+  color: var(--ink-soft);
+}
+
+.welcome-modal__list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0 0 20px;
+  padding: 0;
+  list-style: none;
+}
+
+.welcome-modal__list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.welcome-modal__icon {
+  display: grid;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--red-soft);
+  color: var(--red-dark);
+  place-items: center;
+}
+
+.welcome-modal__list strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--ink);
+  font-size: .92rem;
+}
+
+.welcome-modal__list p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: .84rem;
+  line-height: 1.4;
+}
+
+.home-activity {
+  margin-bottom: 30px;
+}
+
+.activity-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 6px 4px;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.activity-feed__item {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 9px;
+  grid-template-columns: auto auto 1fr auto;
+}
+
+.activity-feed__item:hover {
+  background: var(--surface-soft);
+}
+
+.activity-feed__icon {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  place-items: center;
+}
+
+.activity-feed__item p {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: .86rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-feed__item p strong {
+  color: var(--ink);
+}
+
+.activity-feed__item time {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: .75rem;
+  white-space: nowrap;
+}
+
 .home-actions {
   display: grid;
   gap: 18px;
@@ -2383,6 +2570,40 @@ h3 {
   accent-color: var(--red);
 }
 
+.field-mode-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+}
+
+.field-mode-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+.field-mode-note p {
+  margin: 0;
+  font-size: .82rem;
+  line-height: 1.4;
+}
+
+.layer-list--field {
+  padding: 4px 14px 14px;
+  gap: 4px;
+}
+
+.layer-list--field label {
+  min-height: 46px;
+  font-size: .82rem;
+}
+
 .placement-hint {
   display: flex;
   min-height: 56px;
@@ -3414,7 +3635,7 @@ th {
 }
 
 tbody tr:hover {
-  background: #fbf4f5;
+  background: var(--red-soft);
 }
 
 td button {
@@ -3743,7 +3964,7 @@ td button {
     width: 42px;
     height: 4px;
     border-radius: 999px;
-    background: #c5cdd1;
+    background: var(--line-strong);
     content: '';
     transform: translateX(-50%);
   }
@@ -3824,7 +4045,7 @@ td button {
   }
 
   .editor-mobile-nav button.active {
-    background: #f6e6e8;
+    background: var(--red-soft);
     color: var(--red-dark);
   }
 

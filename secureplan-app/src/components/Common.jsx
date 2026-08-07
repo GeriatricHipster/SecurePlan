@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useRef } from 'react';
-import { MoreHorizontal, X } from 'lucide-react';
+import { FileQuestion, MoreHorizontal, X } from 'lucide-react';
 
 export function Brand({ compact = false }) {
   return (
@@ -27,10 +27,10 @@ export function Spinner({ label = 'Loading' }) {
   );
 }
 
-export function EmptyState({ icon = '◇', title, children, action }) {
+export function EmptyState({ icon: Icon = FileQuestion, title, children, action }) {
   return (
     <section className="empty-state">
-      <span className="empty-state__icon" aria-hidden="true">{icon}</span>
+      <span className="empty-state__icon" aria-hidden="true"><Icon size={32} /></span>
       <h2>{title}</h2>
       {children && <div className="muted">{children}</div>}
       {action}

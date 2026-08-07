@@ -9,7 +9,7 @@ import DeviceGlyph from './DeviceGlyph.jsx';
 import { exportSurveyPdf } from './surveyPdfExport.js';
 import {
   ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  Circle, Cloud, Download, Layers, ListChecks, Minus, Moon, Move, MousePointer2,
+  Circle, Cloud, Download, Eye, Layers, ListChecks, Minus, Moon, Move, MousePointer2,
   Plus, RotateCw, Ruler, Slash, Square, Sun, Type, X,
 } from 'lucide-react';
 
@@ -84,6 +84,21 @@ function LibraryPanel({ activeTool, profiles, visibleLayers, canEdit, doorFuncti
     event.dataTransfer.setData('application/x-secureplan-component', JSON.stringify(payload));
     event.dataTransfer.setData('text/plain', payload.label || payload.name || 'SecurePlan component');
   };
+
+  if (!canEdit) {
+    return (
+      <aside className="editor-panel library-panel library-panel--field" aria-label="Layers">
+        <div className="editor-panel__heading"><div><p className="eyebrow">Viewing</p><h2>Layers</h2></div><button type="button" className="icon-button mobile-only" onClick={onClose} aria-label="Close layers panel">×</button></div>
+        <div className="field-mode-note"><Eye aria-hidden="true" size={16} /><p>You can view devices, update install status, and add notes or photos. Tap a device on the plan to get started.</p></div>
+        <div className="library-scroll">
+          <div className="layer-list layer-list--field">
+            {LAYER_IDS.map((layer) => <label key={layer}><input type="checkbox" checked={visibleLayers.has(layer)} onChange={() => onLayer(layer)} /><span className="category-dot" style={{ backgroundColor: categoryFor(layer)?.color || (layer === 'markup' ? '#46545f' : '#13795b') }} /><span>{categoryFor(layer)?.name || (layer === 'markup' ? 'Markup' : 'Custom')}</span></label>)}
+          </div>
+        </div>
+      </aside>
+    );
+  }
+
   return (
     <aside className="editor-panel library-panel" aria-label="Component library">
       <div className="editor-panel__heading"><div><p className="eyebrow">Plotting</p><h2>Components</h2></div><button type="button" className="icon-button mobile-only" onClick={onClose} aria-label="Close component library">×</button></div>
@@ -299,7 +314,7 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
 
         <section className="inspector-section">
           <div className="section-title"><h3>Cloud photos</h3><span>{photos.length}</span></div>
-          {photos.length > 0 && <div className="photo-grid">{photos.map((photo) => <CloudPhoto key={photo.id} photo={photo} elementLabel={element.label} />)}</div>}
+          {photos.length > 0 ? <div className="photo-grid">{photos.map((photo) => <CloudPhoto key={photo.id} photo={photo} elementLabel={element.label} />)}</div> : <p className="muted">No photos on this element yet.</p>}
           {canAnnotate && <div className="photo-upload"><Field label="Photo caption"><input value={photoCaption} onChange={(e) => setPhotoCaption(e.target.value)} placeholder="Optional field note" /></Field><label className={`button button--secondary upload-button ${photoBusy ? 'disabled' : ''}`}><input type="file" accept="image/jpeg,image/png,image/webp,image/heic" capture="environment" disabled={photoBusy} onChange={(e) => { const file = e.target.files?.[0]; if (file) onAddPhoto(file, photoCaption).then(() => setPhotoCaption('')); e.target.value = ''; }} /><span>{photoBusy ? 'Uploading to cloud…' : 'Take or upload photo'}</span></label><p className="cloud-note"><Cloud aria-hidden="true" size={14} /> Photos are uploaded to the workspace and are not stored in this app on your device.</p></div>}
         </section>
       </div>
@@ -746,7 +761,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
         <div className="editor-header__spacer" />
         <Presence users={presence.length ? presence : [user]} status={syncStatus} />
         <div className="editor-actions">
-          <button type="button" className="button button--ghost" onClick={rotate} disabled={!canEdit} title="Rotate survey clockwise"><RotateCw aria-hidden="true" size={16} /><span className="button-label">Rotate {orientation}°</span></button>
+          {canEdit && <button type="button" className="button button--ghost" onClick={rotate} title="Rotate survey clockwise"><RotateCw aria-hidden="true" size={16} /><span className="button-label">Rotate {orientation}°</span></button>}
           <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'schedule' })}><ListChecks aria-hidden="true" size={16} /><span className="button-label">Schedule</span></button>
           <button type="button" className="button button--secondary" onClick={toggleTheme} title="Toggle dark mode">{theme === 'dark' ? <Sun aria-hidden="true" size={16} /> : <Moon aria-hidden="true" size={16} />}<span className="button-label">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button>
           <button type="button" className="button button--secondary" onClick={exportPdf} disabled={pdfBusy} title="Export a PDF summary of plotted devices"><Download aria-hidden="true" size={16} /><span className="button-label">{pdfBusy ? 'Exporting…' : 'Export PDF'}</span></button>
@@ -770,7 +785,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
         {inspectorCollapsed && <button type="button" className="inspector-reopen-tab desktop-only" onClick={() => setInspectorCollapsed(false)} aria-label="Show properties panel" title="Show properties panel"><ChevronsLeft aria-hidden="true" size={16} /></button>}
       </div>
 
-      <nav className="editor-mobile-nav" aria-label="Survey editor panels"><button type="button" className={mobilePanel === 'library' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'library' ? null : 'library')}><Plus aria-hidden="true" size={18} />Add</button><button type="button" className={activeTool.type === 'select' && !mobilePanel ? 'active' : ''} onClick={() => { setActiveTool({ kind: 'markup', type: 'select', label: 'Select' }); setMobilePanel(null); }}><Move aria-hidden="true" size={18} />Move</button><button type="button" className={mobilePanel === 'inspector' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'inspector' ? null : 'inspector')} disabled={!selected}><ListChecks aria-hidden="true" size={18} />{selected ? 'Details' : 'Select item'}</button></nav>
+      <nav className="editor-mobile-nav" aria-label="Survey editor panels"><button type="button" className={mobilePanel === 'library' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'library' ? null : 'library')}>{canEdit ? <Plus aria-hidden="true" size={18} /> : <Layers aria-hidden="true" size={18} />}{canEdit ? 'Add' : 'Layers'}</button><button type="button" className={activeTool.type === 'select' && !mobilePanel ? 'active' : ''} onClick={() => { setActiveTool({ kind: 'markup', type: 'select', label: 'Select' }); setMobilePanel(null); }}><Move aria-hidden="true" size={18} />Move</button><button type="button" className={mobilePanel === 'inspector' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'inspector' ? null : 'inspector')} disabled={!selected}><ListChecks aria-hidden="true" size={18} />{selected ? 'Details' : 'Select item'}</button></nav>
 
       <Modal open={modal?.type === 'schedule'} title="Device schedule" description={`${elements.filter((element) => element.category !== 'markup').length} plotted security components`} onClose={() => setModal(null)} wide><Schedule elements={elements} onSelect={setSelectedId} onClose={() => setModal(null)} /></Modal>
       <ProfileBuilder open={modal?.type === 'profile'} onClose={() => setModal(null)} onCreate={createProfile} />

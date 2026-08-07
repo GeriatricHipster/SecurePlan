@@ -367,6 +367,13 @@ export const api = {
   },
   sites: () => request('/api/sites'),
   search: (query) => request(`/api/search?q=${encodeURIComponent(query)}`),
+  activity: (params = {}) => {
+    const search = new URLSearchParams();
+    if (params.siteId) search.set('siteId', params.siteId);
+    if (params.limit) search.set('limit', params.limit);
+    const suffix = search.toString();
+    return request(`/api/activity${suffix ? `?${suffix}` : ''}`);
+  },
   site: (id) => request(`/api/sites/${id}`),
   createSite: (values) => request('/api/sites', json('POST', values)),
   updateSite: (id, values) => request(`/api/sites/${id}`, json('PATCH', values)),

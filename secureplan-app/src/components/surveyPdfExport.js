@@ -1,4 +1,3 @@
-import jsPDF from 'jspdf';
 import { categoryFor, itemFor, surveyDeviceCounts } from './deviceLibrary.js';
 
 function safeText(value) {
@@ -11,6 +10,7 @@ export async function exportSurveyPdf({
   elements = [],
   planImageDataUrl = null,
 }) {
+  const { default: jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
   const margin = 36;
   const pageWidth = doc.internal.pageSize.getWidth();

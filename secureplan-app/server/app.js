@@ -19,6 +19,7 @@ import { createElementsRouter } from './routes/elements.js';
 import { createProfilesRouter } from './routes/profiles.js';
 import { createTeamRouter } from './routes/team.js';
 import { createSearchRouter } from './routes/search.js';
+import { createActivityRouter } from './routes/activity.js';
 
 export function createApplication(overrides = {}) {
   const config = createConfig(overrides);
@@ -166,6 +167,7 @@ export function createApplication(overrides = {}) {
   app.use('/api', createProfilesRouter(routerContext));
   app.use('/api', createTeamRouter(routerContext));
   app.use('/api', createSearchRouter(routerContext));
+  app.use('/api', createActivityRouter(routerContext));
 
   app.use('/api', (req, res) => {
     res.status(404).json({

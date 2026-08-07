@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api, normalizeList } from '../api.js';
 import { ConfirmDialog, EmptyState, Field, Menu, MenuButton, Modal, Spinner, formatWhen, initials } from './Common.jsx';
-import { Plus } from 'lucide-react';
+import { Plus, Users } from 'lucide-react';
 
 const roles = [
   { value: 'viewer', label: 'Viewer', help: 'View plans, notes, and schedules.' },
@@ -141,7 +141,7 @@ export default function TeamPage({ user, notify }) {
               </article>
             ))}
           </div>
-        ) : <EmptyState title="No team members" icon="♟">Create an invitation to add your first collaborator.</EmptyState>}
+        ) : <EmptyState title="No team members" icon={Users} action={canManage ? <button type="button" className="button button--primary" onClick={openInvite}><Plus aria-hidden="true" size={16} /> Create invite</button> : undefined}>Create an invitation to add your first collaborator.</EmptyState>}
       </section>
 
       {canManage && (

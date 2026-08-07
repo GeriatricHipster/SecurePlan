@@ -288,7 +288,7 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
               <ul className="folder-tree">
                 {rootFolders.map((folder) => <FolderNode key={folder.id} folder={folder} folders={folders} selectedId={selectedFolderId} canManage={canManage} onSelect={selectFolder} onAction={folderAction} />)}
               </ul>
-            ) : <p className="folder-sidebar__empty">No folders yet</p>}
+            ) : <p className="folder-sidebar__empty">{canManage ? 'No folders yet — use ＋ above to add one.' : 'No folders yet.'}</p>}
           </nav>
           <div className="folder-sidebar__footer">
             <span>{folders.length} folder{folders.length === 1 ? '' : 's'}</span>
