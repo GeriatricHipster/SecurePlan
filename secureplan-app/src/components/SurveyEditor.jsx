@@ -529,39 +529,49 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
     setEditMode(true);
   };
 
+  const withTimeout = (promise, ms, label) => Promise.race([
+    promise,
+    new Promise((_, reject) => window.setTimeout(() => reject(new Error(`${label} took too long and timed out.`)), ms)),
+  ]);
+
   const saveChanges = async () => {
     if (!pendingOpsRef.current.length) { notify('No changes to save.'); return false; }
     setSavingChanges(true);
     const ops = pendingOpsRef.current;
     const tempIdMap = new Map();
-    let failed = false;
-    try {
-      for (const op of ops) {
+    const failures = [];
+    for (const op of ops) {
+      try {
         if (op.type === 'create') {
-          const created = await api.createElement(surveyId, op.values);
+          const created = await withTimeout(api.createElement(surveyId, op.values), 20000, 'Creating an element');
           tempIdMap.set(op.tempId, created.id);
         } else if (op.type === 'update') {
           const realId = tempIdMap.get(op.id) || op.id;
           if (realId.startsWith('temp-')) continue; // created and updated before ever saving; the create already carries the latest values
-          await api.updateElement(realId, op.values);
+          await withTimeout(api.updateElement(realId, op.values), 20000, 'Saving a change');
         } else if (op.type === 'delete') {
           const realId = tempIdMap.get(op.id) || op.id;
           if (realId.startsWith('temp-')) { tempIdMap.delete(op.id); continue; } // created and deleted before ever saving; nothing to remove server-side
-          await api.deleteElement(realId);
+          await withTimeout(api.deleteElement(realId), 20000, 'Deleting an element');
         }
+      } catch (error) {
+        // Drop this one operation and keep going - a failed op (e.g. the element no longer exists) will never
+        // succeed on retry, so leaving it in the queue would permanently block every future save attempt.
+        failures.push(error.message);
       }
-      pendingOpsRef.current = [];
-      if (tempIdMap.size) setElements((current) => current.map((element) => tempIdMap.has(element.id) ? { ...element, id: tempIdMap.get(element.id) } : element));
-      await reloadElements();
-      touch();
-      notify('Changes saved.');
-    } catch (error) {
-      failed = true;
-      notify(`Some changes failed to save: ${error.message}`);
-    } finally {
-      setSavingChanges(false);
     }
-    return !failed;
+    pendingOpsRef.current = [];
+    if (tempIdMap.size) setElements((current) => current.map((element) => tempIdMap.has(element.id) ? { ...element, id: tempIdMap.get(element.id) } : element));
+    try { await withTimeout(reloadElements(), 20000, 'Refreshing the survey'); }
+    catch (error) { failures.push(error.message); }
+    touch();
+    setSavingChanges(false);
+    if (failures.length) {
+      notify(`Saved with ${failures.length} issue${failures.length === 1 ? '' : 's'}: ${failures[0]}`);
+      return false;
+    }
+    notify('Changes saved.');
+    return true;
   };
 
   const discardChanges = async () => {
@@ -1037,9 +1047,9 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
       <Modal open={modal?.type === 'unsaved-changes'} title="You have unsaved changes" onClose={() => setModal(null)}>
         <p>Save your changes before you stop editing, or discard them to leave without saving.</p>
         <div className="modal__actions">
-          <button type="button" className="button button--secondary" onClick={() => setModal(null)}>Cancel</button>
-          <button type="button" className="button button--ghost" onClick={async () => { await discardChanges(); setModal(null); setEditMode(false); }}>Discard changes</button>
-          <button type="button" className="button button--primary" onClick={async () => { const ok = await saveChanges(); setModal(null); if (ok) setEditMode(false); }}>Save & stop editing</button>
+          <button type="button" className="button button--secondary" disabled={savingChanges} onClick={() => setModal(null)}>Cancel</button>
+          <button type="button" className="button button--ghost" disabled={savingChanges} onClick={async () => { await discardChanges(); setModal(null); setEditMode(false); }}>Discard changes</button>
+          <button type="button" className="button button--primary" disabled={savingChanges} onClick={async () => { const ok = await saveChanges(); setModal(null); if (ok) setEditMode(false); }}>{savingChanges ? 'Saving…' : 'Save & stop editing'}</button>
         </div>
       </Modal>
     </main>
