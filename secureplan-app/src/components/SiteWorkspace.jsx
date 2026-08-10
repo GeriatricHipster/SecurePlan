@@ -120,10 +120,10 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
   const load = async () => {
     setLoading(true);
     try {
-      const [allSites, folderResult, surveyResult] = await Promise.all([
-        api.sites(), api.folders(siteId), api.surveys(siteId),
+      const [siteResult, folderResult, surveyResult] = await Promise.all([
+        api.site(siteId).catch(() => ({ id: siteId, name: 'Site' })), api.folders(siteId), api.surveys(siteId),
       ]);
-      setSite(normalizeList(allSites).find((item) => item.id === siteId) || { id: siteId, name: 'Site' });
+      setSite(siteResult);
       setFolders(normalizeList(folderResult));
       setSurveys(normalizeList(surveyResult));
     } catch (loadError) { notify(loadError.message); }

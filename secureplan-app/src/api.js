@@ -375,6 +375,7 @@ export const api = {
     const suffix = search.toString();
     return request(`/api/activity${suffix ? `?${suffix}` : ''}`);
   },
+  dashboardSummary: () => request('/api/dashboard-summary'),
   site: (id) => request(`/api/sites/${id}`),
   createSite: (values) => request('/api/sites', json('POST', values)),
   updateSite: (id, values) => request(`/api/sites/${id}`, json('PATCH', values)),

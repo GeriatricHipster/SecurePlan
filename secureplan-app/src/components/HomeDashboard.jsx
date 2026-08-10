@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api, normalizeList } from '../api.js';
 import { Modal, Spinner, formatWhen, initials } from './Common.jsx';
-import { workflowStatusFor } from './deviceLibrary.js';
 import { Activity, ChartBar, Copy, FilePlus, FolderPlus, MapPin, Pencil, RotateCw, Search, Trash2 } from 'lucide-react';
 
 const WELCOME_STORAGE_KEY = 'secureplan-welcomed';
@@ -157,35 +156,27 @@ export default function HomeDashboard({ user, navigate, notify }) {
     (async () => {
       setLoading(true);
       try {
-        const sites = normalizeList(await api.sites());
+        const [sitesResult, summary, activityResult] = await Promise.all([
+          api.sites(),
+          api.dashboardSummary().catch(() => ({ totalDevices: 0, siteProgress: [] })),
+          api.activity({ limit: 15 }).catch(() => ({ activity: [] })),
+        ]);
+        const sites = normalizeList(sitesResult);
         const totals = sites.reduce((current, site) => ({
           surveys: current.surveys + Number(site.surveyCount ?? site.survey_count ?? 0),
           folders: current.folders + Number(site.folderCount ?? site.folder_count ?? 0),
         }), { surveys: 0, folders: 0 });
 
-        const surveyListsBySite = await Promise.all(sites.map((site) => api.surveys(site.id).catch(() => [])));
-        const surveysWithSite = sites.flatMap((site, index) => normalizeList(surveyListsBySite[index]).map((survey) => ({ ...survey, siteId: site.id })));
-
-        const devices = surveysWithSite.reduce((sum, survey) => sum + Number(survey.elementCount ?? survey.element_count ?? 0), 0);
-
-        const elementListsBySurvey = await Promise.all(surveysWithSite.map((survey) => api.elements(survey.id).catch(() => [])));
-
-        const progressBySite = sites.map((site) => {
-          const deviceElements = surveysWithSite.reduce((collected, survey, index) => {
-            if (survey.siteId !== site.id) return collected;
-            const elements = normalizeList(elementListsBySurvey[index]).filter((element) => element.category !== 'markup');
-            return collected.concat(elements);
-          }, []);
-          const progress = deviceElements.length
-            ? Math.round(deviceElements.reduce((sum, element) => sum + workflowStatusFor(element).progress, 0) / deviceElements.length)
-            : 0;
-          return { id: site.id, name: site.name, progress, deviceCount: deviceElements.length };
-        }).sort((a, b) => a.progress - b.progress);
-
-        const activityResult = await api.activity({ limit: 15 }).catch(() => ({ activity: [] }));
+        const progressBySiteId = new Map((summary?.siteProgress || []).map((entry) => [entry.siteId, entry]));
+        const progressBySite = sites
+          .map((site) => {
+            const entry = progressBySiteId.get(site.id);
+            return { id: site.id, name: site.name, progress: entry?.progress || 0, deviceCount: entry?.deviceCount || 0 };
+          })
+          .sort((a, b) => a.progress - b.progress);
 
         if (active) {
-          setStats({ sites: sites.length, surveys: totals.surveys, folders: totals.folders, devices });
+          setStats({ sites: sites.length, surveys: totals.surveys, folders: totals.folders, devices: summary?.totalDevices || 0 });
           setSiteProgress(progressBySite);
           setActivity(normalizeList(activityResult?.activity ?? activityResult));
         }

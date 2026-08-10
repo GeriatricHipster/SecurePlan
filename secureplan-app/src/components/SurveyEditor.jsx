@@ -491,10 +491,10 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
   const remoteTimer = useRef(null);
   const selectedIdRef = useRef(null);
   const editModeRef = useRef(false);
-  useEffect(() => { editModeRef.current = editMode; }, [editMode]);
   const planStageRef = useRef(null);
   const canEditPermission = roleCanEdit(user.role);
   const [editMode, setEditMode] = useState(false);
+  useEffect(() => { editModeRef.current = editMode; }, [editMode]);
   const [savingChanges, setSavingChanges] = useState(false);
   const pendingOpsRef = useRef([]);
   const canEdit = canEditPermission && editMode;
