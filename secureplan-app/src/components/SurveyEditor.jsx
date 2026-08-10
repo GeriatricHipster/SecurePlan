@@ -9,9 +9,72 @@ import DeviceGlyph from './DeviceGlyph.jsx';
 import { exportSurveyPdf } from './surveyPdfExport.js';
 import {
   ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  Circle, Cloud, Download, Eye, Layers, ListChecks, Minus, Moon, Move, MousePointer2,
-  Plus, RotateCw, Ruler, Slash, Square, Sun, Type, X,
+  Circle, Cloud, Copy, Download, Eye, FilePlus, History, Layers, ListChecks, Minus, Moon, Move, MousePointer2,
+  Pencil, Plus, RotateCw, Ruler, Save, Slash, Square, Sun, Trash2, Type, X,
 } from 'lucide-react';
+
+const HISTORY_ICONS = {
+  'element.created': FilePlus,
+  'element.updated': Pencil,
+  'element.deleted': Trash2,
+  'survey.updated': Pencil,
+  'survey.copied': Copy,
+  'survey.moved': FilePlus,
+  'survey.rotated': RotateCw,
+};
+
+function describeHistoryEntry(entry) {
+  const { action, details = {} } = entry;
+  switch (action) {
+    case 'element.created': return <>plotted <strong>{details.label || details.type || 'a device'}</strong></>;
+    case 'element.updated': return <>updated <strong>{details.label || 'a device'}</strong></>;
+    case 'element.deleted': return <>removed <strong>{details.label || 'a device'}</strong></>;
+    case 'survey.updated': return <>updated survey details</>;
+    case 'survey.copied': return <>copied this survey</>;
+    case 'survey.moved': return <>moved this survey</>;
+    case 'survey.rotated': return <>rotated the plan {details.rotation != null ? `to ${details.rotation}°` : ''}</>;
+    default: return action.replace('.', ' ');
+  }
+}
+
+function HistoryPanel({ surveyId, notify }) {
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setLoading(true);
+      try {
+        const result = await api.activity({ surveyId, limit: 100 });
+        if (active) setEntries(normalizeList(result?.activity ?? result));
+      } catch (error) {
+        if (active) notify(error.message);
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [surveyId, notify]);
+
+  if (loading) return <div className="loading-panel"><Spinner label="Loading history…" /></div>;
+  if (!entries.length) return <p className="muted">No activity recorded on this survey yet.</p>;
+  return (
+    <ul className="activity-feed">
+      {entries.map((entry) => {
+        const Icon = HISTORY_ICONS[entry.action] || Pencil;
+        return (
+          <li key={entry.id} className="activity-feed__item">
+            <span className="activity-feed__icon" aria-hidden="true"><Icon size={15} /></span>
+            <span className="mini-avatar" aria-hidden="true">{initials(entry.actorName)}</span>
+            <p><strong>{entry.actorName}</strong> {describeHistoryEntry(entry)}</p>
+            <time title={new Date(entry.createdAt).toLocaleString()}>{formatWhen(entry.createdAt)}</time>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 const TOOL_ICONS = {
   select: MousePointer2,
@@ -201,11 +264,12 @@ function DeviceLifecyclePanel({ element, canEdit, onPatch }) {
   </section>;
 }
 
-function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, onPatch, onDuplicate, onDelete, onAddNote, onAddPhoto, photoBusy, onClose, onCollapse }) {
+function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, onPatch, onPreview, onDuplicate, onDelete, onAddNote, onAddPhoto, photoBusy, onClose, onCollapse }) {
   const [form, setForm] = useState({
-    label: '', color: '#46545f', size: 42, rotation: 0, doorFunction: 'controlled', fovColor: '#1769aa', fovLength: 0.22, fovSpread: 60, fovRotation: 0,
+    label: '', color: '#46545f', size: 42, rotation: 0, doorFunction: 'controlled', fovColor: '#1769aa', fovLength: 0.22, fovSpread: 60, fovRotation: 0, fovs: null,
   });
   const [noteText, setNoteText] = useState('');
+  const labelSaveTimer = useRef(null);
   const [noteBusy, setNoteBusy] = useState(false);
   const [noteError, setNoteError] = useState('');
   const [photoCaption, setPhotoCaption] = useState('');
@@ -223,6 +287,7 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
       fovLength: Number(metadata.fovLength ?? 0.22),
       fovSpread: Number(metadata.fovSpread ?? 60),
       fovRotation: Number(metadata.fovRotation ?? 0),
+      fovs: Array.isArray(metadata.fovs) ? metadata.fovs : null,
     });
   }, [element?.id, element?.label, element?.color, element?.rotation, element?.metadata?.doorFunction]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -262,7 +327,7 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
       <div className="inspector-scroll">
         <section className="inspector-section">
           <div className="element-identity"><span className="library-symbol" style={{ '--symbol-color': form.color }}><DeviceGlyph type={element.type} symbol={elementSymbol(element)} label={element.label} iconSrc={itemFor(element.category, element.type)?.reportIcon} color={form.color} /></span><div><strong>{categoryFor(element.category)?.name || (element.category === 'markup' ? 'Markup' : 'Custom')}</strong><span>{itemFor(element.category, element.type)?.label || element.type.replaceAll('_', ' ')}</span></div></div>
-          <Field label="Element label"><input value={form.label} disabled={!canEdit} onChange={(e) => setForm({ ...form, label: e.target.value })} onBlur={() => form.label !== element.label && onPatch({ label: form.label })} /></Field>
+          <Field label="Element label"><input value={form.label} disabled={!canEdit} onChange={(e) => { const value = e.target.value; setForm({ ...form, label: value }); onPreview(element.id, { label: value }); if (labelSaveTimer.current) window.clearTimeout(labelSaveTimer.current); labelSaveTimer.current = window.setTimeout(() => onPatch({ label: value }), 500); }} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} onBlur={() => { if (labelSaveTimer.current) window.clearTimeout(labelSaveTimer.current); if (form.label !== element.label) onPatch({ label: form.label }); }} /></Field>
           {isDoorType(element.type) && <div className="door-function-field"><Field label="Door function"><select value={form.doorFunction} disabled={!canEdit} onChange={(event) => { const option = doorFunctionFor(event.target.value); setForm((current) => ({ ...current, doorFunction: option.id, color: option.color })); onPatch({ color: option.color, metadata: { ...metadata, doorFunction: option.id } }); }}>{DOOR_FUNCTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></Field><div className="door-function-key" aria-label="Door function colors">{DOOR_FUNCTIONS.map((option) => <span key={option.id}><i style={{ backgroundColor: option.color }} />{option.label}</span>)}</div><p>Changing the door function automatically applies its standard icon color. You can still choose a custom color below.</p></div>}
           <div className="form-grid form-grid--two">
             <fieldset className="field color-field"><legend className="field__label">Icon color</legend><div className="color-control"><input type="color" aria-label="Choose icon color" value={form.color} disabled={!canEdit} onChange={(e) => setForm({ ...form, color: e.target.value })} onBlur={() => form.color !== elementColor(element) && onPatch({ color: form.color })} /><input aria-label="Icon color hex value" value={form.color} disabled={!canEdit} pattern="#[0-9a-fA-F]{6}" onChange={(e) => setForm({ ...form, color: e.target.value })} onBlur={() => /^#[0-9a-f]{6}$/i.test(form.color) && onPatch({ color: form.color })} /></div></fieldset>
@@ -274,28 +339,35 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
               <legend>Camera field of view</legend>
               {element.type === 'multisensor_camera' ? (
                 <div className="multisensor-fov-list">
-                  {cameraFieldsFor(element).map((fov, index, currentFovs) => <fieldset key={fov.id || index} className="multisensor-fov-control"><legend>View {index + 1}</legend>
-                    <label>Color <input type="color" value={fov.color || elementColor(element)} disabled={!canEdit} onChange={(event) => { const fovs = currentFovs.map((item, itemIndex) => itemIndex === index ? { ...item, color: event.target.value } : item); onPatch({ metadata: { ...metadata, fovs } }); }} /></label>
-                    <Field label="Direction"><div className="range-control"><input type="range" min="0" max="359" value={Number(fov.rotation || 0)} disabled={!canEdit} onChange={(event) => { const fovs = currentFovs.map((item, itemIndex) => itemIndex === index ? { ...item, rotation: Number(event.target.value) } : item); onPatch({ metadata: { ...metadata, fovs } }); }} /><output>{Number(fov.rotation || 0)}°</output></div></Field>
-                    <Field label="Length"><div className="range-control"><input type="range" min="0.05" max="0.75" step="0.01" value={Number(fov.length || 0.22)} disabled={!canEdit} onChange={(event) => { const fovs = currentFovs.map((item, itemIndex) => itemIndex === index ? { ...item, length: Number(event.target.value) } : item); onPatch({ metadata: { ...metadata, fovs } }); }} /><output>{Math.round(Number(fov.length || 0.22) * 100)}%</output></div></Field>
-                    <Field label="Spread"><div className="range-control"><input type="range" min="5" max="180" step="5" value={Number(fov.spread || 60)} disabled={!canEdit} onChange={(event) => { const fovs = currentFovs.map((item, itemIndex) => itemIndex === index ? { ...item, spread: Number(event.target.value) } : item); onPatch({ metadata: { ...metadata, fovs } }); }} /><output>{Number(fov.spread || 60)}°</output></div></Field>
-                  </fieldset>)}
+                  {(form.fovs || cameraFieldsFor(element)).map((fov, index, currentFovs) => {
+                    const updateFov = (patch) => {
+                      const nextFovs = currentFovs.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item);
+                      setForm((current) => ({ ...current, fovs: nextFovs }));
+                    };
+                    const commitFovs = () => onPatch({ metadata: { ...metadata, fovs: form.fovs || currentFovs } });
+                    return <fieldset key={fov.id || index} className="multisensor-fov-control"><legend>View {index + 1}</legend>
+                      <label>Color <input type="color" value={fov.color || elementColor(element)} disabled={!canEdit} onChange={(event) => updateFov({ color: event.target.value })} onBlur={commitFovs} /></label>
+                      <Field label="Direction"><div className="range-control"><input type="range" min="0" max="359" value={Number(fov.rotation || 0)} disabled={!canEdit} onChange={(event) => updateFov({ rotation: Number(event.target.value) })} onPointerUp={commitFovs} onKeyUp={commitFovs} /><output>{Number(fov.rotation || 0)}°</output></div></Field>
+                      <Field label="Length"><div className="range-control"><input type="range" min="0.05" max="0.75" step="0.01" value={Number(fov.length || 0.22)} disabled={!canEdit} onChange={(event) => updateFov({ length: Number(event.target.value) })} onPointerUp={commitFovs} onKeyUp={commitFovs} /><output>{Math.round(Number(fov.length || 0.22) * 100)}%</output></div></Field>
+                      <Field label="Spread"><div className="range-control"><input type="range" min="5" max="180" step="5" value={Number(fov.spread || 60)} disabled={!canEdit} onChange={(event) => updateFov({ spread: Number(event.target.value) })} onPointerUp={commitFovs} onKeyUp={commitFovs} /><output>{Number(fov.spread || 60)}°</output></div></Field>
+                    </fieldset>;
+                  })}
                 </div>
               ) : <>
               <fieldset className="field color-field">
                 <legend className="field__label">Cone color</legend>
                 <div className="color-control">
-                  <input type="color" aria-label="Choose camera cone color" value={form.fovColor} disabled={!canEdit} onChange={(e) => setForm({ ...form, fovColor: e.target.value })} onBlur={() => onPatch({ metadata: { ...metadata, fovColor: form.fovColor } })} />
-                  <input aria-label="Camera cone color hex value" value={form.fovColor} disabled={!canEdit} pattern="#[0-9a-fA-F]{6}" onChange={(e) => setForm({ ...form, fovColor: e.target.value })} onBlur={() => /^#[0-9a-f]{6}$/i.test(form.fovColor) && onPatch({ metadata: { ...metadata, fovColor: form.fovColor } })} />
+                  <input type="color" aria-label="Choose camera cone color" value={form.fovColor} disabled={!canEdit} onChange={(e) => setForm({ ...form, fovColor: e.target.value })} onBlur={() => onPatch({ metadata: { ...metadata, fovColor: form.fovColor, fovLength: form.fovLength, fovSpread: form.fovSpread, fovRotation: form.fovRotation } })} />
+                  <input aria-label="Camera cone color hex value" value={form.fovColor} disabled={!canEdit} pattern="#[0-9a-fA-F]{6}" onChange={(e) => setForm({ ...form, fovColor: e.target.value })} onBlur={() => /^#[0-9a-f]{6}$/i.test(form.fovColor) && onPatch({ metadata: { ...metadata, fovColor: form.fovColor, fovLength: form.fovLength, fovSpread: form.fovSpread, fovRotation: form.fovRotation } })} />
                 </div>
               </fieldset>
               <Field label="Cone length">
-                <div className="range-control"><input type="range" min="0.05" max="0.75" step="0.01" value={form.fovLength} disabled={!canEdit} onChange={(e) => setForm({ ...form, fovLength: Number(e.target.value) })} onPointerUp={() => onPatch({ metadata: { ...metadata, fovLength: form.fovLength } })} onKeyUp={() => onPatch({ metadata: { ...metadata, fovLength: form.fovLength } })} /><output>{Math.round(form.fovLength * 100)}%</output></div>
+                <div className="range-control"><input type="range" min="0.05" max="0.75" step="0.01" value={form.fovLength} disabled={!canEdit} onChange={(e) => setForm({ ...form, fovLength: Number(e.target.value) })} onPointerUp={() => onPatch({ metadata: { ...metadata, fovColor: form.fovColor, fovLength: form.fovLength, fovSpread: form.fovSpread, fovRotation: form.fovRotation } })} onKeyUp={() => onPatch({ metadata: { ...metadata, fovColor: form.fovColor, fovLength: form.fovLength, fovSpread: form.fovSpread, fovRotation: form.fovRotation } })} /><output>{Math.round(form.fovLength * 100)}%</output></div>
               </Field>
               <Field label="Cone spread">
-                <div className="range-control"><input type="range" min="5" max="180" step="5" value={form.fovSpread} disabled={!canEdit} onChange={(e) => setForm({ ...form, fovSpread: Number(e.target.value) })} onPointerUp={() => onPatch({ metadata: { ...metadata, fovSpread: form.fovSpread } })} onKeyUp={() => onPatch({ metadata: { ...metadata, fovSpread: form.fovSpread } })} /><output>{form.fovSpread}°</output></div>
+                <div className="range-control"><input type="range" min="5" max="180" step="5" value={form.fovSpread} disabled={!canEdit} onChange={(e) => setForm({ ...form, fovSpread: Number(e.target.value) })} onPointerUp={() => onPatch({ metadata: { ...metadata, fovColor: form.fovColor, fovLength: form.fovLength, fovSpread: form.fovSpread, fovRotation: form.fovRotation } })} onKeyUp={() => onPatch({ metadata: { ...metadata, fovColor: form.fovColor, fovLength: form.fovLength, fovSpread: form.fovSpread, fovRotation: form.fovRotation } })} /><output>{form.fovSpread}°</output></div>
               </Field>
-              <Field label="Cone direction"><div className="range-control"><input type="range" min="0" max="359" step="1" value={form.fovRotation} disabled={!canEdit} onChange={(e) => setForm({ ...form, fovRotation: Number(e.target.value) })} onPointerUp={() => onPatch({ metadata: { ...metadata, fovRotation: form.fovRotation } })} onKeyUp={() => onPatch({ metadata: { ...metadata, fovRotation: form.fovRotation } })} /><output>{form.fovRotation}°</output></div></Field>
+              <Field label="Cone direction"><div className="range-control"><input type="range" min="0" max="359" step="1" value={form.fovRotation} disabled={!canEdit} onChange={(e) => setForm({ ...form, fovRotation: Number(e.target.value) })} onPointerUp={() => onPatch({ metadata: { ...metadata, fovColor: form.fovColor, fovLength: form.fovLength, fovSpread: form.fovSpread, fovRotation: form.fovRotation } })} onKeyUp={() => onPatch({ metadata: { ...metadata, fovColor: form.fovColor, fovLength: form.fovLength, fovSpread: form.fovSpread, fovRotation: form.fovRotation } })} /><output>{form.fovRotation}°</output></div></Field>
               </>}
               <p>The cone direction is independent from the camera icon rotation.</p>
             </fieldset>
@@ -418,11 +490,92 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
   const [modal, setModal] = useState(null);
   const remoteTimer = useRef(null);
   const selectedIdRef = useRef(null);
+  const editModeRef = useRef(false);
+  useEffect(() => { editModeRef.current = editMode; }, [editMode]);
   const planStageRef = useRef(null);
-  const canEdit = roleCanEdit(user.role);
+  const canEditPermission = roleCanEdit(user.role);
+  const [editMode, setEditMode] = useState(false);
+  const [savingChanges, setSavingChanges] = useState(false);
+  const pendingOpsRef = useRef([]);
+  const canEdit = canEditPermission && editMode;
   const canAnnotate = roleCanAnnotate(user.role);
   const selected = elements.find((element) => element.id === selectedId) || null;
   const orientation = Number(survey?.rotation ?? survey?.orientation ?? 0);
+  const hasPendingChanges = pendingOpsRef.current.length > 0;
+
+  const draftApi = {
+    createElement: async (sId, values) => {
+      if (!editMode) return api.createElement(sId, values);
+      const tempId = `temp-${crypto.randomUUID()}`;
+      const now = new Date().toISOString();
+      pendingOpsRef.current = [...pendingOpsRef.current, { type: 'create', tempId, values }];
+      return { id: tempId, surveyId: sId, createdAt: now, updatedAt: now, createdBy: user.id, updatedBy: user.id, ...values };
+    },
+    updateElement: async (id, values) => {
+      if (!editMode) return api.updateElement(id, values);
+      pendingOpsRef.current = [...pendingOpsRef.current, { type: 'update', id, values }];
+      return { id, updatedAt: new Date().toISOString(), ...values };
+    },
+    deleteElement: async (id) => {
+      if (!editMode) return api.deleteElement(id);
+      pendingOpsRef.current = [...pendingOpsRef.current, { type: 'delete', id }];
+      return { deletedId: id };
+    },
+  };
+
+  const startEditing = () => {
+    if (!canEditPermission) return;
+    pendingOpsRef.current = [];
+    setEditMode(true);
+  };
+
+  const saveChanges = async () => {
+    if (!pendingOpsRef.current.length) { notify('No changes to save.'); return false; }
+    setSavingChanges(true);
+    const ops = pendingOpsRef.current;
+    const tempIdMap = new Map();
+    let failed = false;
+    try {
+      for (const op of ops) {
+        if (op.type === 'create') {
+          const created = await api.createElement(surveyId, op.values);
+          tempIdMap.set(op.tempId, created.id);
+        } else if (op.type === 'update') {
+          const realId = tempIdMap.get(op.id) || op.id;
+          if (realId.startsWith('temp-')) continue; // created and updated before ever saving; the create already carries the latest values
+          await api.updateElement(realId, op.values);
+        } else if (op.type === 'delete') {
+          const realId = tempIdMap.get(op.id) || op.id;
+          if (realId.startsWith('temp-')) { tempIdMap.delete(op.id); continue; } // created and deleted before ever saving; nothing to remove server-side
+          await api.deleteElement(realId);
+        }
+      }
+      pendingOpsRef.current = [];
+      if (tempIdMap.size) setElements((current) => current.map((element) => tempIdMap.has(element.id) ? { ...element, id: tempIdMap.get(element.id) } : element));
+      await reloadElements();
+      touch();
+      notify('Changes saved.');
+    } catch (error) {
+      failed = true;
+      notify(`Some changes failed to save: ${error.message}`);
+    } finally {
+      setSavingChanges(false);
+    }
+    return !failed;
+  };
+
+  const discardChanges = async () => {
+    pendingOpsRef.current = [];
+    await reloadElements();
+  };
+
+  const stopEditing = () => {
+    if (pendingOpsRef.current.length) {
+      setModal({ type: 'unsaved-changes' });
+    } else {
+      setEditMode(false);
+    }
+  };
 
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
 
@@ -503,7 +656,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
       } : current);
       window.clearTimeout(remoteTimer.current);
       remoteTimer.current = window.setTimeout(() => {
-        reloadElements().catch(() => setSyncStatus('offline'));
+        if (!editModeRef.current) reloadElements().catch(() => setSyncStatus('offline'));
         const activeElementId = selectedIdRef.current;
         if (activeElementId && (payload.elementId === activeElementId || payload.type === 'note' || payload.type === 'photo')) {
           api.notes(activeElementId).then((result) => setNotes(normalizeList(result))).catch(() => {});
@@ -533,7 +686,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
   const touch = () => setSurvey((current) => ({ ...current, updatedAt: new Date().toISOString(), lastEditor: user, lastEditedBy: user }));
 
   const createOne = async (values) => {
-    const created = normalizeElement(await api.createElement(surveyId, values));
+    const created = normalizeElement(await draftApi.createElement(surveyId, values));
     setElements((current) => [...current, created]);
     setSelectedId(created.id);
     touch();
@@ -555,7 +708,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
         const created = await Promise.all(componentsOf(activeTool).map((component) => {
           const symbol = component.symbol || itemFor(component.category, component.type)?.symbol;
           const placement = devicePlacementDefaults(component.type, symbol, component.doorFunction || doorFunction);
-          return api.createElement(surveyId, {
+          return draftApi.createElement(surveyId, {
             category: component.category || 'custom', type: component.type || 'custom', label: component.label || activeTool.name,
             x: Math.max(0, Math.min(1, point.x + Number(component.offsetX || component.offset_x || 0))), y: Math.max(0, Math.min(1, point.y + Number(component.offsetY || component.offset_y || 0))),
             width: 0.04, height: 0.04, rotation: 0, color: placement.color,
@@ -572,6 +725,31 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
     }
   };
 
+  const nestOnto = async (draggedId, targetId) => {
+    if (!canEdit) return;
+    const dragged = elements.find((element) => element.id === draggedId);
+    const target = elements.find((element) => element.id === targetId && element.category !== 'markup');
+    if (!dragged || !target) return;
+    const targetMetadata = metadataOf(target);
+    const components = Array.isArray(targetMetadata.components) ? targetMetadata.components : [];
+    const component = { category: dragged.category, type: dragged.type, label: dragged.label, symbol: elementSymbol(dragged), color: elementColor(dragged), ...(dragged.metadata?.doorFunction ? { doorFunction: dragged.metadata.doorFunction } : {}) };
+    if (components.some((item) => item.category === component.category && item.type === component.type)) {
+      notify(`${dragged.label} is already part of ${target.label}.`);
+      return;
+    }
+    try {
+      const metadata = { ...targetMetadata, components: [...components, component] };
+      const updated = await draftApi.updateElement(target.id, { metadata });
+      await draftApi.deleteElement(dragged.id);
+      setElements((current) => current
+        .filter((element) => element.id !== dragged.id)
+        .map((element) => element.id === target.id ? normalizeElement({ ...element, ...updated, metadata }) : element));
+      setSelectedId(target.id);
+      touch();
+      notify(`${dragged.label} merged into ${target.label}.`);
+    } catch (error) { notify(error.message); }
+  };
+
   const dropComponent = async (payload, point, targetId) => {
     if (!payload || !canEdit) return;
     if (targetId && payload.kind === 'device') {
@@ -583,7 +761,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
       if (components.some((item) => item.category === component.category && item.type === component.type)) { notify(`${payload.label} is already part of ${target.label}.`); return; }
       try {
         const metadata = { ...targetMetadata, components: [...components, component] };
-        const updated = await api.updateElement(target.id, { metadata });
+        const updated = await draftApi.updateElement(target.id, { metadata });
         setElements((current) => current.map((element) => element.id === target.id ? normalizeElement({ ...element, ...updated, metadata }) : element));
         setSelectedId(target.id);
         touch();
@@ -601,45 +779,13 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
         const assemblyId = crypto.randomUUID();
         const created = await Promise.all(componentsOf(payload).map((component) => {
           const placement = devicePlacementDefaults(component.type, component.symbol, component.doorFunction || doorFunction);
-          return api.createElement(surveyId, { category: component.category || 'custom', type: component.type || 'custom', label: component.label || payload.name, x: Math.max(0, Math.min(1, point.x + Number(component.offsetX || 0))), y: Math.max(0, Math.min(1, point.y + Number(component.offsetY || 0))), width: 0.04, height: 0.04, rotation: 0, color: placement.color, metadata: { ...placement.metadata, assemblyId, profileName: payload.name } });
+          return draftApi.createElement(surveyId, { category: component.category || 'custom', type: component.type || 'custom', label: component.label || payload.name, x: Math.max(0, Math.min(1, point.x + Number(component.offsetX || 0))), y: Math.max(0, Math.min(1, point.y + Number(component.offsetY || 0))), width: 0.04, height: 0.04, rotation: 0, color: placement.color, metadata: { ...placement.metadata, assemblyId, profileName: payload.name } });
         }));
         setElements((current) => [...current, ...created.map(normalizeElement)]);
         touch();
       }
     } catch (error) { notify(error.message); }
     finally { setActiveTool(previousTool.kind === 'markup' ? previousTool : { kind: 'markup', type: 'select', label: 'Select' }); }
-  };
-
-  const nestElement = async (sourceId, targetId) => {
-    if (!canEdit || sourceId === targetId) return;
-    const source = elements.find((element) => element.id === sourceId && element.category !== 'markup');
-    const target = elements.find((element) => element.id === targetId && element.category !== 'markup');
-    if (!source || !target) return;
-    const targetMetadata = metadataOf(target);
-    const components = Array.isArray(targetMetadata.components) ? targetMetadata.components : [];
-    const component = {
-      category: source.category,
-      type: source.type,
-      label: source.label,
-      symbol: elementSymbol(source),
-      color: source.color,
-      ...(source.metadata?.doorFunction ? { doorFunction: source.metadata.doorFunction } : {}),
-    };
-    if (components.some((item) => item.category === component.category && item.type === component.type)) {
-      notify(`${source.label} is already part of ${target.label}.`);
-      return;
-    }
-    try {
-      const metadata = { ...targetMetadata, components: [...components, component] };
-      const updated = await api.updateElement(target.id, { metadata });
-      await api.deleteElement(source.id);
-      setElements((current) => current
-        .filter((element) => element.id !== source.id)
-        .map((element) => element.id === target.id ? normalizeElement({ ...element, ...updated, metadata }) : element));
-      setSelectedId(target.id);
-      touch();
-      notify(`${source.label} nested into ${target.label}.`);
-    } catch (error) { notify(error.message); }
   };
 
   const draw = async ({ type, start, end }) => {
@@ -654,23 +800,40 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
 
   const move = (id, x, y, commit) => {
     setElements((current) => current.map((element) => element.id === id ? { ...element, x, y } : element));
-    if (commit) api.updateElement(id, { x, y }).then(touch).catch((error) => { notify(error.message); reloadElements(); });
+    if (commit) draftApi.updateElement(id, { x, y }).then(touch).catch((error) => { notify(error.message); reloadElements(); });
   };
+
+  const patchSequenceRef = useRef({});
+  const nextPatchSequence = (id) => {
+    const next = (patchSequenceRef.current[id] || 0) + 1;
+    patchSequenceRef.current[id] = next;
+    return next;
+  };
+  const isLatestPatch = (id, sequence) => patchSequenceRef.current[id] === sequence;
 
   const resizeElement = (id, values, commit) => {
     setElements((current) => current.map((element) => element.id === id ? normalizeElement({ ...element, ...values }) : element));
-    if (commit) api.updateElement(id, values).then((updated) => { setElements((current) => current.map((element) => element.id === id ? normalizeElement({ ...element, ...updated }) : element)); touch(); }).catch((error) => { notify(error.message); reloadElements(); });
+    if (commit) {
+      const sequence = nextPatchSequence(id);
+      draftApi.updateElement(id, values)
+        .then((updated) => { if (isLatestPatch(id, sequence)) { setElements((current) => current.map((element) => element.id === id ? normalizeElement({ ...element, ...updated }) : element)); touch(); } })
+        .catch((error) => { if (isLatestPatch(id, sequence)) { notify(error.message); reloadElements(); } });
+    }
   };
 
   const patchSelected = async (values) => {
     if (!selected) return;
+    const targetId = selected.id;
     const previous = selected;
-    setElements((current) => current.map((element) => element.id === selected.id ? normalizeElement({ ...element, ...values }) : element));
+    const sequence = nextPatchSequence(targetId);
+    setElements((current) => current.map((element) => element.id === targetId ? normalizeElement({ ...element, ...values }) : element));
     try {
-      const updated = await api.updateElement(selected.id, values);
-      setElements((current) => current.map((element) => element.id === selected.id ? normalizeElement({ ...element, ...updated }) : element));
+      const updated = await draftApi.updateElement(targetId, values);
+      if (!isLatestPatch(targetId, sequence)) return;
+      setElements((current) => current.map((element) => element.id === targetId ? normalizeElement({ ...element, ...updated }) : element));
       touch();
     } catch (error) {
+      if (!isLatestPatch(targetId, sequence)) return;
       setElements((current) => current.map((element) => element.id === previous.id ? previous : element));
       notify(error.message);
     }
@@ -679,9 +842,18 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
   const patchElement = async (id, values) => {
     const previous = elements.find((element) => element.id === id);
     if (!previous) return;
+    const sequence = nextPatchSequence(id);
     setElements((current) => current.map((element) => element.id === id ? normalizeElement({ ...element, ...values }) : element));
-    try { const updated = await api.updateElement(id, values); setElements((current) => current.map((element) => element.id === id ? normalizeElement({ ...element, ...updated }) : element)); touch(); }
-    catch (error) { setElements((current) => current.map((element) => element.id === id ? previous : element)); notify(error.message); }
+    try {
+      const updated = await draftApi.updateElement(id, values);
+      if (!isLatestPatch(id, sequence)) return;
+      setElements((current) => current.map((element) => element.id === id ? normalizeElement({ ...element, ...updated }) : element));
+      touch();
+    } catch (error) {
+      if (!isLatestPatch(id, sequence)) return;
+      setElements((current) => current.map((element) => element.id === id ? previous : element));
+      notify(error.message);
+    }
   };
 
   const previewElement = (id, values) => {
@@ -697,31 +869,45 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
     } catch (error) { notify(error.message); }
   };
 
+  useEffect(() => {
+    const handleBeforeUnload = (event) => {
+      if (pendingOpsRef.current.length) { event.preventDefault(); event.returnValue = ''; }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
   const clipboardRef = useRef(null);
 
-  const copySelected = () => {
-    if (!selected) return;
-    const { id, createdAt, created_at, updatedAt, updated_at, ...copy } = selected;
-    clipboardRef.current = copy;
-    notify(`Copied ${selected.label}. Press Ctrl/Cmd+V to paste.`);
-  };
-
-  const pasteClipboard = async () => {
-    if (!clipboardRef.current || !canEdit) return;
-    try {
-      const copy = clipboardRef.current;
-      const x = Math.min(1, Number(copy.x) + 0.025);
-      const y = Math.min(1, Number(copy.y) + 0.025);
-      await createOne({ ...copy, x, y });
-      clipboardRef.current = { ...copy, x, y };
-      notify(`Pasted ${copy.label}.`);
-    } catch (error) { notify(error.message); }
-  };
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (!canEdit) return;
+      const targetTag = event.target?.tagName;
+      if (targetTag === 'INPUT' || targetTag === 'TEXTAREA' || event.target?.isContentEditable) return;
+      if (!(event.metaKey || event.ctrlKey)) return;
+      const key = event.key.toLowerCase();
+      if (key === 'c') {
+        if (!selected) return;
+        clipboardRef.current = selected;
+        notify(`${selected.label} copied.`);
+      } else if (key === 'v') {
+        if (!clipboardRef.current) return;
+        event.preventDefault();
+        const source = clipboardRef.current;
+        const { id, createdAt, created_at, updatedAt, updated_at, ...copy } = source;
+        createOne({ ...copy, label: `${source.label} copy`, x: Math.min(1, Number(source.x) + 0.03), y: Math.min(1, Number(source.y) + 0.03) })
+          .then(() => notify(`${source.label} pasted.`))
+          .catch((error) => notify(error.message));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selected, canEdit, notify]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const deleteSelected = async () => {
     if (!selected) return;
     try {
-      await api.deleteElement(selected.id);
+      await draftApi.deleteElement(selected.id);
       setElements((current) => current.filter((element) => element.id !== selected.id));
       setSelectedId(null);
       setModal(null);
@@ -809,13 +995,17 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
   return (
     <main id="main-content" className="survey-editor">
       <header className="editor-header">
-        <button type="button" className="icon-button" onClick={() => navigate(siteId ? `sites/${siteId}` : 'sites')} aria-label="Back to site"><ArrowLeft aria-hidden="true" size={18} /></button>
+        <button type="button" className="icon-button" onClick={() => { if (pendingOpsRef.current.length && !window.confirm('You have unsaved changes. Leave without saving?')) return; navigate(siteId ? `sites/${siteId}` : 'sites'); }} aria-label="Back to site"><ArrowLeft aria-hidden="true" size={18} /></button>
         <div className="editor-title"><h1>{survey.name}</h1><span>Last edited by {lastEditor} · {formatWhen(survey.updatedAt || survey.updated_at)}</span></div>
         <div className="editor-header__spacer" />
         <Presence users={presence.length ? presence : [user]} status={syncStatus} />
         <div className="editor-actions">
+          {canEditPermission && !editMode && <button type="button" className="button button--primary" onClick={startEditing}><Pencil aria-hidden="true" size={16} /><span className="button-label">Edit</span></button>}
+          {canEditPermission && editMode && <button type="button" className="button button--primary" onClick={saveChanges} disabled={savingChanges || !hasPendingChanges} title={hasPendingChanges ? 'Save your changes' : 'No changes yet'}><Save aria-hidden="true" size={16} /><span className="button-label">{savingChanges ? 'Saving…' : 'Save Changes'}</span></button>}
+          {canEditPermission && editMode && <button type="button" className="button button--secondary" onClick={stopEditing}><X aria-hidden="true" size={16} /><span className="button-label">Stop Editing</span></button>}
           {canEdit && <button type="button" className="button button--ghost" onClick={rotate} title="Rotate survey clockwise"><RotateCw aria-hidden="true" size={16} /><span className="button-label">Rotate {orientation}°</span></button>}
           <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'schedule' })}><ListChecks aria-hidden="true" size={16} /><span className="button-label">Schedule</span></button>
+          <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'history' })}><History aria-hidden="true" size={16} /><span className="button-label">History</span></button>
           <button type="button" className="button button--secondary" onClick={toggleTheme} title="Toggle dark mode">{theme === 'dark' ? <Sun aria-hidden="true" size={16} /> : <Moon aria-hidden="true" size={16} />}<span className="button-label">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button>
           <button type="button" className="button button--secondary" onClick={exportPdf} disabled={pdfBusy} title="Export a PDF summary of plotted devices"><Download aria-hidden="true" size={16} /><span className="button-label">{pdfBusy ? 'Exporting…' : 'Export PDF'}</span></button>
         </div>
@@ -830,19 +1020,28 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
             <div className="page-controls"><button type="button" className="icon-button" aria-label="Previous PDF page" disabled={pageInfo.page <= 1} onClick={() => setPageInfo((current) => ({ ...current, page: current.page - 1 }))}><ChevronLeft aria-hidden="true" size={18} /></button><span>Page {pageInfo.page} of {pageInfo.pages}</span><button type="button" className="icon-button" aria-label="Next PDF page" disabled={pageInfo.page >= pageInfo.pages} onClick={() => setPageInfo((current) => ({ ...current, page: current.page + 1 }))}><ChevronRight aria-hidden="true" size={18} /></button></div>
             <div className="zoom-controls"><button type="button" className="icon-button" aria-label="Zoom out" onClick={() => setZoom((value) => Math.max(MIN_PLAN_ZOOM, Number((value - 0.1).toFixed(2))))}><Minus aria-hidden="true" size={16} /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button type="button" className="icon-button" aria-label="Zoom in" onClick={() => setZoom((value) => Math.min(MAX_PLAN_ZOOM, Number((value + 0.1).toFixed(2))))}><Plus aria-hidden="true" size={16} /></button><button type="button" className="button button--ghost fit-button" onClick={() => setZoom(FIT_PLAN_ZOOM)}>Fit</button></div>
           </div>
-          <PdfPlan survey={survey} orientation={orientation} pageNumber={pageInfo.page} onPageInfo={setPageInfo} zoom={zoom} onZoom={setZoom} elements={elements} visibleLayers={visibleLayers} selectedId={selectedId} activeTool={activeTool} canEdit={canEdit} onPlace={place} onDropComponent={dropComponent} onNestElement={nestElement} onDraw={draw} onPreviewElement={previewElement} onPatchElement={patchElement} onResizeElement={resizeElement} onSelect={setSelectedId} onMove={move} onDeleteSelected={() => selected && setModal({ type: 'delete-element' })} onCopySelected={copySelected} onPaste={pasteClipboard} notify={notify} stageRef={planStageRef} scalePaperInches={scaleDraft.scalePaperInches} scaleRealFeet={scaleDraft.scaleRealFeet} />
+          <PdfPlan survey={survey} orientation={orientation} pageNumber={pageInfo.page} onPageInfo={setPageInfo} zoom={zoom} onZoom={setZoom} elements={elements} visibleLayers={visibleLayers} selectedId={selectedId} activeTool={activeTool} canEdit={canEdit} onPlace={place} onDropComponent={dropComponent} onNestOnto={nestOnto} onDraw={draw} onPreviewElement={previewElement} onPatchElement={patchElement} onResizeElement={resizeElement} onSelect={setSelectedId} onMove={move} onDeleteSelected={() => selected && setModal({ type: 'delete-element' })} notify={notify} stageRef={planStageRef} scalePaperInches={scaleDraft.scalePaperInches} scaleRealFeet={scaleDraft.scaleRealFeet} />
           <div className="mobile-canvas-hint" aria-hidden="true">1 finger moves · 2 fingers zoom</div>
         </section>
 
-        <div className={`mobile-editor-drawer mobile-editor-drawer--right ${mobilePanel === 'inspector' ? 'open' : ''}`}><InspectorPanel element={selected} notes={notes} notesLoading={notesLoading} canEdit={canEdit} canAnnotate={canAnnotate} onPatch={patchSelected} onDuplicate={duplicateSelected} onDelete={() => setModal({ type: 'delete-element' })} onAddNote={addNote} onAddPhoto={addPhoto} photoBusy={photoBusy} onClose={() => setMobilePanel(null)} onCollapse={() => setInspectorCollapsed(true)} /></div>
+        <div className={`mobile-editor-drawer mobile-editor-drawer--right ${mobilePanel === 'inspector' ? 'open' : ''}`}><InspectorPanel element={selected} notes={notes} notesLoading={notesLoading} canEdit={canEdit} canAnnotate={canAnnotate} onPatch={patchSelected} onPreview={previewElement} onDuplicate={duplicateSelected} onDelete={() => setModal({ type: 'delete-element' })} onAddNote={addNote} onAddPhoto={addPhoto} photoBusy={photoBusy} onClose={() => setMobilePanel(null)} onCollapse={() => setInspectorCollapsed(true)} /></div>
         {inspectorCollapsed && <button type="button" className="inspector-reopen-tab desktop-only" onClick={() => setInspectorCollapsed(false)} aria-label="Show properties panel" title="Show properties panel"><ChevronsLeft aria-hidden="true" size={16} /></button>}
       </div>
 
       <nav className="editor-mobile-nav" aria-label="Survey editor panels"><button type="button" className={mobilePanel === 'library' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'library' ? null : 'library')}>{canEdit ? <Plus aria-hidden="true" size={18} /> : <Layers aria-hidden="true" size={18} />}{canEdit ? 'Add' : 'Layers'}</button><button type="button" className={activeTool.type === 'select' && !mobilePanel ? 'active' : ''} onClick={() => { setActiveTool({ kind: 'markup', type: 'select', label: 'Select' }); setMobilePanel(null); }}><Move aria-hidden="true" size={18} />Move</button><button type="button" className={mobilePanel === 'inspector' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'inspector' ? null : 'inspector')} disabled={!selected}><ListChecks aria-hidden="true" size={18} />{selected ? 'Details' : 'Select item'}</button></nav>
 
       <Modal open={modal?.type === 'schedule'} title="Device schedule" description={`${elements.filter((element) => element.category !== 'markup').length} plotted security components`} onClose={() => setModal(null)} wide><Schedule elements={elements} onSelect={setSelectedId} onClose={() => setModal(null)} /></Modal>
+      <Modal open={modal?.type === 'history'} title="Survey history" description="Who plotted, edited, or removed items, and when." onClose={() => setModal(null)} wide>{modal?.type === 'history' && <HistoryPanel surveyId={surveyId} notify={notify} />}</Modal>
       <ProfileBuilder open={modal?.type === 'profile'} onClose={() => setModal(null)} onCreate={createProfile} />
       <ConfirmDialog open={modal?.type === 'delete-element'} title="Delete this element?" onClose={() => setModal(null)} onConfirm={deleteSelected}><p><strong>{selected?.label}</strong> and its notes and cloud photos will be permanently deleted.</p></ConfirmDialog>
+      <Modal open={modal?.type === 'unsaved-changes'} title="You have unsaved changes" onClose={() => setModal(null)}>
+        <p>Save your changes before you stop editing, or discard them to leave without saving.</p>
+        <div className="modal__actions">
+          <button type="button" className="button button--secondary" onClick={() => setModal(null)}>Cancel</button>
+          <button type="button" className="button button--ghost" onClick={async () => { await discardChanges(); setModal(null); setEditMode(false); }}>Discard changes</button>
+          <button type="button" className="button button--primary" onClick={async () => { const ok = await saveChanges(); setModal(null); if (ok) setEditMode(false); }}>Save & stop editing</button>
+        </div>
+      </Modal>
     </main>
   );
 }

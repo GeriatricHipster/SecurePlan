@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api, normalizeList } from '../api.js';
 import { ConfirmDialog, EmptyState, Field, Menu, MenuButton, Modal, Spinner, formatWhen, initials, roleCanManage } from './Common.jsx';
-import { LayoutGrid, Plus, Search } from 'lucide-react';
+import { LayoutGrid, Plus, Search, Upload } from 'lucide-react';
 
 function SiteCard({ site, index, total, canManage, canDelete, onOpen, onEdit, onCopy, onDelete, onMove }) {
   const count = site.surveyCount ?? site.survey_count ?? site.surveys?.length ?? 0;
@@ -55,6 +55,9 @@ export default function SitesDashboard({ user, navigate, notify }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [bulkText, setBulkText] = useState('');
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0, failed: [] });
   const canManage = roleCanManage(user.role);
   const canDelete = ['owner', 'admin'].includes(user.role);
 
@@ -77,6 +80,49 @@ export default function SitesDashboard({ user, navigate, notify }) {
     setForm({ name: '', address: '', description: '' });
     setError('');
     setModal({ type: 'create' });
+  };
+
+  const parseBulkLines = (text) => {
+    const rows = [];
+    for (const rawLine of text.split('\n')) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      const match = line.match(/^(\d+)\s+(.*)$/);
+      if (match) rows.push({ number: Number(match[1]), name: `${match[1]} ${match[2].replace(/\s+/g, ' ').trim()}` });
+      else rows.push({ number: null, name: line });
+    }
+    return rows.sort((a, b) => {
+      if (a.number == null && b.number == null) return 0;
+      if (a.number == null) return 1;
+      if (b.number == null) return -1;
+      return a.number - b.number;
+    });
+  };
+
+  const openBulkImport = () => {
+    setBulkText('');
+    setBulkProgress({ done: 0, total: 0, failed: [] });
+    setModal({ type: 'bulk-import' });
+  };
+
+  const runBulkImport = async () => {
+    const rows = parseBulkLines(bulkText);
+    if (!rows.length) return;
+    setBulkBusy(true);
+    setBulkProgress({ done: 0, total: rows.length, failed: [] });
+    const failed = [];
+    for (const row of rows) {
+      try {
+        const created = await api.createSite({ name: row.name, address: '', description: '' });
+        setSites((current) => [...current, created]);
+      } catch (error) {
+        failed.push(row.name);
+      }
+      setBulkProgress((current) => ({ ...current, done: current.done + 1, failed }));
+    }
+    setBulkBusy(false);
+    if (failed.length) notify(`Imported ${rows.length - failed.length} of ${rows.length} sites. ${failed.length} failed.`);
+    else notify(`Imported ${rows.length} sites.`);
   };
 
   const openEdit = (site) => {
@@ -148,6 +194,7 @@ export default function SitesDashboard({ user, navigate, notify }) {
           <h1>Sites</h1>
           <p>Organize buildings, plans, surveys, and field documentation.</p>
         </div>
+        {canManage && <button type="button" className="button button--secondary" onClick={openBulkImport}><Upload aria-hidden="true" size={16} /> Bulk import</button>}
         {canManage && <button type="button" className="button button--primary" onClick={openCreate}><Plus aria-hidden="true" size={16} /> New site</button>}
       </div>
 
@@ -192,6 +239,22 @@ export default function SitesDashboard({ user, navigate, notify }) {
           <Field label={`Type “${modal?.site?.name || ''}” to confirm`}><input autoFocus value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" /></Field>
           <div className="modal__actions"><button type="button" className="button button--ghost" onClick={() => setModal(null)} disabled={busy}>Cancel</button><button className="button button--danger" disabled={busy || deleteConfirmation !== modal?.site?.name}>{busy ? 'Deleting…' : 'Delete site'}</button></div>
         </form>
+      </Modal>
+      <Modal open={modal?.type === 'bulk-import'} title="Bulk import sites" description="Paste one site per line, e.g. '0001 Park'. Sites are created in numeric order, smallest to largest." onClose={() => !bulkBusy && setModal(null)} wide>
+        <div className="stack-form">
+          <Field label="Site list"><textarea rows="12" value={bulkText} disabled={bulkBusy} onChange={(event) => setBulkText(event.target.value)} placeholder={'0001 Park\n0002 Voice Box\n0003 Gardner Hall'} /></Field>
+          {(() => { const rows = parseBulkLines(bulkText); return rows.length > 0 && <p className="muted">{rows.length} site{rows.length === 1 ? '' : 's'} ready to import.</p>; })()}
+          {bulkProgress.total > 0 && (
+            <p className="muted">
+              {bulkBusy ? `Importing… ${bulkProgress.done} of ${bulkProgress.total}` : `Done — ${bulkProgress.total - bulkProgress.failed.length} of ${bulkProgress.total} imported.`}
+              {bulkProgress.failed.length > 0 && ` Failed: ${bulkProgress.failed.join(', ')}`}
+            </p>
+          )}
+          <div className="modal__actions">
+            <button type="button" className="button button--ghost" onClick={() => setModal(null)} disabled={bulkBusy}>{bulkProgress.done > 0 && !bulkBusy ? 'Close' : 'Cancel'}</button>
+            <button type="button" className="button button--primary" onClick={runBulkImport} disabled={bulkBusy || !parseBulkLines(bulkText).length}>{bulkBusy ? 'Importing…' : 'Import sites'}</button>
+          </div>
+        </div>
       </Modal>
     </main>
   );
