@@ -413,7 +413,7 @@ export const api = {
   },
   updateSurvey: (id, values) => request(`/api/surveys/${id}`, json('PATCH', values)),
   deleteSurvey: (id) => request(`/api/surveys/${id}`, json('DELETE')),
-  copySurvey: (id) => request(`/api/surveys/${id}/copy`, json('POST')),
+  copySurvey: (id, values) => request(`/api/surveys/${id}/copy`, json('POST', values)),
   moveSurvey: (id, values) => request(`/api/surveys/${id}/move`, json('POST', values)),
   rotateSurvey: (id, orientation) => request(`/api/surveys/${id}/rotate`, json('POST', { rotation: orientation })),
   surveyFileUrl: (id) => apiUrl(`/api/surveys/${id}/file`),

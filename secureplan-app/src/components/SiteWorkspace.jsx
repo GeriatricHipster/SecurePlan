@@ -111,6 +111,8 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({ name: '', description: '', files: [], items: [], destinationId: '' });
+  const [destinationSites, setDestinationSites] = useState([]);
+  const [destinationFolders, setDestinationFolders] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [mobileFoldersOpen, setMobileFoldersOpen] = useState(false);
@@ -147,8 +149,24 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
     if (type === 'folder-move') setForm({ name: data.folder.name, destinationId: folderParent(data.folder) || '' });
     if (type === 'survey-create') setForm({ name: '', description: '', files: [], items: [], destinationId: data.folderId ?? activeFolderId ?? '' });
     if (type === 'survey-edit') setForm({ name: data.survey.name, description: data.survey.description || '' });
-    if (type === 'survey-move') setForm({ name: data.survey.name, destinationId: surveyFolder(data.survey) || '' });
+    if (type === 'survey-move') {
+      setForm({ name: data.survey.name, destinationSiteId: siteId, destinationId: surveyFolder(data.survey) || '' });
+      setDestinationFolders(folders);
+      api.sites().then((result) => setDestinationSites(normalizeList(result))).catch(() => {});
+    }
+    if (type === 'survey-copy') {
+      setForm({ name: `${data.survey.name} copy`, destinationSiteId: siteId, destinationId: surveyFolder(data.survey) || '' });
+      setDestinationFolders(folders);
+      api.sites().then((result) => setDestinationSites(normalizeList(result))).catch(() => {});
+    }
     setModal({ type, ...data });
+  };
+
+  const changeDestinationSite = async (newSiteId) => {
+    setForm((current) => ({ ...current, destinationSiteId: newSiteId, destinationId: '' }));
+    if (newSiteId === siteId) { setDestinationFolders(folders); return; }
+    try { setDestinationFolders(normalizeList(await api.folders(newSiteId))); }
+    catch { setDestinationFolders([]); }
   };
 
   const save = async (event) => {
@@ -194,9 +212,21 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
         notify('Survey details updated.');
       }
       if (modal.type === 'survey-move') {
-        const updated = await api.moveSurvey(modal.survey.id, { folderId: form.destinationId || null });
-        setSurveys((current) => current.map((survey) => survey.id === modal.survey.id ? { ...survey, ...updated, folderId: form.destinationId || null, folder_id: form.destinationId || null } : survey));
-        notify('Survey moved.');
+        const targetSiteId = form.destinationSiteId || siteId;
+        const updated = await api.moveSurvey(modal.survey.id, { siteId: targetSiteId, folderId: form.destinationId || null });
+        if (targetSiteId !== siteId) {
+          setSurveys((current) => current.filter((survey) => survey.id !== modal.survey.id));
+          notify('Survey moved to another site.');
+        } else {
+          setSurveys((current) => current.map((survey) => survey.id === modal.survey.id ? { ...survey, ...updated, folderId: form.destinationId || null, folder_id: form.destinationId || null } : survey));
+          notify('Survey moved.');
+        }
+      }
+      if (modal.type === 'survey-copy') {
+        const targetSiteId = form.destinationSiteId || siteId;
+        const copied = await api.copySurvey(modal.survey.id, { siteId: targetSiteId, folderId: form.destinationId || null, name: form.name });
+        if (targetSiteId === siteId) setSurveys((current) => [...current, copied]);
+        notify(targetSiteId === siteId ? 'Survey copied.' : 'Survey copied to another site.');
       }
       setModal(null);
     } catch (saveError) { setError(saveError.message); }
@@ -209,14 +239,6 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
       await api.copyFolder(folder.id);
       await load();
       notify('Folder and its contents copied.');
-    } catch (copyError) { notify(copyError.message); }
-  };
-
-  const copySurvey = async (survey) => {
-    try {
-      const copied = await api.copySurvey(survey.id);
-      setSurveys((current) => [...current, copied]);
-      notify('Survey copied.');
     } catch (copyError) { notify(copyError.message); }
   };
 
@@ -243,10 +265,7 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
     else startAction(type, data);
   };
 
-  const surveyAction = (type, data) => {
-    if (type === 'survey-copy') copySurvey(data.survey);
-    else startAction(type, data);
-  };
+  const surveyAction = (type, data) => startAction(type, data);
 
   const selectFolder = (id) => {
     setSelectedFolderId(id);
@@ -315,8 +334,8 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
       </div>
 
       <Modal
-        open={['folder-create', 'folder-edit', 'folder-move', 'survey-create', 'survey-review', 'survey-edit', 'survey-move'].includes(modal?.type)}
-        title={{ 'folder-create': 'Create folder', 'folder-edit': 'Rename folder', 'folder-move': 'Move folder', 'survey-create': 'Create surveys', 'survey-review': 'Review selected floor plans', 'survey-edit': 'Edit survey details', 'survey-move': 'Move survey' }[modal?.type] || ''}
+        open={['folder-create', 'folder-edit', 'folder-move', 'survey-create', 'survey-review', 'survey-edit', 'survey-move', 'survey-copy'].includes(modal?.type)}
+        title={{ 'folder-create': 'Create folder', 'folder-edit': 'Rename folder', 'folder-move': 'Move folder', 'survey-create': 'Create surveys', 'survey-review': 'Review selected floor plans', 'survey-edit': 'Edit survey details', 'survey-move': 'Move survey', 'survey-copy': 'Copy survey' }[modal?.type] || ''}
         description={modal?.type === 'survey-review' ? 'Each PDF will become an independent survey with its own plotted elements and markup.' : undefined}
         onClose={() => setModal(null)}
         wide={modal?.type === 'survey-review'}
@@ -394,7 +413,10 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
               ))}
             </div></>
           )}
-          {['folder-move', 'survey-move'].includes(modal?.type) && (
+          {modal?.type === 'survey-copy' && (
+            <Field label="New survey name"><input required autoFocus value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+          )}
+          {['folder-move'].includes(modal?.type) && (
             <Field label="Destination folder">
               <select value={form.destinationId || ''} onChange={(e) => setForm({ ...form, destinationId: e.target.value })}>
                 <option value="">Site root</option>
@@ -402,9 +424,24 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
               </select>
             </Field>
           )}
+          {['survey-move', 'survey-copy'].includes(modal?.type) && (
+            <>
+              <Field label="Destination site">
+                <select value={form.destinationSiteId || siteId} onChange={(e) => changeDestinationSite(e.target.value)}>
+                  {destinationSites.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Destination folder">
+                <select value={form.destinationId || ''} onChange={(e) => setForm({ ...form, destinationId: e.target.value })}>
+                  <option value="">Site root</option>
+                  {destinationFolders.map((folder) => <option key={folder.id} value={folder.id}>{'— '.repeat(Math.max(0, pathToFolder(folder.id, destinationFolders).length - 1))}{folder.name}</option>)}
+                </select>
+              </Field>
+            </>
+          )}
           <div className="modal__actions">
             <button type="button" className="button button--ghost" onClick={() => setModal(null)}>Cancel</button>
-            <button className="button button--primary" disabled={busy}>{busy ? 'Saving…' : modal?.type === 'survey-review' ? `Create ${form.items.length} surveys` : modal?.type?.includes('move') ? 'Move' : 'Save'}</button>
+            <button className="button button--primary" disabled={busy}>{busy ? 'Saving…' : modal?.type === 'survey-review' ? `Create ${form.items.length} surveys` : modal?.type === 'survey-copy' ? 'Copy' : modal?.type?.includes('move') ? 'Move' : 'Save'}</button>
           </div>
         </form>
       </Modal>
