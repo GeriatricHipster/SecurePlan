@@ -2784,44 +2784,15 @@ h3 {
   left: 50%;
   min-width: max-content;
   max-width: 150px;
-  padding: 2px 5px;
-  border-radius: 3px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow-sm);
-  color: var(--ink);
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: rgb(16 24 32 / 92%);
+  color: white;
   font-size: 10px;
   font-weight: 750;
   line-height: 1.2;
   transform: translateX(-50%);
   white-space: nowrap;
-  cursor: text;
-}
-
-.plan-element__label--empty {
-  color: var(--muted);
-  font-weight: 600;
-  font-style: italic;
-}
-
-.plan-element__label-input {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 50%;
-  transform: translateX(-50%);
-  min-width: 70px;
-  max-width: 180px;
-  padding: 2px 5px;
-  border-radius: 3px;
-  border: 1px solid var(--focus);
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 10px;
-  font-weight: 750;
-  line-height: 1.2;
-  font-family: inherit;
-  text-align: center;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 20%, transparent);
 }
 
 .plan-element__components {
@@ -2866,6 +2837,13 @@ h3 {
   box-shadow: 0 0 0 4px rgb(255 255 255 / 92%), 0 0 0 7px #202b32, 0 4px 10px rgb(0 0 0 / 28%);
 }
 
+.plan-element.nest-target {
+  z-index: 25;
+  box-shadow: 0 0 0 5px var(--green-soft), 0 0 0 8px var(--green);
+  transform: translate(-50%, -50%) scale(1.15) !important;
+  transition: transform .12s ease-out, box-shadow .12s ease-out;
+}
+
 .plan-element small {
   display: grid;
   position: absolute;
@@ -2895,6 +2873,64 @@ h3 {
   stroke-width: .45;
   stroke-opacity: .78;
   vector-effect: non-scaling-stroke;
+}
+
+.camera-fov__cone {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.camera-fov__cone:hover {
+  fill-opacity: .32;
+}
+
+.camera-fov__cone.selected {
+  fill-opacity: .38;
+}
+
+.fov-handles {
+  position: absolute;
+  z-index: 21;
+  inset: 0;
+  pointer-events: none;
+}
+
+.fov-handle {
+  position: absolute;
+  z-index: 21;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 2px solid var(--red);
+  border-radius: 4px;
+  background: white;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 30%);
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+  cursor: grab;
+}
+
+.fov-handle:active {
+  cursor: grabbing;
+}
+
+.fov-handle--spread {
+  border-radius: 999px;
+  background: var(--red);
+}
+
+.fov-handle--tip {
+  width: 22px;
+  height: 22px;
+  border-color: var(--blue);
+}
+
+.fov-handle--tip::before {
+  position: absolute;
+  inset: 4px;
+  border-radius: 999px;
+  background: var(--blue);
+  content: '';
 }
 
 .markup-line,

@@ -215,24 +215,54 @@ function DeviceElement({ element, orientation, selected, isNestTarget, onPointer
   );
 }
 
-function CameraFieldOfView({ element, orientation }) {
+function CameraFieldOfView({ element, orientation, selectedFov, onSelectFov, onFovHandleDown, canEdit }) {
   if (!isCameraType(element.type)) return null;
-  const metadata = element.metadata || {};
   const origin = toDisplay({ x: Number(element.x), y: Number(element.y) }, orientation);
   const fovs = cameraFieldsFor(element);
   return (
-    <svg className="camera-fov" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-      {fovs.map((fov, index) => {
+    <>
+      <svg className="camera-fov" viewBox="0 0 100 100" preserveAspectRatio="none">
+        {fovs.map((fov, index) => {
+          const length = Math.max(0.03, Math.min(0.75, Number(fov.length ?? 0.22)));
+          const spread = Math.max(5, Math.min(180, Number(fov.spread ?? 60)));
+          const direction = (Number(fov.rotation || 0) + Number(orientation || 0) - 90) * Math.PI / 180;
+          const halfSpread = spread * Math.PI / 360;
+          const left = { x: origin.x + Math.cos(direction - halfSpread) * length, y: origin.y + Math.sin(direction - halfSpread) * length };
+          const right = { x: origin.x + Math.cos(direction + halfSpread) * length, y: origin.y + Math.sin(direction + halfSpread) * length };
+          const color = /^#[0-9a-f]{6}$/i.test(fov.color || '') ? fov.color : elementColor(element);
+          const isSelected = selectedFov?.elementId === element.id && selectedFov?.fovIndex === index;
+          return (
+            <polygon
+              key={fov.id || index}
+              points={`${origin.x * 100},${origin.y * 100} ${left.x * 100},${left.y * 100} ${right.x * 100},${right.y * 100}`}
+              fill={color}
+              stroke={isSelected ? 'white' : color}
+              strokeWidth={isSelected ? 0.6 : 0}
+              className={`camera-fov__cone ${isSelected ? 'selected' : ''}`}
+              onPointerDown={(event) => { if (!canEdit) return; event.stopPropagation(); onSelectFov(element.id, index); }}
+            />
+          );
+        })}
+      </svg>
+      {selectedFov?.elementId === element.id && fovs[selectedFov.fovIndex] && canEdit && (() => {
+        const index = selectedFov.fovIndex;
+        const fov = fovs[index];
         const length = Math.max(0.03, Math.min(0.75, Number(fov.length ?? 0.22)));
         const spread = Math.max(5, Math.min(180, Number(fov.spread ?? 60)));
         const direction = (Number(fov.rotation || 0) + Number(orientation || 0) - 90) * Math.PI / 180;
         const halfSpread = spread * Math.PI / 360;
         const left = { x: origin.x + Math.cos(direction - halfSpread) * length, y: origin.y + Math.sin(direction - halfSpread) * length };
         const right = { x: origin.x + Math.cos(direction + halfSpread) * length, y: origin.y + Math.sin(direction + halfSpread) * length };
-        const color = /^#[0-9a-f]{6}$/i.test(fov.color || '') ? fov.color : elementColor(element);
-        return <polygon key={fov.id || index} points={`${origin.x * 100},${origin.y * 100} ${left.x * 100},${left.y * 100} ${right.x * 100},${right.y * 100}`} fill={color} stroke={color} />;
-      })}
-    </svg>
+        const tip = { x: origin.x + Math.cos(direction) * length, y: origin.y + Math.sin(direction) * length };
+        return (
+          <div className="fov-handles" aria-label={`Adjust ${element.label} field of view`}>
+            <button type="button" className="fov-handle fov-handle--spread fov-handle--left" style={{ left: `${left.x * 100}%`, top: `${left.y * 100}%` }} onPointerDown={(event) => onFovHandleDown(event, element, index, 'left')} aria-label="Adjust field of view spread" />
+            <button type="button" className="fov-handle fov-handle--spread fov-handle--right" style={{ left: `${right.x * 100}%`, top: `${right.y * 100}%` }} onPointerDown={(event) => onFovHandleDown(event, element, index, 'right')} aria-label="Adjust field of view spread" />
+            <button type="button" className="fov-handle fov-handle--tip" style={{ left: `${tip.x * 100}%`, top: `${tip.y * 100}%` }} onPointerDown={(event) => onFovHandleDown(event, element, index, 'tip')} aria-label="Adjust field of view direction and length" />
+          </div>
+        );
+      })()}
+    </>
   );
 }
 
@@ -300,6 +330,8 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
   const drawRef = useRef(null);
   const scrollRef = useRef(null);
   const resizeRef = useRef(null);
+  const fovDragRef = useRef(null);
+  const [selectedFov, setSelectedFov] = useState(null);
   const draftFrameRef = useRef(null);
   const draftPointRef = useRef(null);
   const lastTapRef = useRef({ id: null, at: 0, x: 0, y: 0 });
@@ -657,7 +689,7 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
     if (activeTool.type === 'select' && event.button === 0) {
       const scroll = scrollRef.current;
       const selectionCleared = event.pointerType !== 'touch';
-      if (selectionCleared) { onSelect(null); setEditingId(null); }
+      if (selectionCleared) { onSelect(null); setEditingId(null); setSelectedFov(null); }
       panRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, scrollLeft: scroll.scrollLeft, scrollTop: scroll.scrollTop, selectionCleared };
       event.currentTarget.setPointerCapture(event.pointerId);
       setPanning(true);
@@ -748,11 +780,44 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
     }
     setEditingId(null);
     onSelect(element.id);
+    setSelectedFov((current) => current?.elementId === element.id ? current : null);
     if (!canEdit || activeTool.type !== 'select') return;
     const point = fromDisplay(surfacePoint(event), orientation);
     dragRef.current = { id: element.id, pointerId: event.pointerId, dx: point.x - Number(element.x), dy: point.y - Number(element.y), originX: Number(element.x), originY: Number(element.y), startClientX: event.clientX, startClientY: event.clientY, moved: false };
     surfaceRef.current.setPointerCapture(event.pointerId);
   };
+
+  const startFovDrag = (event, element, fovIndex, handle) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (pinchRef.current || consumedTouchRef.current.has(event.pointerId)) return;
+    onSelect(element.id);
+    setSelectedFov({ elementId: element.id, fovIndex });
+    const fovs = cameraFieldsFor(element);
+    const fov = fovs[fovIndex];
+    if (!fov) return;
+    const direction = (Number(fov.rotation || 0) + Number(orientation || 0) - 90) * Math.PI / 180;
+    fovDragRef.current = { elementId: element.id, fovIndex, handle, pointerId: event.pointerId, direction, isMultisensor: element.type === 'multisensor_camera' };
+    surfaceRef.current.setPointerCapture(event.pointerId);
+  };
+
+  const commitFov = (elementId, fovIndex, patch, isMultisensor, live) => {
+    const element = elements.find((item) => item.id === elementId);
+    if (!element) return;
+    const metadata = element.metadata || {};
+    const apply = live ? onPreviewElement : onPatchElement;
+    if (isMultisensor) {
+      const fovs = cameraFieldsFor(element);
+      const nextFovs = fovs.map((item, index) => index === fovIndex ? { ...item, ...patch } : item);
+      apply(elementId, { metadata: { ...metadata, fovs: nextFovs } });
+    } else {
+      const fieldMap = { rotation: 'fovRotation', spread: 'fovSpread', length: 'fovLength' };
+      const metaPatch = {};
+      for (const [key, value] of Object.entries(patch)) metaPatch[fieldMap[key]] = value;
+      apply(elementId, { metadata: { ...metadata, ...metaPatch } });
+    }
+  };
+
 
   const startResize = (event, element, handle) => {
     event.preventDefault();
@@ -864,6 +929,30 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
         onResizeElement(element.id, values, false);
       }
     }
+    if (fovDragRef.current?.pointerId === event.pointerId) {
+      const { elementId, fovIndex, handle, direction, isMultisensor } = fovDragRef.current;
+      const element = elements.find((item) => item.id === elementId);
+      if (element) {
+        const origin = toDisplay({ x: Number(element.x), y: Number(element.y) }, orientation);
+        const point = surfacePoint(event);
+        const dx = point.x - origin.x;
+        const dy = point.y - origin.y;
+        if (handle === 'tip') {
+          const length = Math.max(0.05, Math.min(0.75, Math.hypot(dx, dy)));
+          const angle = Math.atan2(dy, dx);
+          let rotation = (angle * 180 / Math.PI) - Number(orientation || 0) + 90;
+          rotation = ((rotation % 360) + 360) % 360;
+          commitFov(elementId, fovIndex, { rotation: Math.round(rotation), length: Number(length.toFixed(3)) }, isMultisensor, true);
+        } else {
+          const angleToHandle = Math.atan2(dy, dx);
+          let delta = angleToHandle - direction;
+          while (delta > Math.PI) delta -= 2 * Math.PI;
+          while (delta < -Math.PI) delta += 2 * Math.PI;
+          const spread = Math.max(5, Math.min(180, Math.abs(delta) * 2 * 180 / Math.PI));
+          commitFov(elementId, fovIndex, { spread: Math.round(spread) }, isMultisensor, true);
+        }
+      }
+    }
   };
 
   const pointerUp = (event) => {
@@ -930,6 +1019,15 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
       else if (values) onResizeElement(id, values, true);
       resizeRef.current = null;
     }
+    if (fovDragRef.current?.pointerId === event.pointerId) {
+      const { elementId, fovIndex, isMultisensor } = fovDragRef.current;
+      const element = elements.find((item) => item.id === elementId);
+      fovDragRef.current = null;
+      if (element && !cancelled) {
+        const fov = cameraFieldsFor(element)[fovIndex];
+        if (fov) commitFov(elementId, fovIndex, { rotation: Number(fov.rotation || 0), spread: Number(fov.spread || 60), length: Number(fov.length || 0.22) }, isMultisensor, false);
+      }
+    }
   };
 
   const keyDown = (event) => {
@@ -985,7 +1083,7 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
             {elements.filter((element) => visibleLayers.has(element.category)).map((element) => element.category === 'markup'
               ? <MarkupElement key={element.id} element={element} orientation={orientation} selected={selectedId === element.id} onPointerDown={pointerDownElement} onSelect={onSelect} onEdit={setEditingId} editingId={editingId} onPreview={onPreviewElement} onCommit={onPatchElement} dimensions={dimensions} pointsPerPixel={pointsPerPixel} scalePaperInches={scalePaperInches} scaleRealFeet={scaleRealFeet} />
               : <React.Fragment key={element.id}>
-                  <CameraFieldOfView element={element} orientation={orientation} />
+                  <CameraFieldOfView element={element} orientation={orientation} selectedFov={selectedFov} onSelectFov={(elementId, fovIndex) => { onSelect(elementId); setSelectedFov({ elementId, fovIndex }); }} onFovHandleDown={startFovDrag} canEdit={canEdit} />
                   <DeviceElement element={element} orientation={orientation} selected={selectedId === element.id} isNestTarget={nestTargetId === element.id} onPointerDown={pointerDownElement} onSelect={onSelect} />
                 </React.Fragment>)}
             {draftBounds && !['line', 'arrow', 'measure'].includes(draftShape.type) && <span className={`draft-shape draft-shape--${draftShape.type}`} style={{ left: `${draftBounds.left}%`, top: `${draftBounds.top}%`, width: `${draftBounds.width}%`, height: `${draftBounds.height}%` }} />}
