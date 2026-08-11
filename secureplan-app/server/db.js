@@ -168,6 +168,21 @@ export function createDatabase(config) {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS security_events (
+      id TEXT PRIMARY KEY,
+      event_type TEXT NOT NULL,
+      severity TEXT NOT NULL DEFAULT 'info',
+      user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      email_attempted TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      details_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_security_events_created ON security_events(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_security_events_type ON security_events(event_type, created_at DESC);
+
     CREATE TABLE IF NOT EXISTS survey_assignments (
       survey_id TEXT NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -344,6 +359,31 @@ export async function logActivity(db, { siteId = null, surveyId = null, elementI
     JSON.stringify(details),
     new Date().toISOString(),
   );
+}
+
+export async function logSecurityEvent(db, { eventType, severity = 'info', userId = null, emailAttempted = null, req = null, details = {} }) {
+  try {
+    const ipAddress = req ? (req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket?.remoteAddress || null) : null;
+    const userAgent = req ? (req.headers['user-agent'] || null) : null;
+    await db.prepare(
+      `INSERT INTO security_events
+        (id, event_type, severity, user_id, email_attempted, ip_address, user_agent, details_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      crypto.randomUUID(),
+      eventType,
+      severity,
+      userId,
+      emailAttempted,
+      ipAddress,
+      userAgent,
+      JSON.stringify(details),
+      new Date().toISOString(),
+    );
+  } catch (error) {
+    // Never let a logging failure block the actual security-relevant action (a failed login should still fail cleanly).
+    console.error('Failed to record security event:', error.message);
+  }
 }
 
 export async function touchSurvey(db, surveyId, userId) {

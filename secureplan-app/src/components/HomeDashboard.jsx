@@ -16,7 +16,7 @@ function WelcomeModal({ open, onClose }) {
         </li>
         <li>
           <span className="welcome-modal__icon" aria-hidden="true"><ChartBar size={18} /></span>
-          <div><strong>Track install progress</strong><p>Home shows each site's completion percentage, least-finished first, so you always know what needs attention.</p></div>
+          <div><strong>See what needs attention</strong><p>Home surfaces the sites with the least install progress, so you always know where to focus next.</p></div>
         </li>
         <li>
           <span className="welcome-modal__icon" aria-hidden="true"><Activity size={18} /></span>
@@ -211,19 +211,24 @@ export default function HomeDashboard({ user, navigate, notify }) {
             <StatTile label="Plotted devices" value={stats.devices} note="Items on plans" />
           </div>
 
-          {siteProgress.length > 0 && (
-            <div className="home-progress">
-              <div className="home-progress__heading">
-                <h2>Install progress by site</h2>
-                <p>Sorted least-complete first, so you can see what needs attention.</p>
+          {(() => {
+            const needsAttention = siteProgress.filter((site) => site.deviceCount > 0 && site.progress < 100).slice(0, 5);
+            if (!needsAttention.length) return null;
+            return (
+              <div className="home-progress">
+                <div className="home-progress__heading">
+                  <h2>Needs attention</h2>
+                  <p>Sites with the least install progress so far.</p>
+                </div>
+                <div className="home-progress__list">
+                  {needsAttention.map((site) => (
+                    <ProgressRow key={site.id} site={site} onOpen={() => navigate(`sites/${site.id}`)} />
+                  ))}
+                </div>
+                <button type="button" className="button button--ghost home-progress__view-all" onClick={() => navigate('sites')}>View all sites</button>
               </div>
-              <div className="home-progress__list">
-                {siteProgress.map((site) => (
-                  <ProgressRow key={site.id} site={site} onOpen={() => navigate(`sites/${site.id}`)} />
-                ))}
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           <ActivityFeed entries={activity} />
 

@@ -6,7 +6,7 @@ import express from 'express';
 import { rateLimit } from 'express-rate-limit';
 import multer from 'multer';
 import { createConfig } from './config.js';
-import { createDatabase } from './db.js';
+import { createDatabase, logSecurityEvent } from './db.js';
 import { ApiError } from './lib/errors.js';
 import { checkStorage, cleanTemporaryUpload } from './lib/storage.js';
 import { createAuthMiddleware } from './lib/auth.js';
@@ -21,6 +21,7 @@ import { createTeamRouter } from './routes/team.js';
 import { createSearchRouter } from './routes/search.js';
 import { createActivityRouter } from './routes/activity.js';
 import { createDashboardRouter } from './routes/dashboard.js';
+import { createSecurityRouter } from './routes/security.js';
 
 export function createApplication(overrides = {}) {
   const config = createConfig(overrides);
@@ -170,6 +171,7 @@ export function createApplication(overrides = {}) {
   app.use('/api', createSearchRouter(routerContext));
   app.use('/api', createActivityRouter(routerContext));
   app.use('/api', createDashboardRouter(routerContext));
+  app.use('/api', createSecurityRouter(routerContext));
 
   app.use('/api', (req, res) => {
     res.status(404).json({
@@ -228,6 +230,15 @@ export function createApplication(overrides = {}) {
     };
     if (apiError instanceof ApiError && apiError.details !== undefined) response.error.details = apiError.details;
     if (status >= 500) console.error(`[${req.requestId}]`, error);
+    if (status === 401 || status === 403) {
+      logSecurityEvent(db, {
+        eventType: status === 401 ? 'auth.unauthorized' : 'permission.denied',
+        severity: 'warning',
+        userId: req.user?.id || null,
+        req,
+        details: { path: req.originalUrl, method: req.method, requestId: req.requestId },
+      }).catch(() => {});
+    }
     res.status(status).json(response);
   });
 

@@ -5,6 +5,7 @@ import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { getSite } from '../lib/resources.js';
 import { serializeInvitation, serializeMember } from '../lib/serializers.js';
 import { emailValue, enumValue, idValue, numberValue, optionalNullableString } from '../lib/validation.js';
+import { logSecurityEvent } from '../db.js';
 
 export function createTeamRouter({ db, auth, emitSiteUpdate, disconnectUser }) {
   const router = Router();
@@ -153,6 +154,7 @@ export function createTeamRouter({ db, auth, emitSiteUpdate, disconnectUser }) {
         now,
         userId,
       );
+      await logSecurityEvent(db, { eventType: 'role.changed', userId: req.user.id, req, details: { targetUserId: userId, fromRole: member.role, toRole: role } });
     }
     disconnectUser(userId);
     res.json({ data: { userId, siteId, role }, success: true });
@@ -178,6 +180,7 @@ export function createTeamRouter({ db, auth, emitSiteUpdate, disconnectUser }) {
             WHERE id = ?`,
         ).run(now, now, userId);
       })();
+      await logSecurityEvent(db, { eventType: 'account.disabled', userId: req.user.id, req, details: { targetUserId: userId } });
     }
     disconnectUser(userId);
     res.json({ data: { removedId: userId, siteId }, success: true });

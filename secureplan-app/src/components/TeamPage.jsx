@@ -1,7 +1,59 @@
 import React, { useEffect, useState } from 'react';
 import { api, normalizeList } from '../api.js';
 import { ConfirmDialog, EmptyState, Field, Menu, MenuButton, Modal, Spinner, formatWhen, initials } from './Common.jsx';
-import { Plus, Users } from 'lucide-react';
+import { AlertTriangle, Plus, ShieldAlert, Users } from 'lucide-react';
+
+const SEVERITY_COLORS = { info: 'var(--muted)', warning: 'var(--amber, #b45309)', critical: 'var(--red)' };
+
+const EVENT_LABELS = {
+  'login.failed': 'Failed login attempt',
+  'login.success': 'Successful login',
+  'setup_code.failed': 'Failed owner setup code',
+  'role.changed': 'Role changed',
+  'account.disabled': 'Account disabled',
+  'auth.unauthorized': 'Unauthorized request',
+  'permission.denied': 'Permission denied',
+};
+
+function SecurityLogPanel({ notify }) {
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setLoading(true);
+      try {
+        const result = await api.securityEvents(150);
+        if (active) setEvents(normalizeList(result?.events ?? result));
+      } catch (error) {
+        if (active) notify(error.message);
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [notify]);
+
+  if (loading) return <div className="loading-panel"><Spinner label="Loading security log…" /></div>;
+  if (!events.length) return <p className="muted">No security events recorded yet.</p>;
+  return (
+    <ul className="security-log">
+      {events.map((event) => (
+        <li key={event.id} className="security-log__item">
+          <span className="security-log__severity" style={{ background: SEVERITY_COLORS[event.severity] || 'var(--muted)' }} aria-hidden="true">
+            {event.severity === 'critical' ? <ShieldAlert size={14} /> : <AlertTriangle size={14} />}
+          </span>
+          <div className="security-log__body">
+            <p><strong>{EVENT_LABELS[event.eventType] || event.eventType}</strong>{event.userName ? ` — ${event.userName}` : event.userEmail ? ` — ${event.userEmail}` : ''}</p>
+            <small>{event.ipAddress ? `From ${event.ipAddress} · ` : ''}{event.details?.path ? `${event.details.method || ''} ${event.details.path}` : ''}</small>
+          </div>
+          <time title={new Date(event.createdAt).toLocaleString()}>{formatWhen(event.createdAt)}</time>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 const roles = [
   { value: 'viewer', label: 'Viewer', help: 'View plans, notes, and schedules.' },
@@ -117,6 +169,7 @@ export default function TeamPage({ user, notify }) {
           <h1>Team & invitations</h1>
           <p>Control who can enter the workspace and what they are allowed to change.</p>
         </div>
+        {canManage && <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'security-log' })}><ShieldAlert aria-hidden="true" size={16} /> Security log</button>}
         {canManage && <button type="button" className="button button--primary" onClick={openInvite}><Plus aria-hidden="true" size={16} /> Create invite</button>}
       </div>
 
@@ -197,6 +250,10 @@ export default function TeamPage({ user, notify }) {
       <ConfirmDialog open={modal?.type === 'remove'} title="Remove team member?" busy={busy} onClose={() => setModal(null)} onConfirm={removeMember} confirmLabel="Remove member">
         <p><strong>{modal?.member?.name}</strong> will immediately lose access to the workspace. Their survey history will be retained. To restore them later, create a new invitation restricted to their email address.</p>
       </ConfirmDialog>
+
+      <Modal open={modal?.type === 'security-log'} title="Security log" description="Failed logins, permission-denied attempts, and account/role changes across the workspace." onClose={() => setModal(null)} wide>
+        {modal?.type === 'security-log' && <SecurityLogPanel notify={notify} />}
+      </Modal>
     </main>
   );
 }

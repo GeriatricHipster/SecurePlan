@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { hashInviteCode, hashPassword, setAuthCookie, clearAuthCookie, signSession, verifyPassword, publicUser } from '../lib/auth.js';
 import { conflict, unauthorized, forbidden } from '../lib/errors.js';
 import { emailValue, passwordValue, stringValue } from '../lib/validation.js';
-import { seedOwnerDemo } from '../db.js';
+import { seedOwnerDemo, logSecurityEvent } from '../db.js';
 
 export function createAuthRouter({ db, config, auth, disconnectUser }) {
   const router = Router();
@@ -29,6 +29,7 @@ export function createAuthRouter({ db, config, auth, disconnectUser }) {
       throw forbidden('Owner setup is disabled until SETUP_CODE is configured with at least 16 characters.');
     }
     if (config.setupCode && !sameSecret(req.body?.setupCode, config.setupCode)) {
+      await logSecurityEvent(db, { eventType: 'setup_code.failed', severity: 'critical', req });
       throw forbidden('The owner setup code is incorrect.');
     }
     const name = stringValue(req.body?.name, 'name', { min: 2, max: 100 });
@@ -69,8 +70,10 @@ export function createAuthRouter({ db, config, auth, disconnectUser }) {
     const password = stringValue(req.body?.password, 'password', { min: 1, max: 200, trim: false });
     const user = await db.prepare('SELECT * FROM users WHERE email = ? AND disabled_at IS NULL').get(email);
     if (!user || !verifyPassword(password, user.password_hash)) {
+      await logSecurityEvent(db, { eventType: 'login.failed', severity: 'warning', emailAttempted: email, req });
       throw unauthorized('Email or password is incorrect.');
     }
+    await logSecurityEvent(db, { eventType: 'login.success', userId: user.id, req });
     const sessionToken = signSession(user, config);
     setAuthCookie(res, sessionToken, config);
     sendAuthResponse(req, res, 200, user, sessionToken);

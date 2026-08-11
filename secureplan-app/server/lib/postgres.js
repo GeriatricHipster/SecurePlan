@@ -297,6 +297,21 @@ const POSTGRES_SCHEMA = `
     created_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS security_events (
+    id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    severity TEXT NOT NULL DEFAULT 'info',
+    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    email_attempted TEXT,
+    ip_address TEXT,
+    user_agent TEXT,
+    details_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_security_events_created ON security_events(created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_security_events_type ON security_events(event_type, created_at DESC);
+
   CREATE TABLE IF NOT EXISTS survey_assignments (
     survey_id TEXT NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
