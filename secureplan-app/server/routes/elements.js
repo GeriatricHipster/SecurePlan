@@ -269,15 +269,8 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate }) {
       });
     })();
     for (const photo of photos) {
-      try {
-        await deleteStoredFile(photo.storage_key, 'photo', config);
-      } catch (error) {
-        // The element (and its DB rows) are already gone at this point, which is what
-        // matters to the user. A failure to clean up the underlying stored photo file
-        // (e.g. a transient storage-provider error) should not be reported as a failed
-        // delete, since retrying would just 404 on an element that no longer exists.
-        console.error(`[element.delete] failed to remove stored photo ${photo.storage_key}:`, error);
-      }
+      try { await deleteStoredFile(photo.storage_key, 'photo', config); }
+      catch (error) { console.error('Failed to delete stored photo after element deletion:', error); }
     }
     emitSurveyUpdate(element.survey_id, 'element.deleted', req.user, { elementId: element.id });
     res.json({ data: { deletedId: element.id }, success: true });
