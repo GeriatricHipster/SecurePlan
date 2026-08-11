@@ -1,13 +1,14 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
-import { assertSiteAccess, createInviteCode, hashInviteCode, hasRole, SITE_ROLES } from '../lib/auth.js';
+import { assertSiteAccess, createInviteCode, hashInviteCode, hasRole, SITE_ROLES, createResetToken, hashResetToken } from '../lib/auth.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { getSite } from '../lib/resources.js';
 import { serializeInvitation, serializeMember } from '../lib/serializers.js';
 import { emailValue, enumValue, idValue, numberValue, optionalNullableString } from '../lib/validation.js';
 import { logSecurityEvent } from '../db.js';
+import { sendEmail, inviteEmailTemplate, passwordResetEmailTemplate } from '../lib/email.js';
 
-export function createTeamRouter({ db, auth, emitSiteUpdate, disconnectUser }) {
+export function createTeamRouter({ db, config, auth, emitSiteUpdate, disconnectUser }) {
   const router = Router();
   router.use(auth.requireAuth);
 
@@ -110,6 +111,22 @@ export function createTeamRouter({ db, auth, emitSiteUpdate, disconnectUser }) {
       .get(id);
     const invitation = serializeInvitation(row);
     if (siteId) emitSiteUpdate(siteId, 'invitation.created', req.user, { invitation });
+    if (email) {
+      const template = inviteEmailTemplate({
+        inviterName: req.user.name || 'A workspace admin',
+        code,
+        roleLabel: role.charAt(0).toUpperCase() + role.slice(1),
+        siteName: row.site_name || null,
+        appUrl: config.frontendOrigin || 'https://app.secureplan.example',
+      });
+      try {
+        await sendEmail(config, { to: email, ...template });
+        await logSecurityEvent(db, { eventType: 'invite.email_sent', userId: req.user.id, req, details: { invitationId: id, email } });
+      } catch (error) {
+        console.error('Failed to send invite email:', error.message);
+        await logSecurityEvent(db, { eventType: 'invite.email_failed', severity: 'warning', userId: req.user.id, req, details: { invitationId: id, email, error: error.message } });
+      }
+    }
     res.status(201).json({ data: { ...invitation, code }, invitation, code });
   };
   router.post('/invitations', createInvitation);
@@ -158,6 +175,31 @@ export function createTeamRouter({ db, auth, emitSiteUpdate, disconnectUser }) {
     }
     disconnectUser(userId);
     res.json({ data: { userId, siteId, role }, success: true });
+  });
+
+  router.post('/members/:userId/reset-password', async (req, res) => {
+    requireWorkspaceAdmin(req.user);
+    const userId = idValue(req.params.userId, 'userId');
+    const member = await db.prepare('SELECT * FROM users WHERE id = ? AND disabled_at IS NULL').get(userId);
+    if (!member) throw notFound('Member');
+    const token = createResetToken();
+    const now = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    await db.prepare(
+      `INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, used_at, created_at)
+       VALUES (?, ?, ?, ?, NULL, ?)`,
+    ).run(crypto.randomUUID(), member.id, hashResetToken(token), expiresAt, now);
+    const resetUrl = `${config.frontendOrigin || ''}/#/reset-password?token=${encodeURIComponent(token)}`;
+    const template = passwordResetEmailTemplate({ resetUrl });
+    let emailSent = true;
+    try {
+      await sendEmail(config, { to: member.email, ...template });
+    } catch (error) {
+      emailSent = false;
+      console.error('Failed to send admin-triggered password reset email:', error.message);
+    }
+    await logSecurityEvent(db, { eventType: 'password.admin_reset_triggered', userId: req.user.id, req, details: { targetUserId: member.id, emailSent } });
+    res.json({ data: { sent: emailSent }, success: true });
   });
 
   router.delete('/members/:userId', async (req, res) => {

@@ -80,6 +80,10 @@ export function createConfig(overrides = {}) {
     frontendOrigin,
     mobileOrigins,
     allowedOrigins,
+    azureTenantId: overrides.azureTenantId ?? process.env.AZURE_TENANT_ID ?? '',
+    azureClientId: overrides.azureClientId ?? process.env.AZURE_CLIENT_ID ?? '',
+    azureClientSecret: overrides.azureClientSecret ?? process.env.AZURE_CLIENT_SECRET ?? '',
+    emailFromMailbox: overrides.emailFromMailbox ?? process.env.EMAIL_FROM_MAILBOX ?? '',
     trustProxy: parseTrustProxy(overrides.trustProxy ?? process.env.TRUST_PROXY, nodeEnv === 'production' ? 1 : false),
     staticDir: path.resolve(
       overrides.staticDir || process.env.STATIC_DIR || path.join(serverDirectory, '..', 'dist'),

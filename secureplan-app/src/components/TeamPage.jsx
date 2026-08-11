@@ -145,6 +145,15 @@ export default function TeamPage({ user, notify }) {
     finally { setBusy(false); }
   };
 
+  const resetMemberPassword = async (member) => {
+    try {
+      const result = await api.adminResetPassword(member.id);
+      notify(result?.sent === false
+        ? `Reset link generated for ${member.name}, but the email failed to send. Ask them to use "Forgot password" instead.`
+        : `Password reset email sent to ${member.name}.`);
+    } catch (error) { notify(error.message); }
+  };
+
   const revokeInvite = async (invitation) => {
     try {
       await api.revokeInvitation(invitation.id);
@@ -188,6 +197,7 @@ export default function TeamPage({ user, notify }) {
                 {canManage && member.role !== 'owner' && member.id !== user.id && (
                   <Menu label={`Actions for ${member.name}`}>
                     <MenuButton onClick={() => { setForm({ role: member.role }); setError(''); setModal({ type: 'role', member }); }}>Change role</MenuButton>
+                    <MenuButton onClick={() => resetMemberPassword(member)}>Reset password</MenuButton>
                     <MenuButton danger onClick={() => setModal({ type: 'remove', member })}>Remove member</MenuButton>
                   </Menu>
                 )}

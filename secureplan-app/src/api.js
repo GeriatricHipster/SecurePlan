@@ -361,6 +361,11 @@ export const api = {
   setupOwner: (values) => request('/api/auth/setup', json('POST', values)),
   login: (values) => request('/api/auth/login', json('POST', values)),
   register: (values) => request('/api/auth/register', json('POST', values)),
+  forgotPassword: (email) => request('/api/auth/forgot-password', json('POST', { email })),
+  resetPassword: (values) => request('/api/auth/reset-password', json('POST', values)),
+  adminResetPassword: (userId) => request(`/api/members/${userId}/reset-password`, json('POST')),
+  changePassword: (values) => request('/api/auth/change-password', json('POST', values)),
+  adminResetPassword: (userId) => request(`/api/members/${userId}/reset-password`, json('POST')),
   logout: async () => {
     try { return await request('/api/auth/logout', json('POST')); }
     finally { nativeSessionToken = null; }
