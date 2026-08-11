@@ -122,32 +122,14 @@ function MarkupElement({ element, orientation, selected, onPointerDown, onSelect
       </>
     );
   }
-  if (element.type === 'line' || element.type === 'arrow' || element.type === 'verify') {
+  if (element.type === 'line' || element.type === 'arrow') {
     const markerId = `arrow-${String(element.id).replace(/[^a-zA-Z0-9_-]/g, '')}`;
     return (
-      <>
-        <svg className={`markup-line ${selected ? 'selected' : ''}`} viewBox="0 0 100 100" preserveAspectRatio="none" role="button" tabIndex="0" aria-pressed={selected} aria-label={element.label} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(element.id); } }}>
-          {element.type === 'arrow' && <defs><marker id={markerId} markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill={color} /></marker></defs>}
-          <line className="markup-line__hit-area" x1={start.x * 100} y1={start.y * 100} x2={end.x * 100} y2={end.y * 100} vectorEffect="non-scaling-stroke" />
-          <line className="markup-line__visible" x1={start.x * 100} y1={start.y * 100} x2={end.x * 100} y2={end.y * 100} stroke={color} strokeWidth={strokeWidth} strokeDasharray={element.type === 'verify' ? '6 4' : undefined} vectorEffect="non-scaling-stroke" markerEnd={element.type === 'arrow' ? `url(#${markerId})` : undefined} />
-        </svg>
-        {element.type === 'verify' && <span className="verify-flag" style={{ left: `${((start.x + end.x) / 2) * 100}%`, top: `${((start.y + end.y) / 2) * 100}%`, background: color }}>VERIFY</span>}
-      </>
-    );
-  }
-  if (element.type === 'callout') {
-    const isEditing = editingId === element.id;
-    return (
-      <>
-        <svg className={`markup-line ${selected ? 'selected' : ''}`} viewBox="0 0 100 100" preserveAspectRatio="none" onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }}>
-          <line className="markup-line__hit-area" x1={start.x * 100} y1={start.y * 100} x2={end.x * 100} y2={end.y * 100} vectorEffect="non-scaling-stroke" />
-          <line className="markup-line__visible" x1={start.x * 100} y1={start.y * 100} x2={end.x * 100} y2={end.y * 100} stroke={color} strokeWidth={strokeWidth} vectorEffect="non-scaling-stroke" />
-          <circle cx={start.x * 100} cy={start.y * 100} r="1.1" fill={color} vectorEffect="non-scaling-stroke" />
-        </svg>
-        {isEditing
-          ? <InlineTextEditor element={element} left={end.x * 100} top={end.y * 100} boxWidth={22} boxHeight={6} color={color} onPreview={onPreview} onCommit={onCommit} onDone={() => onEdit(null)} />
-          : <button type="button" className={`callout-bubble ${selected ? 'selected' : ''}`} style={{ left: `${end.x * 100}%`, top: `${end.y * 100}%`, color, borderColor: color }} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }}>{element.label || 'Comment'}</button>}
-      </>
+      <svg className={`markup-line ${selected ? 'selected' : ''}`} viewBox="0 0 100 100" preserveAspectRatio="none" role="button" tabIndex="0" aria-pressed={selected} aria-label={element.label} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(element.id); } }}>
+        {element.type === 'arrow' && <defs><marker id={markerId} markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill={color} /></marker></defs>}
+        <line className="markup-line__hit-area" x1={start.x * 100} y1={start.y * 100} x2={end.x * 100} y2={end.y * 100} vectorEffect="non-scaling-stroke" />
+        <line className="markup-line__visible" x1={start.x * 100} y1={start.y * 100} x2={end.x * 100} y2={end.y * 100} stroke={color} strokeWidth={strokeWidth} vectorEffect="non-scaling-stroke" markerEnd={element.type === 'arrow' ? `url(#${markerId})` : undefined} />
+      </svg>
     );
   }
   const left = Math.min(start.x, end.x) * 100;
@@ -313,10 +295,10 @@ function MarkupPopup({ element, orientation, onPreview, onCommit, onClose }) {
   const preview = (values) => { setDraft((current) => ({ ...current, ...values })); onPreview(element.id, values); };
   const previewMetadata = (values) => { const next = { ...metadata, ...values }; setDraft((current) => ({ ...current, metadata: next })); onPreview(element.id, { metadata: next }); };
   return <div className="markup-popup" role="dialog" aria-label={`${element.type} formatting`} style={{ left: `${anchor.x * 100}%`, top: `${anchor.y * 100}%` }} onPointerDown={(event) => event.stopPropagation()}>
-    <header className="markup-popup__header"><div><strong>Edit {element.type}</strong><small>{['text', 'callout'].includes(element.type) ? 'Type directly in the text box on the plan' : 'Changes save when you finish a field'}</small></div><button type="button" className="markup-popup__close" onClick={onClose} aria-label="Close formatting controls">×</button></header>
+    <header className="markup-popup__header"><div><strong>Edit {element.type}</strong><small>{element.type === 'text' ? 'Type directly in the text box on the plan' : 'Changes save when you finish a field'}</small></div><button type="button" className="markup-popup__close" onClick={onClose} aria-label="Close formatting controls">×</button></header>
     <div className="markup-popup__grid">
       <label className="markup-control"><span>Color</span><input type="color" value={draft.color} onChange={(event) => preview({ color: event.target.value })} onBlur={() => onCommit(element.id, { color: draft.color })} /></label>
-      {['text', 'callout'].includes(element.type) ? <label className="markup-control markup-control--wide"><span>Font size <output>{Number(metadata.fontSize || 18)} px</output></span><input type="range" min="10" max="72" value={Number(metadata.fontSize || 18)} onChange={(event) => previewMetadata({ fontSize: Number(event.target.value) })} onPointerUp={() => onCommit(element.id, { metadata: draft.metadata })} onKeyUp={() => onCommit(element.id, { metadata: draft.metadata })} /></label> : <>
+      {element.type === 'text' ? <label className="markup-control markup-control--wide"><span>Font size <output>{Number(metadata.fontSize || 18)} px</output></span><input type="range" min="10" max="72" value={Number(metadata.fontSize || 18)} onChange={(event) => previewMetadata({ fontSize: Number(event.target.value) })} onPointerUp={() => onCommit(element.id, { metadata: draft.metadata })} onKeyUp={() => onCommit(element.id, { metadata: draft.metadata })} /></label> : <>
         <label className="markup-control"><span>Thickness <output>{Number(metadata.strokeWidth || 3)} px</output></span><input type="range" min="1" max="20" value={Number(metadata.strokeWidth || 3)} onChange={(event) => previewMetadata({ strokeWidth: Number(event.target.value) })} onPointerUp={() => onCommit(element.id, { metadata: draft.metadata })} onKeyUp={() => onCommit(element.id, { metadata: draft.metadata })} /></label>
         <label className="markup-control markup-control--wide"><span>Length <output>{Math.round(length * 100)}%</output></span><input type="range" min="0.01" max="0.8" step="0.01" value={length} onChange={(event) => patchLength(Number(event.target.value))} onPointerUp={() => onCommit(element.id, { width: draft.width, height: draft.height })} onKeyUp={() => onCommit(element.id, { width: draft.width, height: draft.height })} /></label>
       </>}
@@ -335,7 +317,7 @@ function SelectionHandles({ element, orientation, dimensions, onStart }) {
   }
   const start = toDisplay({ x: Number(element.x), y: Number(element.y) }, orientation);
   const end = toDisplay({ x: Number(element.x) + Number(element.width), y: Number(element.y) + Number(element.height) }, orientation);
-  const points = ['line', 'arrow', 'measure', 'callout', 'verify'].includes(element.type)
+  const points = ['line', 'arrow', 'measure'].includes(element.type)
     ? [['start', start.x, start.y], ['end', end.x, end.y]]
     : [['nw', Math.min(start.x, end.x), Math.min(start.y, end.y)], ['ne', Math.max(start.x, end.x), Math.min(start.y, end.y)], ['sw', Math.min(start.x, end.x), Math.max(start.y, end.y)], ['se', Math.max(start.x, end.x), Math.max(start.y, end.y)]];
   return <div className="resize-handles" aria-label={`Resize ${element.label}`}>{points.map(([handle, x, y]) => <button key={handle} type="button" className={`resize-handle resize-handle--${handle}`} style={{ left: `${x * 100}%`, top: `${y * 100}%` }} onPointerDown={(event) => onStart(event, element, handle)} aria-label={`Resize ${element.label} from ${handle}`} />)}</div>;
@@ -557,12 +539,12 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
       const color = elementColor(element);
       const strokeWidth = Math.max(1, Math.min(20, Number(element.metadata?.strokeWidth || 3)));
 
-      if (element.type === 'line' || element.type === 'arrow' || element.type === 'measure' || element.type === 'verify') {
+      if (element.type === 'line' || element.type === 'arrow' || element.type === 'measure') {
         const sx = start.x * W; const sy = start.y * H; const ex = end.x * W; const ey = end.y * H;
         ctx.beginPath();
         ctx.strokeStyle = color;
         ctx.lineWidth = strokeWidth;
-        if (element.type === 'measure' || element.type === 'verify') ctx.setLineDash([8, 6]);
+        if (element.type === 'measure') ctx.setLineDash([8, 6]);
         ctx.moveTo(sx, sy);
         ctx.lineTo(ex, ey);
         ctx.stroke();
@@ -578,13 +560,13 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
           ctx.fillStyle = color;
           ctx.fill();
         }
-        if (element.type === 'measure' || element.type === 'verify') {
-          const label = element.type === 'verify' ? 'VERIFY' : measureLabel(start, end).label;
+        if (element.type === 'measure') {
+          const label = measureLabel(start, end).label;
           const midX = (sx + ex) / 2; const midY = (sy + ey) / 2;
           ctx.font = '600 13px Inter, sans-serif';
           const textWidth = ctx.measureText(label).width;
           ctx.fillStyle = color;
-          const pillX = midX - textWidth / 2 - 8; const pillY = midY - 12; const pillW = textWidth + 16; const pillH = 24; const pillR = element.type === 'verify' ? 5 : 12;
+          const pillX = midX - textWidth / 2 - 8; const pillY = midY - 12; const pillW = textWidth + 16; const pillH = 24; const pillR = 12;
           ctx.beginPath();
           ctx.moveTo(pillX + pillR, pillY);
           ctx.arcTo(pillX + pillW, pillY, pillX + pillW, pillY + pillH, pillR);
@@ -604,8 +586,16 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
       const left = Math.min(start.x, end.x) * W; const top = Math.min(start.y, end.y) * H;
       const boxW = Math.abs(end.x - start.x) * W; const boxH = Math.abs(end.y - start.y) * H;
 
-      const wrapText = (text, x, startY, maxWidth, lineHeight) => {
-        let lineY = startY;
+      if (element.type === 'text') {
+        const fontSize = Math.max(10, Number(element.metadata?.fontSize || 18));
+        ctx.font = `${fontSize}px Inter, sans-serif`;
+        ctx.fillStyle = color;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        const text = element.label || 'Callout';
+        const maxWidth = Math.max(30, boxW);
+        const lineHeight = fontSize * 1.3;
+        let lineY = top;
         for (const paragraph of text.split('\n')) {
           const words = paragraph.split(/\s+/).filter(Boolean);
           if (!words.length) { lineY += lineHeight; continue; }
@@ -613,61 +603,15 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
           for (const word of words) {
             const testLine = line ? `${line} ${word}` : word;
             if (line && ctx.measureText(testLine).width > maxWidth) {
-              ctx.fillText(line, x, lineY);
+              ctx.fillText(line, left, lineY);
               line = word;
               lineY += lineHeight;
             } else {
               line = testLine;
             }
           }
-          if (line) { ctx.fillText(line, x, lineY); lineY += lineHeight; }
+          if (line) { ctx.fillText(line, left, lineY); lineY += lineHeight; }
         }
-        return lineY;
-      };
-
-      if (element.type === 'text') {
-        const fontSize = Math.max(10, Number(element.metadata?.fontSize || 18));
-        ctx.font = `${fontSize}px Inter, sans-serif`;
-        ctx.fillStyle = color;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        wrapText(element.label || 'Callout', left, top, Math.max(30, boxW), fontSize * 1.3);
-        continue;
-      }
-
-      if (element.type === 'callout') {
-        const sx = start.x * W; const sy = start.y * H; const ex = end.x * W; const ey = end.y * H;
-        ctx.beginPath();
-        ctx.strokeStyle = color;
-        ctx.lineWidth = strokeWidth;
-        ctx.moveTo(sx, sy);
-        ctx.lineTo(ex, ey);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(sx, sy, 4, 0, Math.PI * 2);
-        ctx.fillStyle = color;
-        ctx.fill();
-        const fontSize = 15;
-        ctx.font = `600 ${fontSize}px Inter, sans-serif`;
-        const text = element.label || 'Comment';
-        const maxWidth = 200;
-        const padding = 10;
-        const bubbleX = ex; const bubbleY = ey;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        ctx.fillStyle = color;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 1.5;
-        const paragraphCount = text.split('\n').reduce((sum, p) => sum + Math.max(1, Math.ceil(ctx.measureText(p).width / maxWidth)), 0);
-        const bubbleHeight = paragraphCount * fontSize * 1.3 + padding * 2;
-        ctx.globalAlpha = 1;
-        ctx.beginPath();
-        ctx.rect(bubbleX, bubbleY, maxWidth + padding * 2, bubbleHeight);
-        ctx.fillStyle = '#ffffff';
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = color;
-        wrapText(text, bubbleX + padding, bubbleY + padding, maxWidth, fontSize * 1.3);
         continue;
       }
 
@@ -679,19 +623,6 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
         ctx.ellipse(left + boxW / 2, top + boxH / 2, Math.max(1, boxW / 2), Math.max(1, boxH / 2), 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
-      } else if (element.type === 'cloud') {
-        const radius = Math.max(4, Math.min(boxW, boxH) * 0.3);
-        ctx.beginPath();
-        ctx.moveTo(left + radius, top);
-        ctx.arcTo(left + boxW, top, left + boxW, top + boxH, radius);
-        ctx.arcTo(left + boxW, top + boxH, left, top + boxH, radius);
-        ctx.arcTo(left, top + boxH, left, top, radius);
-        ctx.arcTo(left, top, left + boxW, top, radius);
-        ctx.closePath();
-        ctx.setLineDash([strokeWidth * 2.2, strokeWidth * 1.6]);
-        ctx.fill();
-        ctx.stroke();
-        ctx.setLineDash([]);
       } else {
         ctx.beginPath();
         ctx.rect(left, top, boxW, boxH);
@@ -794,7 +725,7 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
       onPlace(fromDisplay(surfacePoint(event), orientation));
       return;
     }
-    if (['line', 'arrow', 'rectangle', 'ellipse', 'measure', 'cloud', 'callout', 'verify'].includes(activeTool.type)) {
+    if (['line', 'arrow', 'rectangle', 'ellipse', 'measure'].includes(activeTool.type)) {
       const startDisplay = surfacePoint(event);
       drawRef.current = { pointerId: event.pointerId, startDisplay, type: activeTool.type };
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -1175,8 +1106,8 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
                   <CameraFieldOfView element={element} orientation={orientation} selectedFov={selectedFov} onSelectFov={(elementId, fovIndex) => { onSelect(elementId); setSelectedFov({ elementId, fovIndex }); }} onFovHandleDown={startFovDrag} canEdit={canEdit} />
                   <DeviceElement element={element} orientation={orientation} selected={selectedId === element.id} isNestTarget={nestTargetId === element.id} onPointerDown={pointerDownElement} onSelect={onSelect} />
                 </React.Fragment>)}
-            {draftBounds && !['line', 'arrow', 'measure', 'callout', 'verify'].includes(draftShape.type) && <span className={`draft-shape draft-shape--${draftShape.type}`} style={{ left: `${draftBounds.left}%`, top: `${draftBounds.top}%`, width: `${draftBounds.width}%`, height: `${draftBounds.height}%` }} />}
-            {draftShape && ['line', 'arrow', 'measure', 'callout', 'verify'].includes(draftShape.type) && <svg className="draft-line" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1={draftShape.start.x * 100} y1={draftShape.start.y * 100} x2={draftShape.end.x * 100} y2={draftShape.end.y * 100} /></svg>}
+            {draftBounds && !['line', 'arrow', 'measure'].includes(draftShape.type) && <span className={`draft-shape draft-shape--${draftShape.type}`} style={{ left: `${draftBounds.left}%`, top: `${draftBounds.top}%`, width: `${draftBounds.width}%`, height: `${draftBounds.height}%` }} />}
+            {draftShape && ['line', 'arrow', 'measure'].includes(draftShape.type) && <svg className="draft-line" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1={draftShape.start.x * 100} y1={draftShape.start.y * 100} x2={draftShape.end.x * 100} y2={draftShape.end.y * 100} /></svg>}
             {draftShape && draftShape.type === 'measure' && <span className="measure-label" style={{ left: `${((draftShape.start.x + draftShape.end.x) / 2) * 100}%`, top: `${((draftShape.start.y + draftShape.end.y) / 2) * 100}%` }}>{measureLabel(draftShape.start, draftShape.end).label}</span>}
             {canEdit && <SelectionHandles element={elements.find((element) => element.id === selectedId)} orientation={orientation} dimensions={dimensions} onStart={startResize} />}
             {canEdit && <MarkupPopup element={elements.find((element) => element.id === editingId)} orientation={orientation} onPreview={onPreviewElement} onCommit={onPatchElement} onClose={() => setEditingId(null)} />}
