@@ -9,7 +9,7 @@ import DeviceGlyph from './DeviceGlyph.jsx';
 import { exportSurveyPdf } from './surveyPdfExport.js';
 import {
   ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  Circle, Cloud, Copy, Download, Eye, FilePlus, Flag, History, Layers, ListChecks, MessageSquare, Minus, Moon, Move, MousePointer2,
+  Circle, Cloud, Copy, Download, Eye, FilePlus, History, Layers, ListChecks, Minus, Moon, Move, MousePointer2,
   Pencil, Plus, RotateCw, Ruler, Save, Slash, Square, Sun, Trash2, Type, X,
 } from 'lucide-react';
 
@@ -85,8 +85,6 @@ const TOOL_ICONS = {
   text: Type,
   measure: Ruler,
   cloud: Cloud,
-  callout: MessageSquare,
-  verify: Flag,
 };
 
 const LAYER_IDS = [...DEVICE_CATEGORIES.map((category) => category.id), 'custom', 'markup'];
@@ -803,11 +801,11 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
 
   const draw = async ({ type, start, end }) => {
     let x = start.x; let y = start.y; let width = end.x - start.x; let height = end.y - start.y;
-    if (!['line', 'arrow', 'callout', 'verify'].includes(type)) { x = Math.min(start.x, end.x); y = Math.min(start.y, end.y); width = Math.abs(end.x - start.x); height = Math.abs(end.y - start.y); }
+    if (!['line', 'arrow'].includes(type)) { x = Math.min(start.x, end.x); y = Math.min(start.y, end.y); width = Math.abs(end.x - start.x); height = Math.abs(end.y - start.y); }
     if (Math.abs(width) < 0.005 && Math.abs(height) < 0.005 && type !== 'text') return;
-    const defaultLabel = { text: 'Callout', callout: 'Comment', verify: 'Verify' }[type] || type[0].toUpperCase() + type.slice(1);
+    const defaultLabel = type === 'text' ? 'Callout' : type[0].toUpperCase() + type.slice(1);
     try {
-      await createOne({ category: 'markup', type, label: defaultLabel, x, y, width: type === 'text' ? 0.14 : width, height: type === 'text' ? 0.05 : height, rotation: 0, color: '#b4232d', metadata: type === 'text' || type === 'callout' ? { fontSize: 18 } : {} });
+      await createOne({ category: 'markup', type, label: defaultLabel, x, y, width: type === 'text' ? 0.14 : width, height: type === 'text' ? 0.05 : height, rotation: 0, color: '#b4232d', metadata: type === 'text' ? { fontSize: 18 } : {} });
       setActiveTool({ kind: 'markup', type: 'select', label: 'Select' });
     } catch (error) { notify(error.message); }
   };

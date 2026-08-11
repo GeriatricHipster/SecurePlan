@@ -586,16 +586,8 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
       const left = Math.min(start.x, end.x) * W; const top = Math.min(start.y, end.y) * H;
       const boxW = Math.abs(end.x - start.x) * W; const boxH = Math.abs(end.y - start.y) * H;
 
-      if (element.type === 'text') {
-        const fontSize = Math.max(10, Number(element.metadata?.fontSize || 18));
-        ctx.font = `${fontSize}px Inter, sans-serif`;
-        ctx.fillStyle = color;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        const text = element.label || 'Callout';
-        const maxWidth = Math.max(30, boxW);
-        const lineHeight = fontSize * 1.3;
-        let lineY = top;
+      const wrapText = (text, x, startY, maxWidth, lineHeight) => {
+        let lineY = startY;
         for (const paragraph of text.split('\n')) {
           const words = paragraph.split(/\s+/).filter(Boolean);
           if (!words.length) { lineY += lineHeight; continue; }
@@ -603,15 +595,25 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
           for (const word of words) {
             const testLine = line ? `${line} ${word}` : word;
             if (line && ctx.measureText(testLine).width > maxWidth) {
-              ctx.fillText(line, left, lineY);
+              ctx.fillText(line, x, lineY);
               line = word;
               lineY += lineHeight;
             } else {
               line = testLine;
             }
           }
-          if (line) { ctx.fillText(line, left, lineY); lineY += lineHeight; }
+          if (line) { ctx.fillText(line, x, lineY); lineY += lineHeight; }
         }
+        return lineY;
+      };
+
+      if (element.type === 'text') {
+        const fontSize = Math.max(10, Number(element.metadata?.fontSize || 18));
+        ctx.font = `${fontSize}px Inter, sans-serif`;
+        ctx.fillStyle = color;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        wrapText(element.label || 'Callout', left, top, Math.max(30, boxW), fontSize * 1.3);
         continue;
       }
 
@@ -623,6 +625,19 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
         ctx.ellipse(left + boxW / 2, top + boxH / 2, Math.max(1, boxW / 2), Math.max(1, boxH / 2), 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
+      } else if (element.type === 'cloud') {
+        const radius = Math.max(4, Math.min(boxW, boxH) * 0.3);
+        ctx.beginPath();
+        ctx.moveTo(left + radius, top);
+        ctx.arcTo(left + boxW, top, left + boxW, top + boxH, radius);
+        ctx.arcTo(left + boxW, top + boxH, left, top + boxH, radius);
+        ctx.arcTo(left, top + boxH, left, top, radius);
+        ctx.arcTo(left, top, left + boxW, top, radius);
+        ctx.closePath();
+        ctx.setLineDash([strokeWidth * 2.2, strokeWidth * 1.6]);
+        ctx.fill();
+        ctx.stroke();
+        ctx.setLineDash([]);
       } else {
         ctx.beginPath();
         ctx.rect(left, top, boxW, boxH);
@@ -725,7 +740,7 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
       onPlace(fromDisplay(surfacePoint(event), orientation));
       return;
     }
-    if (['line', 'arrow', 'rectangle', 'ellipse', 'measure'].includes(activeTool.type)) {
+    if (['line', 'arrow', 'rectangle', 'ellipse', 'measure', 'cloud'].includes(activeTool.type)) {
       const startDisplay = surfacePoint(event);
       drawRef.current = { pointerId: event.pointerId, startDisplay, type: activeTool.type };
       event.currentTarget.setPointerCapture(event.pointerId);
