@@ -378,7 +378,8 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate }) {
           await touchSurvey(db, element.survey_id, req.user.id);
         })();
       } catch (error) {
-        await deleteStoredFile(storageKey, 'photo', config);
+        try { await deleteStoredFile(storageKey, 'photo', config); }
+        catch (cleanupError) { console.error('Failed to clean up photo after failed upload:', cleanupError); }
         throw error;
       }
       const photo = serializePhoto(await db.prepare('SELECT * FROM element_photos WHERE id = ?').get(id));
@@ -414,7 +415,8 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate }) {
       await db.prepare('DELETE FROM element_photos WHERE id = ?').run(photo.id);
       await touchSurvey(db, photo.survey_id, req.user.id);
     })();
-    await deleteStoredFile(photo.storage_key, 'photo', config);
+    try { await deleteStoredFile(photo.storage_key, 'photo', config); }
+    catch (error) { console.error('Failed to delete stored photo:', error); }
     emitSurveyUpdate(photo.survey_id, 'photo.deleted', req.user, { elementId: photo.element_id, photoId: photo.id });
     res.json({ data: { deletedId: photo.id }, success: true });
   });
@@ -424,7 +426,7 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate }) {
 
 function validateElementInput(body = {}, partial, existingType) {
   const effectiveType = body.type !== undefined ? body.type : (partial ? existingType : 'device');
-  const isDirectionalMarkup = ['line', 'arrow', 'measure'].includes(effectiveType);
+  const isDirectionalMarkup = ['line', 'arrow', 'measure', 'text', 'callout', 'verify'].includes(effectiveType);
   const dimensionRange = isDirectionalMarkup ? { min: -10, max: 10 } : { min: 0.001, max: 10 };
   const result = {
     profileId: body.profileId === undefined

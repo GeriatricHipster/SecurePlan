@@ -101,6 +101,9 @@ export const MARKUP_TOOLS = [
   { type: 'ellipse', label: 'Ellipse', symbol: '○' },
   { type: 'text', label: 'Text callout', symbol: 'T' },
   { type: 'measure', label: 'Measure', symbol: '↔' },
+  { type: 'cloud', label: 'Cloud', symbol: '☁' },
+  { type: 'callout', label: 'Callout', symbol: '💬' },
+  { type: 'verify', label: 'Verify', symbol: '🚩' },
 ];
 
 export const DEVICE_WORKFLOW_STATUSES = [
