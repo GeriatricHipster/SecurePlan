@@ -10,7 +10,7 @@ import { exportSurveyPdf } from './surveyPdfExport.js';
 import {
   ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   Circle, Cloud, Copy, Download, Eye, FilePlus, History, Layers, ListChecks, Minus, Moon, Move, MousePointer2,
-  Pencil, Plus, RotateCw, Ruler, Save, Slash, Square, Sun, Trash2, Type, X,
+  Pencil, Plus, RotateCw, Ruler, Slash, Square, Sun, Trash2, Type, X,
 } from 'lucide-react';
 
 const HISTORY_ICONS = {
@@ -491,102 +491,11 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
   const [modal, setModal] = useState(null);
   const remoteTimer = useRef(null);
   const selectedIdRef = useRef(null);
-  const editModeRef = useRef(false);
   const planStageRef = useRef(null);
-  const canEditPermission = roleCanEdit(user.role);
-  const [editMode, setEditMode] = useState(false);
-  useEffect(() => { editModeRef.current = editMode; }, [editMode]);
-  const [savingChanges, setSavingChanges] = useState(false);
-  const pendingOpsRef = useRef([]);
-  const canEdit = canEditPermission && editMode;
+  const canEdit = roleCanEdit(user.role);
   const canAnnotate = roleCanAnnotate(user.role);
   const selected = elements.find((element) => element.id === selectedId) || null;
   const orientation = Number(survey?.rotation ?? survey?.orientation ?? 0);
-  const hasPendingChanges = pendingOpsRef.current.length > 0;
-
-  const draftApi = {
-    createElement: async (sId, values) => {
-      if (!editMode) return api.createElement(sId, values);
-      const tempId = `temp-${crypto.randomUUID()}`;
-      const now = new Date().toISOString();
-      pendingOpsRef.current = [...pendingOpsRef.current, { type: 'create', tempId, values }];
-      return { id: tempId, surveyId: sId, createdAt: now, updatedAt: now, createdBy: user.id, updatedBy: user.id, ...values };
-    },
-    updateElement: async (id, values) => {
-      if (!editMode) return api.updateElement(id, values);
-      pendingOpsRef.current = [...pendingOpsRef.current, { type: 'update', id, values }];
-      return { id, updatedAt: new Date().toISOString(), ...values };
-    },
-    deleteElement: async (id) => {
-      if (!editMode) return api.deleteElement(id);
-      pendingOpsRef.current = [...pendingOpsRef.current, { type: 'delete', id }];
-      return { deletedId: id };
-    },
-  };
-
-  const startEditing = () => {
-    if (!canEditPermission) return;
-    pendingOpsRef.current = [];
-    setEditMode(true);
-  };
-
-  const withTimeout = (promise, ms, label) => Promise.race([
-    promise,
-    new Promise((_, reject) => window.setTimeout(() => reject(new Error(`${label} took too long and timed out.`)), ms)),
-  ]);
-
-  const saveChanges = async () => {
-    if (!pendingOpsRef.current.length) { notify('No changes to save.'); return false; }
-    setSavingChanges(true);
-    const ops = pendingOpsRef.current;
-    const tempIdMap = new Map();
-    const failures = [];
-    for (const op of ops) {
-      try {
-        if (op.type === 'create') {
-          const created = await withTimeout(api.createElement(surveyId, op.values), 20000, 'Creating an element');
-          tempIdMap.set(op.tempId, created.id);
-        } else if (op.type === 'update') {
-          const realId = tempIdMap.get(op.id) || op.id;
-          if (realId.startsWith('temp-')) continue; // created and updated before ever saving; the create already carries the latest values
-          await withTimeout(api.updateElement(realId, op.values), 20000, 'Saving a change');
-        } else if (op.type === 'delete') {
-          const realId = tempIdMap.get(op.id) || op.id;
-          if (realId.startsWith('temp-')) { tempIdMap.delete(op.id); continue; } // created and deleted before ever saving; nothing to remove server-side
-          await withTimeout(api.deleteElement(realId), 20000, 'Deleting an element');
-        }
-      } catch (error) {
-        // Drop this one operation and keep going - a failed op (e.g. the element no longer exists) will never
-        // succeed on retry, so leaving it in the queue would permanently block every future save attempt.
-        failures.push(error.message);
-      }
-    }
-    pendingOpsRef.current = [];
-    if (tempIdMap.size) setElements((current) => current.map((element) => tempIdMap.has(element.id) ? { ...element, id: tempIdMap.get(element.id) } : element));
-    try { await withTimeout(reloadElements(), 20000, 'Refreshing the survey'); }
-    catch (error) { failures.push(error.message); }
-    touch();
-    setSavingChanges(false);
-    if (failures.length) {
-      notify(`Saved with ${failures.length} issue${failures.length === 1 ? '' : 's'}: ${failures[0]}`);
-      return false;
-    }
-    notify('Changes saved.');
-    return true;
-  };
-
-  const discardChanges = async () => {
-    pendingOpsRef.current = [];
-    await reloadElements();
-  };
-
-  const stopEditing = () => {
-    if (pendingOpsRef.current.length) {
-      setModal({ type: 'unsaved-changes' });
-    } else {
-      setEditMode(false);
-    }
-  };
 
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
 
@@ -667,7 +576,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
       } : current);
       window.clearTimeout(remoteTimer.current);
       remoteTimer.current = window.setTimeout(() => {
-        if (!editModeRef.current) reloadElements().catch(() => setSyncStatus('offline'));
+        reloadElements().catch(() => setSyncStatus('offline'));
         const activeElementId = selectedIdRef.current;
         if (activeElementId && (payload.elementId === activeElementId || payload.type === 'note' || payload.type === 'photo')) {
           api.notes(activeElementId).then((result) => setNotes(normalizeList(result))).catch(() => {});
@@ -697,7 +606,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
   const touch = () => setSurvey((current) => ({ ...current, updatedAt: new Date().toISOString(), lastEditor: user, lastEditedBy: user }));
 
   const createOne = async (values) => {
-    const created = normalizeElement(await draftApi.createElement(surveyId, values));
+    const created = normalizeElement(await api.createElement(surveyId, values));
     setElements((current) => [...current, created]);
     setSelectedId(created.id);
     touch();
@@ -719,7 +628,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
         const created = await Promise.all(componentsOf(activeTool).map((component) => {
           const symbol = component.symbol || itemFor(component.category, component.type)?.symbol;
           const placement = devicePlacementDefaults(component.type, symbol, component.doorFunction || doorFunction);
-          return draftApi.createElement(surveyId, {
+          return api.createElement(surveyId, {
             category: component.category || 'custom', type: component.type || 'custom', label: component.label || activeTool.name,
             x: Math.max(0, Math.min(1, point.x + Number(component.offsetX || component.offset_x || 0))), y: Math.max(0, Math.min(1, point.y + Number(component.offsetY || component.offset_y || 0))),
             width: 0.04, height: 0.04, rotation: 0, color: placement.color,
@@ -750,8 +659,8 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
     }
     try {
       const metadata = { ...targetMetadata, components: [...components, component] };
-      const updated = await draftApi.updateElement(target.id, { metadata });
-      await draftApi.deleteElement(dragged.id);
+      const updated = await api.updateElement(target.id, { metadata });
+      await api.deleteElement(dragged.id);
       setElements((current) => current
         .filter((element) => element.id !== dragged.id)
         .map((element) => element.id === target.id ? normalizeElement({ ...element, ...updated, metadata }) : element));
@@ -772,7 +681,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
       if (components.some((item) => item.category === component.category && item.type === component.type)) { notify(`${payload.label} is already part of ${target.label}.`); return; }
       try {
         const metadata = { ...targetMetadata, components: [...components, component] };
-        const updated = await draftApi.updateElement(target.id, { metadata });
+        const updated = await api.updateElement(target.id, { metadata });
         setElements((current) => current.map((element) => element.id === target.id ? normalizeElement({ ...element, ...updated, metadata }) : element));
         setSelectedId(target.id);
         touch();
@@ -790,7 +699,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
         const assemblyId = crypto.randomUUID();
         const created = await Promise.all(componentsOf(payload).map((component) => {
           const placement = devicePlacementDefaults(component.type, component.symbol, component.doorFunction || doorFunction);
-          return draftApi.createElement(surveyId, { category: component.category || 'custom', type: component.type || 'custom', label: component.label || payload.name, x: Math.max(0, Math.min(1, point.x + Number(component.offsetX || 0))), y: Math.max(0, Math.min(1, point.y + Number(component.offsetY || 0))), width: 0.04, height: 0.04, rotation: 0, color: placement.color, metadata: { ...placement.metadata, assemblyId, profileName: payload.name } });
+          return api.createElement(surveyId, { category: component.category || 'custom', type: component.type || 'custom', label: component.label || payload.name, x: Math.max(0, Math.min(1, point.x + Number(component.offsetX || 0))), y: Math.max(0, Math.min(1, point.y + Number(component.offsetY || 0))), width: 0.04, height: 0.04, rotation: 0, color: placement.color, metadata: { ...placement.metadata, assemblyId, profileName: payload.name } });
         }));
         setElements((current) => [...current, ...created.map(normalizeElement)]);
         touch();
@@ -812,7 +721,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
 
   const move = (id, x, y, commit) => {
     setElements((current) => current.map((element) => element.id === id ? { ...element, x, y } : element));
-    if (commit) draftApi.updateElement(id, { x, y }).then(touch).catch((error) => { notify(error.message); reloadElements(); });
+    if (commit) api.updateElement(id, { x, y }).then(touch).catch((error) => { notify(error.message); reloadElements(); });
   };
 
   const patchSequenceRef = useRef({});
@@ -827,7 +736,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
     setElements((current) => current.map((element) => element.id === id ? normalizeElement({ ...element, ...values }) : element));
     if (commit) {
       const sequence = nextPatchSequence(id);
-      draftApi.updateElement(id, values)
+      api.updateElement(id, values)
         .then((updated) => { if (isLatestPatch(id, sequence)) { setElements((current) => current.map((element) => element.id === id ? normalizeElement({ ...element, ...updated }) : element)); touch(); } })
         .catch((error) => { if (isLatestPatch(id, sequence)) { notify(error.message); reloadElements(); } });
     }
@@ -840,7 +749,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
     const sequence = nextPatchSequence(targetId);
     setElements((current) => current.map((element) => element.id === targetId ? normalizeElement({ ...element, ...values }) : element));
     try {
-      const updated = await draftApi.updateElement(targetId, values);
+      const updated = await api.updateElement(targetId, values);
       if (!isLatestPatch(targetId, sequence)) return;
       setElements((current) => current.map((element) => element.id === targetId ? normalizeElement({ ...element, ...updated }) : element));
       touch();
@@ -857,7 +766,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
     const sequence = nextPatchSequence(id);
     setElements((current) => current.map((element) => element.id === id ? normalizeElement({ ...element, ...values }) : element));
     try {
-      const updated = await draftApi.updateElement(id, values);
+      const updated = await api.updateElement(id, values);
       if (!isLatestPatch(id, sequence)) return;
       setElements((current) => current.map((element) => element.id === id ? normalizeElement({ ...element, ...updated }) : element));
       touch();
@@ -880,14 +789,6 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
       notify('Element duplicated.');
     } catch (error) { notify(error.message); }
   };
-
-  useEffect(() => {
-    const handleBeforeUnload = (event) => {
-      if (pendingOpsRef.current.length) { event.preventDefault(); event.returnValue = ''; }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, []);
 
   const clipboardRef = useRef(null);
 
@@ -919,7 +820,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
   const deleteSelected = async () => {
     if (!selected) return;
     try {
-      await draftApi.deleteElement(selected.id);
+      await api.deleteElement(selected.id);
       setElements((current) => current.filter((element) => element.id !== selected.id));
       setSelectedId(null);
       setModal(null);
@@ -1007,14 +908,11 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
   return (
     <main id="main-content" className="survey-editor">
       <header className="editor-header">
-        <button type="button" className="icon-button" onClick={() => { if (pendingOpsRef.current.length && !window.confirm('You have unsaved changes. Leave without saving?')) return; navigate(siteId ? `sites/${siteId}` : 'sites'); }} aria-label="Back to site"><ArrowLeft aria-hidden="true" size={18} /></button>
+        <button type="button" className="icon-button" onClick={() => navigate(siteId ? `sites/${siteId}` : 'sites')} aria-label="Back to site"><ArrowLeft aria-hidden="true" size={18} /></button>
         <div className="editor-title"><h1>{survey.name}</h1><span>Last edited by {lastEditor} · {formatWhen(survey.updatedAt || survey.updated_at)}</span></div>
         <div className="editor-header__spacer" />
         <Presence users={presence.length ? presence : [user]} status={syncStatus} />
         <div className="editor-actions">
-          {canEditPermission && !editMode && <button type="button" className="button button--primary" onClick={startEditing}><Pencil aria-hidden="true" size={16} /><span className="button-label">Edit</span></button>}
-          {canEditPermission && editMode && <button type="button" className="button button--primary" onClick={saveChanges} disabled={savingChanges || !hasPendingChanges} title={hasPendingChanges ? 'Save your changes' : 'No changes yet'}><Save aria-hidden="true" size={16} /><span className="button-label">{savingChanges ? 'Saving…' : 'Save Changes'}</span></button>}
-          {canEditPermission && editMode && <button type="button" className="button button--secondary" onClick={stopEditing}><X aria-hidden="true" size={16} /><span className="button-label">Stop Editing</span></button>}
           {canEdit && <button type="button" className="button button--ghost" onClick={rotate} title="Rotate survey clockwise"><RotateCw aria-hidden="true" size={16} /><span className="button-label">Rotate {orientation}°</span></button>}
           <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'schedule' })}><ListChecks aria-hidden="true" size={16} /><span className="button-label">Schedule</span></button>
           <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'history' })}><History aria-hidden="true" size={16} /><span className="button-label">History</span></button>
@@ -1046,14 +944,6 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
       <Modal open={modal?.type === 'history'} title="Survey history" description="Who plotted, edited, or removed items, and when." onClose={() => setModal(null)} wide>{modal?.type === 'history' && <HistoryPanel surveyId={surveyId} notify={notify} />}</Modal>
       <ProfileBuilder open={modal?.type === 'profile'} onClose={() => setModal(null)} onCreate={createProfile} />
       <ConfirmDialog open={modal?.type === 'delete-element'} title="Delete this element?" onClose={() => setModal(null)} onConfirm={deleteSelected}><p><strong>{selected?.label}</strong> and its notes and cloud photos will be permanently deleted.</p></ConfirmDialog>
-      <Modal open={modal?.type === 'unsaved-changes'} title="You have unsaved changes" onClose={() => setModal(null)}>
-        <p>Save your changes before you stop editing, or discard them to leave without saving.</p>
-        <div className="modal__actions">
-          <button type="button" className="button button--secondary" disabled={savingChanges} onClick={() => setModal(null)}>Cancel</button>
-          <button type="button" className="button button--ghost" disabled={savingChanges} onClick={async () => { await discardChanges(); setModal(null); setEditMode(false); }}>Discard changes</button>
-          <button type="button" className="button button--primary" disabled={savingChanges} onClick={async () => { const ok = await saveChanges(); setModal(null); if (ok) setEditMode(false); }}>{savingChanges ? 'Saving…' : 'Save & stop editing'}</button>
-        </div>
-      </Modal>
     </main>
   );
 }
