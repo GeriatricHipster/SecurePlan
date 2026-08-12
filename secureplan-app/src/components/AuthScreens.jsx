@@ -185,6 +185,7 @@ export function SignIn({ initialMode = 'login', onLogin, onRegister, onForgotPas
   const [values, setValues] = useState({ name: '', email: '', password: '', inviteCode: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
 
   const changeMode = (next) => {
     setMode(next);
@@ -231,11 +232,13 @@ export function SignIn({ initialMode = 'login', onLogin, onRegister, onForgotPas
         <Field label="Password" hint={mode === 'register' ? 'At least 10 characters with a letter and number.' : undefined}>
           <input required minLength={mode === 'register' ? 10 : undefined} type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={values.password} onChange={(e) => setValues({ ...values, password: e.target.value })} />
         </Field>
+        {mode === 'login' && <button type="button" className="auth-link" onClick={() => setForgotOpen(true)}>Forgot password?</button>}
         <button className="button button--primary button--wide" disabled={busy}>
           {busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Join workspace'}
         </button>
       </form>
       <p className="auth-help">Need an invitation? Ask the workspace owner or administrator to create one from the Team page.</p>
+      <ForgotPasswordModal open={forgotOpen} onClose={() => setForgotOpen(false)} onSubmit={onForgotPassword} />
     </AuthLayout>
   );
 }
