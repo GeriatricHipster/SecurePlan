@@ -154,6 +154,14 @@ export async function assertSiteAccess(db, user, siteId, minimumRole = 'viewer')
   return role;
 }
 
+export async function assertSurveyAssignment(db, user, role, surveyId) {
+  if (role !== 'viewer') return;
+  const assignment = await db
+    .prepare('SELECT 1 FROM survey_assignments WHERE survey_id = ? AND user_id = ?')
+    .get(surveyId, user.id);
+  if (!assignment) throw forbidden('You are not assigned to this survey.');
+}
+
 export function publicUser(user) {
   if (!user) return null;
   return {
