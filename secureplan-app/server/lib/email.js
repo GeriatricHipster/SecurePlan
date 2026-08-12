@@ -144,3 +144,18 @@ export function passwordResetEmailTemplate({ resetUrl }) {
     text: `Reset your SecurePlan Surveyor password: ${resetUrl} (expires in 1 hour)`,
   };
 }
+
+export function elementUpdateEmailTemplate({ senderName, elementLabel, surveyName, message, surveyUrl }) {
+  const html = emailShell('An update was flagged for you', `
+    <p><strong>${senderName || 'A teammate'}</strong> flagged an update on <strong>${elementLabel || 'a device'}</strong> in <strong>${surveyName || 'a survey'}</strong>.</p>
+    ${message ? `<p style="background:#f4f5f6;border-radius:8px;padding:14px 16px;margin:16px 0;">${message}</p>` : ''}
+    <p style="text-align:center;margin:24px 0;">
+      <a href="${surveyUrl}" style="display:inline-block;background:#b4232d;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:700;">Open survey</a>
+    </p>
+  `);
+  return {
+    subject: `${senderName || 'A teammate'} flagged an update in ${surveyName || 'a survey'}`,
+    html,
+    text: `${senderName || 'A teammate'} flagged an update on ${elementLabel || 'a device'} in ${surveyName || 'a survey'}.${message ? ` Note: ${message}` : ''} Open the survey: ${surveyUrl}`,
+  };
+}

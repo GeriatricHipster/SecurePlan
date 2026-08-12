@@ -17,7 +17,8 @@ import {
   safeFilename,
   stringValue,
 } from '../lib/validation.js';
-import { logActivity, touchSurvey } from '../db.js';
+import { logActivity, logSecurityEvent, touchSurvey } from '../db.js';
+import { sendEmail, elementUpdateEmailTemplate } from '../lib/email.js';
 
 export function createElementsRouter({ db, config, auth, emitSurveyUpdate, notifyUser }) {
   const router = Router();
@@ -185,7 +186,7 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate, notif
     await assertSiteAccess(db, req.user, survey.site_id);
     const rows = await db
       .prepare(
-        `SELECT DISTINCT u.id, u.name
+        `SELECT DISTINCT u.id, u.name, u.email
            FROM users u
            LEFT JOIN site_members sm ON sm.site_id = ? AND sm.user_id = u.id
           WHERE u.disabled_at IS NULL
@@ -210,7 +211,7 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate, notif
     const placeholders = userIds.map(() => '?').join(',');
     const validRecipients = await db
       .prepare(
-        `SELECT u.id
+        `SELECT u.id, u.email
            FROM users u
            LEFT JOIN site_members sm ON sm.site_id = ? AND sm.user_id = u.id
           WHERE u.id IN (${placeholders})
@@ -219,6 +220,17 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate, notif
             AND (u.workspace_access = 1 OR sm.user_id IS NOT NULL)`,
       )
       .all(survey.site_id, ...userIds, req.user.id);
+
+    const surveyUrl = `${config.frontendOrigin || ''}/#/surveys/${survey.id}?site=${survey.site_id}`;
+    const emailTemplate = elementUpdateEmailTemplate({
+      senderName: req.user.name,
+      elementLabel: element.label,
+      surveyName: survey.name,
+      message,
+      surveyUrl,
+    });
+    let emailsSent = 0;
+    const emailFailures = [];
 
     for (const row of validRecipients) {
       notifyUser?.(row.id, {
@@ -232,8 +244,20 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate, notif
         siteId: survey.site_id,
         senderName: req.user.name,
       });
+      if (row.email) {
+        try {
+          const result = await sendEmail(config, { to: row.email, ...emailTemplate });
+          if (result?.sent) emailsSent += 1;
+        } catch (error) {
+          console.error('Failed to send element-update notification email:', error.message);
+          emailFailures.push(row.email);
+        }
+      }
     }
-    res.json({ data: { notified: validRecipients.length }, success: true });
+    if (emailFailures.length) {
+      await logSecurityEvent(db, { eventType: 'element_notify.email_failed', severity: 'warning', userId: req.user.id, req, details: { elementId: element.id, failedRecipients: emailFailures } });
+    }
+    res.json({ data: { notified: validRecipients.length, emailsSent }, success: true });
   });
 
   router.patch('/surveys/:surveyId/elements/bulk', async (req, res) => {

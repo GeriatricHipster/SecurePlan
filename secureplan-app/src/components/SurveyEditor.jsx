@@ -224,7 +224,73 @@ function LibraryPanel({ activeTool, profiles, visibleLayers, canEdit, doorFuncti
   );
 }
 
-function DeviceLifecyclePanel({ element, canEdit, onPatch }) {
+function NotifyTeammatesButton({ element }) {
+  const [open, setOpen] = useState(false);
+  const [teammates, setTeammates] = useState([]);
+  const [selected, setSelected] = useState(new Set());
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [status, setStatus] = useState('');
+
+  const openPicker = async () => {
+    setOpen(true);
+    setStatus('');
+    try { setTeammates(normalizeList(await api.notifyRecipients(element.id))); }
+    catch { setTeammates([]); }
+  };
+
+  const toggle = (id) => setSelected((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const send = async () => {
+    if (!selected.size) return;
+    setSending(true);
+    try {
+      const result = await api.notifyAboutElement(element.id, { userIds: [...selected], message: message.trim() || undefined });
+      const count = result?.notified ?? selected.size;
+      const emailNote = result?.emailsSent ? `, ${result.emailsSent} by email` : '';
+      setStatus(`Notified ${count} teammate${count === 1 ? '' : 's'}${emailNote}.`);
+      setSelected(new Set());
+      setMessage('');
+    } catch (error) { setStatus(error.message); }
+    finally { setSending(false); }
+  };
+
+  return (
+    <div className="notify-teammates">
+      <button type="button" className="button button--secondary" onClick={() => (open ? setOpen(false) : openPicker())}>
+        <Bell aria-hidden="true" size={15} /> Notify teammates
+      </button>
+      {open && (
+        <div className="notify-teammates__panel">
+          {teammates.length === 0
+            ? <p className="muted">No teammates found.</p>
+            : (
+              <div className="notify-teammates__list">
+                {teammates.map((member) => (
+                  <label key={member.id}>
+                    <input type="checkbox" checked={selected.has(member.id)} onChange={() => toggle(member.id)} />
+                    <span>{member.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          <textarea rows="2" placeholder="Optional note (e.g. what changed)" value={message} onChange={(event) => setMessage(event.target.value)} />
+          <div className="notify-teammates__actions">
+            <button type="button" className="button button--ghost" onClick={() => setOpen(false)}>Cancel</button>
+            <button type="button" className="button button--primary" disabled={sending || !selected.size} onClick={send}>{sending ? 'Sending…' : 'Send notification'}</button>
+          </div>
+          {status && <p className="notify-teammates__status">{status}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DeviceLifecyclePanel({ element, canAnnotate, onPatch }) {
   const metadata = metadataOf(element);
   const asset = metadata.asset || {};
   const [form, setForm] = useState({});
@@ -247,20 +313,20 @@ function DeviceLifecyclePanel({ element, canEdit, onPatch }) {
   return <section className="device-lifecycle" aria-label="Device lifecycle">
     <div className="section-title"><h3>Lifecycle & field status</h3><span className="workflow-badge" style={{ '--workflow-color': workflowStatusFor({ metadata: { ...metadata, workflowStatus: form.workflowStatus } }).color, '--workflow-text-color': workflowStatusFor({ metadata: { ...metadata, workflowStatus: form.workflowStatus } }).textColor }}>{workflowStatusFor({ metadata: { ...metadata, workflowStatus: form.workflowStatus } }).label}</span></div>
     <div className="form-grid form-grid--two">
-      <Field label="Installation status"><select value={form.workflowStatus || 'planned'} disabled={!canEdit} onChange={(event) => { const workflowStatus = event.target.value; update('workflowStatus', workflowStatus); onPatch({ metadata: { ...metadata, workflowStatus } }); }}>{DEVICE_WORKFLOW_STATUSES.map((status) => <option key={status.id} value={status.id}>{status.label}</option>)}</select></Field>
-      <Field label="Assigned to"><input value={form.assignee || ''} disabled={!canEdit} placeholder="Technician or vendor" onChange={(event) => update('assignee', event.target.value)} onBlur={() => saveWorkflow('assignee')} /></Field>
-      <Field label="Target date"><input type="date" value={form.dueDate || ''} disabled={!canEdit} onChange={(event) => update('dueDate', event.target.value)} onBlur={() => saveWorkflow('dueDate')} /></Field>
+      <Field label="Installation status"><select value={form.workflowStatus || 'planned'} disabled={!canAnnotate} onChange={(event) => { const workflowStatus = event.target.value; update('workflowStatus', workflowStatus); onPatch({ metadata: { ...metadata, workflowStatus } }); }}>{DEVICE_WORKFLOW_STATUSES.map((status) => <option key={status.id} value={status.id}>{status.label}</option>)}</select></Field>
+      <Field label="Assigned to"><input value={form.assignee || ''} disabled={!canAnnotate} placeholder="Technician or vendor" onChange={(event) => update('assignee', event.target.value)} onBlur={() => saveWorkflow('assignee')} /></Field>
+      <Field label="Target date"><input type="date" value={form.dueDate || ''} disabled={!canAnnotate} onChange={(event) => update('dueDate', event.target.value)} onBlur={() => saveWorkflow('dueDate')} /></Field>
       <Field label="Progress"><div className="workflow-progress"><span style={{ width: `${workflowStatusFor({ metadata: { workflowStatus: form.workflowStatus } }).progress}%`, backgroundColor: workflowStatusFor({ metadata: { workflowStatus: form.workflowStatus } }).color }} /><output>{workflowStatusFor({ metadata: { workflowStatus: form.workflowStatus } }).progress}%</output></div></Field>
     </div>
     <details className="asset-record"><summary><strong>Asset record</strong><span>Manufacturer, model, serial, network and warranty</span></summary><div className="form-grid form-grid--two">
-      <Field label="Manufacturer"><input value={form.manufacturer || ''} disabled={!canEdit} onChange={(event) => update('manufacturer', event.target.value)} onBlur={() => saveAsset('manufacturer')} /></Field>
-      <Field label="Model"><input value={form.model || ''} disabled={!canEdit} onChange={(event) => update('model', event.target.value)} onBlur={() => saveAsset('model')} /></Field>
-      <Field label="Part number"><input value={form.partNumber || ''} disabled={!canEdit} onChange={(event) => update('partNumber', event.target.value)} onBlur={() => saveAsset('partNumber')} /></Field>
-      <Field label="Serial number"><input value={form.serialNumber || ''} disabled={!canEdit} onChange={(event) => update('serialNumber', event.target.value)} onBlur={() => saveAsset('serialNumber')} /></Field>
-      <Field label="IP address"><input value={form.ipAddress || ''} disabled={!canEdit} inputMode="decimal" onChange={(event) => update('ipAddress', event.target.value)} onBlur={() => saveAsset('ipAddress')} /></Field>
-      <Field label="MAC address"><input value={form.macAddress || ''} disabled={!canEdit} autoCapitalize="characters" onChange={(event) => update('macAddress', event.target.value)} onBlur={() => saveAsset('macAddress')} /></Field>
-      <Field label="Installed"><input type="date" value={form.installDate || ''} disabled={!canEdit} onChange={(event) => update('installDate', event.target.value)} onBlur={() => saveAsset('installDate')} /></Field>
-      <Field label="Warranty expires"><input type="date" value={form.warrantyExpiry || ''} disabled={!canEdit} onChange={(event) => update('warrantyExpiry', event.target.value)} onBlur={() => saveAsset('warrantyExpiry')} /></Field>
+      <Field label="Manufacturer"><input value={form.manufacturer || ''} disabled={!canAnnotate} onChange={(event) => update('manufacturer', event.target.value)} onBlur={() => saveAsset('manufacturer')} /></Field>
+      <Field label="Model"><input value={form.model || ''} disabled={!canAnnotate} onChange={(event) => update('model', event.target.value)} onBlur={() => saveAsset('model')} /></Field>
+      <Field label="Part number"><input value={form.partNumber || ''} disabled={!canAnnotate} onChange={(event) => update('partNumber', event.target.value)} onBlur={() => saveAsset('partNumber')} /></Field>
+      <Field label="Serial number"><input value={form.serialNumber || ''} disabled={!canAnnotate} onChange={(event) => update('serialNumber', event.target.value)} onBlur={() => saveAsset('serialNumber')} /></Field>
+      <Field label="IP address"><input value={form.ipAddress || ''} disabled={!canAnnotate} inputMode="decimal" onChange={(event) => update('ipAddress', event.target.value)} onBlur={() => saveAsset('ipAddress')} /></Field>
+      <Field label="MAC address"><input value={form.macAddress || ''} disabled={!canAnnotate} autoCapitalize="characters" onChange={(event) => update('macAddress', event.target.value)} onBlur={() => saveAsset('macAddress')} /></Field>
+      <Field label="Installed"><input type="date" value={form.installDate || ''} disabled={!canAnnotate} onChange={(event) => update('installDate', event.target.value)} onBlur={() => saveAsset('installDate')} /></Field>
+      <Field label="Warranty expires"><input type="date" value={form.warrantyExpiry || ''} disabled={!canAnnotate} onChange={(event) => update('warrantyExpiry', event.target.value)} onBlur={() => saveAsset('warrantyExpiry')} /></Field>
     </div></details>
   </section>;
 }
@@ -374,7 +440,7 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
             </fieldset>
           )}
           {element.category !== 'markup' && Array.isArray(metadata.components) && metadata.components.length > 0 && <fieldset className="assembly-components"><legend>Attached components</legend>{metadata.components.map((component, index) => <div key={`${component.type}-${index}`}><span><strong>{component.symbol}</strong> {component.label}</span>{canEdit && <button type="button" className="icon-button" aria-label={`Remove ${component.label}`} onClick={() => onPatch({ metadata: { ...metadata, components: metadata.components.filter((_, itemIndex) => itemIndex !== index) } })}>×</button>}</div>)}</fieldset>}
-          {element.category !== 'markup' && <DeviceLifecyclePanel element={element} canEdit={canEdit} onPatch={onPatch} />}
+          {element.category !== 'markup' && <DeviceLifecyclePanel element={element} canAnnotate={canAnnotate} onPatch={onPatch} />}
           <p className="edit-attribution">Last edited by {element.updatedBy?.name || element.updated_by_name || 'a team member'} · {formatWhen(element.updatedAt || element.updated_at)}</p>
           {canEdit && <div className="button-group button-group--wide"><button type="button" className="button button--secondary" onClick={onDuplicate}>Duplicate</button><button type="button" className="button button--ghost danger-text" onClick={onDelete}>Delete</button></div>}
         </section>
