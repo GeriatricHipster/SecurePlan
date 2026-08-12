@@ -84,7 +84,103 @@ export function OwnerSetup({ onSubmit, setupCodeRequired = false }) {
   );
 }
 
-export function SignIn({ initialMode = 'login', onLogin, onRegister }) {
+export function ResetPassword({ token, onSubmit, onDone }) {
+  const [password, setPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setError('');
+    if (password !== confirmation) { setError('The passwords do not match.'); return; }
+    setBusy(true);
+    try {
+      await onSubmit({ token, password });
+      setDone(true);
+    } catch (submitError) {
+      setError(submitError.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!token) {
+    return (
+      <AuthLayout eyebrow="Reset password" title="Link missing" copy="This reset link is incomplete. Request a new one from the sign-in screen.">
+        <button type="button" className="button button--primary button--wide" onClick={onDone}>Back to sign in</button>
+      </AuthLayout>
+    );
+  }
+
+  if (done) {
+    return (
+      <AuthLayout eyebrow="Reset password" title="Password updated" copy="Your password has been changed. Sign in with your new password.">
+        <button type="button" className="button button--primary button--wide" onClick={onDone}>Back to sign in</button>
+      </AuthLayout>
+    );
+  }
+
+  return (
+    <AuthLayout eyebrow="Reset password" title="Choose a new password" copy="This link works once and expires after an hour.">
+      <form className="stack-form" onSubmit={submit}>
+        <ErrorNotice message={error} />
+        <Field label="New password" hint="At least 10 characters with a letter and number.">
+          <input required minLength="10" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </Field>
+        <Field label="Confirm new password"><input required minLength="10" type="password" autoComplete="new-password" value={confirmation} onChange={(e) => setConfirmation(e.target.value)} /></Field>
+        <button className="button button--primary button--wide" disabled={busy}>{busy ? 'Saving…' : 'Reset password'}</button>
+      </form>
+    </AuthLayout>
+  );
+}
+
+function ForgotPasswordModal({ open, onClose, onSubmit }) {
+  const [email, setEmail] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  if (!open) return null;
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setError('');
+    setBusy(true);
+    try {
+      await onSubmit(email);
+      setSent(true);
+    } catch (submitError) {
+      setError(submitError.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const close = () => { setSent(false); setEmail(''); setError(''); onClose(); };
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={close}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Reset your password" onClick={(event) => event.stopPropagation()}>
+        <div className="modal__header"><h2>Reset your password</h2><button type="button" className="icon-button" onClick={close} aria-label="Close">×</button></div>
+        <div className="modal__body">
+          {sent ? (
+            <p>If an account exists for that email, we've sent a link to reset the password. It expires in 1 hour.</p>
+          ) : (
+            <form className="stack-form" onSubmit={submit}>
+              <ErrorNotice message={error} />
+              <Field label="Work email"><input required autoFocus type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
+              <button className="button button--primary button--wide" disabled={busy}>{busy ? 'Sending…' : 'Send reset link'}</button>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function SignIn({ initialMode = 'login', onLogin, onRegister, onForgotPassword }) {
   const [mode, setMode] = useState(initialMode);
   const [values, setValues] = useState({ name: '', email: '', password: '', inviteCode: '' });
   const [error, setError] = useState('');

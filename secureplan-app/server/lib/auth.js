@@ -34,6 +34,14 @@ export function createInviteCode() {
   return `${compact.slice(0, 4)}-${compact.slice(4, 8)}-${compact.slice(8, 12)}`;
 }
 
+export function createResetToken() {
+  return crypto.randomBytes(32).toString('base64url');
+}
+
+export function hashResetToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+
 export function signSession(user, config) {
   return jwt.sign({ sub: user.id, tokenVersion: user.token_version || 0 }, config.jwtSecret, {
     expiresIn: config.jwtExpiresIn,
@@ -144,14 +152,6 @@ export async function assertSiteAccess(db, user, siteId, minimumRole = 'viewer')
   if (!role) throw forbidden('You do not have access to this site.');
   if (!hasRole(role, minimumRole)) throw forbidden();
   return role;
-}
-
-export async function assertSurveyAssignment(db, user, role, surveyId) {
-  if (role !== 'viewer') return;
-  const assigned = await db
-    .prepare('SELECT 1 FROM survey_assignments WHERE survey_id = ? AND user_id = ?')
-    .get(surveyId, user.id);
-  if (!assigned) throw forbidden('You are not assigned to this survey.');
 }
 
 export function publicUser(user) {
