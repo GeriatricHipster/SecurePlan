@@ -84,6 +84,8 @@ export function createConfig(overrides = {}) {
     azureClientId: overrides.azureClientId ?? process.env.AZURE_CLIENT_ID ?? '',
     azureClientSecret: overrides.azureClientSecret ?? process.env.AZURE_CLIENT_SECRET ?? '',
     emailFromMailbox: overrides.emailFromMailbox ?? process.env.EMAIL_FROM_MAILBOX ?? '',
+    resendApiKey: overrides.resendApiKey ?? process.env.RESEND_API_KEY ?? '',
+    resendFrom: overrides.resendFrom ?? process.env.RESEND_FROM ?? '',
     trustProxy: parseTrustProxy(overrides.trustProxy ?? process.env.TRUST_PROXY, nodeEnv === 'production' ? 1 : false),
     staticDir: path.resolve(
       overrides.staticDir || process.env.STATIC_DIR || path.join(serverDirectory, '..', 'dist'),

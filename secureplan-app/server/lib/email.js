@@ -24,11 +24,15 @@ async function getGraphAccessToken(config) {
   return cachedToken;
 }
 
-export async function sendEmail(config, { to, subject, html, text }) {
-  if (!config.azureTenantId || !config.azureClientId || !config.azureClientSecret || !config.emailFromMailbox) {
-    console.warn(`Microsoft Graph email is not configured; skipping email to ${to} ("${subject}").`);
-    return { skipped: true };
-  }
+function isGraphConfigured(config) {
+  return Boolean(config.azureTenantId && config.azureClientId && config.azureClientSecret && config.emailFromMailbox);
+}
+
+function isResendConfigured(config) {
+  return Boolean(config.resendApiKey);
+}
+
+async function sendViaGraph(config, { to, subject, html }) {
   const accessToken = await getGraphAccessToken(config);
   const response = await fetch(
     `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(config.emailFromMailbox)}/sendMail`,
@@ -50,9 +54,41 @@ export async function sendEmail(config, { to, subject, html, text }) {
   );
   if (!response.ok) {
     const body = await response.text().catch(() => '');
-    throw new Error(`Email send failed (${response.status}): ${body.slice(0, 300)}`);
+    throw new Error(`Email send failed via Microsoft Graph (${response.status}): ${body.slice(0, 300)}`);
   }
-  return { sent: true };
+  return { sent: true, provider: 'graph' };
+}
+
+async function sendViaResend(config, { to, subject, html, text }) {
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${config.resendApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: config.resendFrom || 'SecurePlan Surveyor <onboarding@resend.dev>',
+      to,
+      subject,
+      html,
+      text,
+    }),
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`Email send failed via Resend (${response.status}): ${body.slice(0, 300)}`);
+  }
+  return { sent: true, provider: 'resend' };
+}
+
+export async function sendEmail(config, { to, subject, html, text }) {
+  // Prefer Microsoft Graph (the university's own M365 tenant) whenever it's configured.
+  // Resend is a temporary fallback while the Azure app registration is pending with IT -
+  // once Graph is configured, it's used automatically with no code changes needed.
+  if (isGraphConfigured(config)) return sendViaGraph(config, { to, subject, html });
+  if (isResendConfigured(config)) return sendViaResend(config, { to, subject, html, text });
+  console.warn(`No email provider is configured (Graph or Resend); skipping email to ${to} ("${subject}").`);
+  return { skipped: true };
 }
 
 function emailShell(title, bodyHtml) {
