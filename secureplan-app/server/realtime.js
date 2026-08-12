@@ -1,4 +1,5 @@
 import { Server } from 'socket.io';
+import crypto from 'node:crypto';
 import { assertSiteAccess, parseCookies, publicUser } from './lib/auth.js';
 import { getSurvey } from './lib/resources.js';
 
@@ -118,6 +119,15 @@ export function createRealtimeServer(httpServer, { db, config, auth }) {
     io.in(userRoom(userId)).disconnectSockets(true);
   }
 
+  function notifyUser(userId, notification) {
+    if (typeof userId !== 'string') return;
+    io.to(userRoom(userId)).emit('user:notification', {
+      id: crypto.randomUUID(),
+      at: new Date().toISOString(),
+      ...notification,
+    });
+  }
+
   // Site rooms are useful for folder/survey lists. Authorization is checked before joining.
   io.on('connection', (socket) => {
     socket.on('site:join', async (input, acknowledge = () => {}) => {
@@ -137,7 +147,7 @@ export function createRealtimeServer(httpServer, { db, config, auth }) {
     });
   });
 
-  return { io, emitSurveyUpdate, emitSiteUpdate, disconnectUser };
+  return { io, emitSurveyUpdate, emitSiteUpdate, disconnectUser, notifyUser };
 }
 
 function leaveSurvey(io, presence, socket, surveyId) {

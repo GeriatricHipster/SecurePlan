@@ -381,6 +381,8 @@ export const api = {
     return request(`/api/activity${suffix ? `?${suffix}` : ''}`);
   },
   dashboardSummary: () => request('/api/dashboard-summary'),
+  notifyAboutElement: (elementId, values) => request(`/api/elements/${elementId}/notify`, json('POST', values)),
+  notifyRecipients: (elementId) => request(`/api/elements/${elementId}/notify-recipients`),
   securityEvents: (limit = 100) => request(`/api/security-events?limit=${limit}`),
   site: (id) => request(`/api/sites/${id}`),
   createSite: (values) => request('/api/sites', json('POST', values)),

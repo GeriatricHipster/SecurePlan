@@ -99,7 +99,7 @@ export function createApplication(overrides = {}) {
       });
     },
   });
-  app.use(['/api/auth/setup', '/api/auth/login', '/api/auth/register'], authLimiter);
+  app.use(['/api/auth/setup', '/api/auth/login', '/api/auth/register', '/api/auth/forgot-password', '/api/auth/reset-password'], authLimiter);
 
   app.get('/api/health/live', (_req, res) => {
     res.json({ data: { status: 'ok', time: new Date().toISOString(), uptimeSeconds: Math.floor(process.uptime()) } });
@@ -160,6 +160,7 @@ export function createApplication(overrides = {}) {
     emitSurveyUpdate: realtime.emitSurveyUpdate,
     emitSiteUpdate: realtime.emitSiteUpdate,
     disconnectUser: realtime.disconnectUser,
+    notifyUser: realtime.notifyUser,
   };
   app.use('/api', createAuthRouter(routerContext));
   app.use('/api', createSitesRouter(routerContext));

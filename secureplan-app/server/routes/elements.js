@@ -19,7 +19,7 @@ import {
 } from '../lib/validation.js';
 import { logActivity, touchSurvey } from '../db.js';
 
-export function createElementsRouter({ db, config, auth, emitSurveyUpdate }) {
+export function createElementsRouter({ db, config, auth, emitSurveyUpdate, notifyUser }) {
   const router = Router();
   const photoUpload = multer({
     dest: config.temporaryFilesDir,
@@ -178,6 +178,63 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate }) {
   };
   router.patch('/elements/:elementId', updateElement);
   router.patch('/devices/:elementId', updateElement);
+
+  router.get('/elements/:elementId/notify-recipients', async (req, res) => {
+    const element = await getElement(db, idValue(req.params.elementId, 'elementId'));
+    const survey = await getSurvey(db, element.survey_id);
+    await assertSiteAccess(db, req.user, survey.site_id);
+    const rows = await db
+      .prepare(
+        `SELECT DISTINCT u.id, u.name
+           FROM users u
+           LEFT JOIN site_members sm ON sm.site_id = ? AND sm.user_id = u.id
+          WHERE u.disabled_at IS NULL
+            AND u.id != ?
+            AND (u.workspace_access = 1 OR sm.user_id IS NOT NULL)
+          ORDER BY u.name COLLATE NOCASE`,
+      )
+      .all(survey.site_id, req.user.id);
+    res.json({ data: rows, recipients: rows });
+  });
+
+  router.post('/elements/:elementId/notify', async (req, res) => {
+    const element = await getElement(db, idValue(req.params.elementId, 'elementId'));
+    const survey = await getSurvey(db, element.survey_id);
+    await assertSiteAccess(db, req.user, survey.site_id);
+    const userIds = jsonArray(req.body?.userIds, 'userIds')
+      .filter((value) => typeof value === 'string')
+      .slice(0, 20);
+    const message = req.body?.message ? stringValue(req.body.message, 'message', { max: 300 }) : null;
+    if (!userIds.length) throw badRequest('Select at least one teammate to notify.');
+
+    const placeholders = userIds.map(() => '?').join(',');
+    const validRecipients = await db
+      .prepare(
+        `SELECT u.id
+           FROM users u
+           LEFT JOIN site_members sm ON sm.site_id = ? AND sm.user_id = u.id
+          WHERE u.id IN (${placeholders})
+            AND u.disabled_at IS NULL
+            AND u.id != ?
+            AND (u.workspace_access = 1 OR sm.user_id IS NOT NULL)`,
+      )
+      .all(survey.site_id, ...userIds, req.user.id);
+
+    for (const row of validRecipients) {
+      notifyUser?.(row.id, {
+        type: 'element.notify',
+        title: `${req.user.name || 'A teammate'} flagged an update`,
+        body: message || `${element.label || 'A device'} was updated on "${survey.name}".`,
+        elementId: element.id,
+        elementLabel: element.label,
+        surveyId: survey.id,
+        surveyName: survey.name,
+        siteId: survey.site_id,
+        senderName: req.user.name,
+      });
+    }
+    res.json({ data: { notified: validRecipients.length }, success: true });
+  });
 
   router.patch('/surveys/:surveyId/elements/bulk', async (req, res) => {
     const survey = await getSurvey(db, idValue(req.params.surveyId, 'surveyId'));

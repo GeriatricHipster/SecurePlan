@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from './api.js';
-import { OwnerSetup, SignIn } from './components/AuthScreens.jsx';
+import { io } from 'socket.io-client';
+import { api, nativeTransport } from './api.js';
+import { OwnerSetup, ResetPassword, SignIn } from './components/AuthScreens.jsx';
 import { Brand, Modal, Spinner, initials } from './components/Common.jsx';
 import HomeDashboard from './components/HomeDashboard.jsx';
 import SitesDashboard from './components/SitesDashboard.jsx';
@@ -8,7 +9,7 @@ import SiteWorkspace from './components/SiteWorkspace.jsx';
 import TeamPage from './components/TeamPage.jsx';
 import InstallAppPrompt from './components/InstallAppPrompt.jsx';
 import FullScreenToggle from './components/FullScreenToggle.jsx';
-import { ChevronDown, FileText, Home as HomeIcon, LayoutGrid, MapPin, Moon, Search, Sun, Users } from 'lucide-react';
+import { Bell, ChevronDown, FileText, Home as HomeIcon, LayoutGrid, MapPin, Moon, Search, Sun, Users, X as XIcon } from 'lucide-react';
 const SurveyEditor = lazy(() => import('./components/SurveyEditor.jsx'));
 
 const THEME_STORAGE_KEY = 'secureplan-theme';
@@ -29,6 +30,10 @@ function routeFromHash() {
     return { page: 'survey', surveyId: parts[1].split('?')[0], siteId: params.get('site') || '' };
   }
   if (parts[0] === 'team') return { page: 'team' };
+  if (parts[0] === 'reset-password') {
+    const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
+    return { page: 'reset-password', token: params.get('token') || '' };
+  }
   return { page: 'home' };
 }
 
@@ -181,6 +186,31 @@ function MobileNav({ route, user }) {
   );
 }
 
+function playNotificationChime() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    const now = ctx.currentTime;
+    [660, 880].forEach((freq, index) => {
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, now + index * 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.2, now + index * 0.12 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + index * 0.12 + 0.25);
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      oscillator.start(now + index * 0.12);
+      oscillator.stop(now + index * 0.12 + 0.3);
+    });
+    window.setTimeout(() => ctx.close(), 700);
+  } catch {
+    // Sound is a nice-to-have - fail silently if the browser blocks audio (e.g. no user interaction yet).
+  }
+}
+
 export default function App() {
   const [status, setStatus] = useState('loading');
   const [setupRequired, setSetupRequired] = useState(false);
@@ -190,6 +220,7 @@ export default function App() {
   const [toast, setToast] = useState('');
   const [theme, setTheme] = useState(initialTheme);
   const [isOnline, setIsOnline] = useState(window.navigator.onLine);
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -219,6 +250,33 @@ export default function App() {
       window.removeEventListener('offline', onOffline);
     };
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+    const socketOptions = {
+      withCredentials: !nativeTransport.isNative,
+      ...(nativeTransport.isNative ? { auth: { token: nativeTransport.sessionToken() } } : {}),
+    };
+    const socket = nativeTransport.isNative ? io(nativeTransport.apiOrigin, socketOptions) : io(socketOptions);
+    socket.on('user:notification', (notification) => {
+      setNotifications((current) => [notification, ...current].slice(0, 5));
+      playNotificationChime();
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
+        try {
+          const browserNotification = new Notification(notification.title || 'SecurePlan', { body: notification.body, tag: notification.id });
+          browserNotification.onclick = () => { window.focus(); browserNotification.close(); };
+        } catch {
+          // Some environments (certain native webviews) don't support the Notification API - fail silently.
+        }
+      }
+    });
+    return () => socket.disconnect();
+  }, [user?.id]);
+
+  const dismissNotification = (id) => setNotifications((current) => current.filter((item) => item.id !== id));
 
   useEffect(() => {
     const pageName = {
@@ -305,12 +363,16 @@ export default function App() {
     );
   }
 
+  if (route.page === 'reset-password') {
+    return <ResetPassword token={route.token} onSubmit={(values) => api.resetPassword(values)} onDone={() => navigate('home')} />;
+  }
+
   if (setupRequired) {
     return <OwnerSetup setupCodeRequired={setupCodeRequired} onSubmit={(values) => authenticate(api.setupOwner, values)} />;
   }
 
   if (!user) {
-    return <SignIn onLogin={(values) => authenticate(api.login, values)} onRegister={(values) => authenticate(api.register, values)} />;
+    return <SignIn onLogin={(values) => authenticate(api.login, values)} onRegister={(values) => authenticate(api.register, values)} onForgotPassword={(email) => api.forgotPassword(email)} />;
   }
 
   return (
@@ -329,6 +391,23 @@ export default function App() {
         {route.page === 'team' && <TeamPage {...context} />}
         <MobileNav route={route} user={user} />
         <InstallAppPrompt />
+        {notifications.length > 0 && (
+          <div className="notification-stack" role="region" aria-label="Notifications">
+            {notifications.map((notification) => (
+              <div key={notification.id} className="notification-card">
+                <span className="notification-card__icon" aria-hidden="true"><Bell size={16} /></span>
+                <div className="notification-card__body">
+                  <strong>{notification.title}</strong>
+                  <p>{notification.body}</p>
+                  {notification.surveyId && (
+                    <button type="button" className="notification-card__view" onClick={() => { dismissNotification(notification.id); navigate(`surveys/${notification.surveyId}?site=${notification.siteId}`); }}>View survey</button>
+                  )}
+                </div>
+                <button type="button" className="notification-card__dismiss" onClick={() => dismissNotification(notification.id)} aria-label="Dismiss notification"><XIcon size={14} /></button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className={`toast ${toast ? 'toast--visible' : ''}`} role="status" aria-live="polite">{toast}</div>
       </div>
     </>

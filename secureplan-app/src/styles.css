@@ -459,6 +459,78 @@ h3 {
   transform: translateY(0);
 }
 
+.notification-stack {
+  position: fixed;
+  z-index: 2100;
+  top: calc(16px + env(safe-area-inset-top));
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(360px, calc(100vw - 32px));
+}
+
+.notification-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  animation: notification-in .2s ease-out;
+}
+
+@keyframes notification-in {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.notification-card__icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--red-soft);
+  color: var(--red-dark);
+  place-items: center;
+}
+
+.notification-card__body strong {
+  display: block;
+  color: var(--ink);
+  font-size: .86rem;
+}
+
+.notification-card__body p {
+  margin: 3px 0 6px;
+  color: var(--ink-soft);
+  font-size: .8rem;
+  line-height: 1.4;
+}
+
+.notification-card__view {
+  padding: 5px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  font-size: .76rem;
+  font-weight: 700;
+}
+
+.notification-card__dismiss {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  place-items: center;
+}
+
 /* Authentication */
 
 .auth-page {
@@ -3282,6 +3354,74 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--page);
+}
+
+.notify-teammates {
+  position: relative;
+  margin-top: 12px;
+}
+
+.notify-teammates__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.notify-teammates__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.notify-teammates__list label {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 4px;
+  border-radius: 7px;
+  font-size: .85rem;
+  cursor: pointer;
+}
+
+.notify-teammates__list label:hover {
+  background: var(--surface-soft);
+}
+
+.notify-teammates__list input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--red);
+}
+
+.notify-teammates__panel textarea {
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--page);
+  color: var(--ink);
+  font-size: .85rem;
+}
+
+.notify-teammates__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.notify-teammates__status {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: .8rem;
 }
 
 .workflow-progress > span {
