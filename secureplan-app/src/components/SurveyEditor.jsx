@@ -460,7 +460,7 @@ function ReportsPanel({ surveyId, canAnnotate, notify }) {
         ) : reports.map((report) => (
           <div key={report.id} className="report-card">
             <button type="button" className="report-card__header" onClick={() => setExpandedId((current) => current === report.id ? null : report.id)}>
-              <span className="report-card__title">{report.title}</span>
+              <span className="report-card__title">{report.title}{report.createdByName && <small className="report-card__by"> — {report.createdByName}</small>}</span>
               {report.photos.length > 0 && <span className="report-card__photo-count"><Cloud aria-hidden="true" size={12} /> {report.photos.length}</span>}
               <time>{formatWhen(report.createdAt)}</time>
             </button>

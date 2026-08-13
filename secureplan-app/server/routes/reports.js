@@ -25,6 +25,7 @@ function serializeReport(row, photos) {
     id: row.id,
     surveyId: row.survey_id,
     createdBy: row.created_by,
+    createdByName: row.created_by_name || null,
     title: row.title,
     bodyText: row.report_text,
     photos: photos.map(serializeReportPhoto),
@@ -46,7 +47,13 @@ export function createReportsRouter({ db, config, auth }) {
     const role = await assertSiteAccess(db, req.user, survey.site_id);
     await assertSurveyAssignment(db, req.user, role, survey.id);
     const reportRows = await db
-      .prepare('SELECT * FROM survey_reports WHERE survey_id = ? ORDER BY created_at DESC')
+      .prepare(
+        `SELECT r.*, u.name AS created_by_name
+           FROM survey_reports r
+           LEFT JOIN users u ON u.id = r.created_by
+          WHERE r.survey_id = ?
+          ORDER BY r.created_at DESC`,
+      )
       .all(survey.id);
     const reports = [];
     for (const reportRow of reportRows) {
@@ -105,6 +112,7 @@ export function createReportsRouter({ db, config, auth }) {
       await logActivity(db, { surveyId: survey.id, siteId: survey.site_id, actorId: req.user.id, action: 'report.created', details: { reportId: id, photoCount: photoRows.length } });
 
       const reportRow = await db.prepare('SELECT * FROM survey_reports WHERE id = ?').get(id);
+      reportRow.created_by_name = req.user.name;
       res.status(201).json({ data: serializeReport(reportRow, photoRows) });
     } catch (error) {
       files.forEach(cleanTemporaryUpload);

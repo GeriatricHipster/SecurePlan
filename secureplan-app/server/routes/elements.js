@@ -119,9 +119,12 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate, notif
   router.post('/elements', createElement);
   router.post('/devices', createElement);
 
+  const PLAN_EDITING_KEYS = ['x', 'y', 'width', 'height', 'rotation', 'color', 'profileId', 'category', 'type', 'zIndex'];
   const updateElement = async (req, res) => {
     const element = await getElement(db, idValue(req.params.elementId, 'elementId'));
-    await assertSiteAccess(db, req.user, element.site_id, 'editor');
+    const bodyKeys = Object.keys(req.body || {});
+    const touchesPlanEditing = bodyKeys.some((key) => PLAN_EDITING_KEYS.includes(key));
+    await assertSiteAccess(db, req.user, element.site_id, touchesPlanEditing ? 'editor' : 'installer');
     const values = validateElementInput(req.body, true, element.type);
     const merged = {
       profileId: values.profileId === undefined ? element.profile_id : values.profileId,
