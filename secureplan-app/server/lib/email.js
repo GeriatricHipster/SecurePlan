@@ -40,7 +40,7 @@ function isGmailConfigured(config) {
   return Boolean(config.gmailUser && config.gmailAppPassword);
 }
 
-async function sendViaGraph(config, { to, subject, html }) {
+async function sendViaGraph(config, { to, subject, html, attachments }) {
   const accessToken = await getGraphAccessToken(config);
   const response = await fetch(
     `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(config.emailFromMailbox)}/sendMail`,
@@ -55,6 +55,12 @@ async function sendViaGraph(config, { to, subject, html }) {
           subject,
           body: { contentType: 'HTML', content: html },
           toRecipients: [{ emailAddress: { address: to } }],
+          attachments: (attachments || []).map((attachment) => ({
+            '@odata.type': '#microsoft.graph.fileAttachment',
+            name: attachment.filename,
+            contentType: attachment.contentType,
+            contentBytes: attachment.buffer.toString('base64'),
+          })),
         },
         saveToSentItems: false,
       }),
@@ -67,7 +73,7 @@ async function sendViaGraph(config, { to, subject, html }) {
   return { sent: true, provider: 'graph' };
 }
 
-async function sendViaResend(config, { to, subject, html, text }) {
+async function sendViaResend(config, { to, subject, html, text, attachments }) {
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -80,6 +86,10 @@ async function sendViaResend(config, { to, subject, html, text }) {
       subject,
       html,
       text,
+      attachments: (attachments || []).map((attachment) => ({
+        filename: attachment.filename,
+        content: attachment.buffer.toString('base64'),
+      })),
     }),
   });
   if (!response.ok) {
@@ -109,7 +119,11 @@ async function sendViaGmail(config, { to, subject, html, text, attachments }) {
       subject,
       html,
       text,
-      attachments,
+      attachments: (attachments || []).map((attachment) => ({
+        filename: attachment.filename,
+        content: attachment.buffer,
+        contentType: attachment.contentType,
+      })),
     });
     return { sent: true, provider: 'gmail' };
   } catch (error) {
@@ -123,9 +137,9 @@ export async function sendEmail(config, { to, subject, html, text, attachments }
   // to anyone (unlike Resend's test domain, which can only send to the account owner).
   // Resend is the last-resort fallback. Whichever is configured is used automatically -
   // switching providers later needs no code changes, just environment variables.
-  if (isGraphConfigured(config)) return sendViaGraph(config, { to, subject, html });
+  if (isGraphConfigured(config)) return sendViaGraph(config, { to, subject, html, attachments });
   if (isGmailConfigured(config)) return sendViaGmail(config, { to, subject, html, text, attachments });
-  if (isResendConfigured(config)) return sendViaResend(config, { to, subject, html, text });
+  if (isResendConfigured(config)) return sendViaResend(config, { to, subject, html, text, attachments });
   console.warn(`No email provider is configured (Graph, Gmail, or Resend); skipping email to ${to} ("${subject}").`);
   return { skipped: true };
 }
@@ -184,10 +198,11 @@ export function passwordResetEmailTemplate({ resetUrl }) {
   };
 }
 
-export function elementUpdateEmailTemplate({ senderName, elementLabel, surveyName, message, surveyUrl }) {
+export function elementUpdateEmailTemplate({ senderName, elementLabel, surveyName, message, surveyUrl, photoCount = 0 }) {
   const html = emailShell('An update was flagged for you', `
     <p><strong>${senderName || 'A teammate'}</strong> flagged an update on <strong>${elementLabel || 'a device'}</strong> in <strong>${surveyName || 'a survey'}</strong>.</p>
     ${message ? `<p style="background:#f4f5f6;border-radius:8px;padding:14px 16px;margin:16px 0;">${message}</p>` : ''}
+    ${photoCount > 0 ? `<p style="color:#748089;font-size:13px;">${photoCount} photo${photoCount === 1 ? '' : 's'} attached.</p>` : ''}
     <p style="text-align:center;margin:24px 0;">
       <a href="${surveyUrl}" style="display:inline-block;background:#b4232d;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:700;">Open survey</a>
     </p>
@@ -195,6 +210,6 @@ export function elementUpdateEmailTemplate({ senderName, elementLabel, surveyNam
   return {
     subject: `${senderName || 'A teammate'} flagged an update in ${surveyName || 'a survey'}`,
     html,
-    text: `${senderName || 'A teammate'} flagged an update on ${elementLabel || 'a device'} in ${surveyName || 'a survey'}.${message ? ` Note: ${message}` : ''} Open the survey: ${surveyUrl}`,
+    text: `${senderName || 'A teammate'} flagged an update on ${elementLabel || 'a device'} in ${surveyName || 'a survey'}.${message ? ` Note: ${message}` : ''}${photoCount > 0 ? ` (${photoCount} photo${photoCount === 1 ? '' : 's'} attached.)` : ''} Open the survey: ${surveyUrl}`,
   };
 }

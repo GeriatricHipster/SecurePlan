@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import multer from 'multer';
 import { assertSiteAccess, hasRole } from '../lib/auth.js';
 import { badRequest, forbidden } from '../lib/errors.js';
@@ -205,8 +206,24 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate, notif
     const userIds = jsonArray(req.body?.userIds, 'userIds')
       .filter((value) => typeof value === 'string')
       .slice(0, 20);
+    const photoIds = jsonArray(req.body?.photoIds ?? [], 'photoIds')
+      .filter((value) => typeof value === 'string')
+      .slice(0, 5);
     const message = req.body?.message ? stringValue(req.body.message, 'message', { max: 300 }) : null;
     if (!userIds.length) throw badRequest('Select at least one teammate to notify.');
+
+    let attachments = [];
+    if (photoIds.length) {
+      const photoPlaceholders = photoIds.map(() => '?').join(',');
+      const photoRows = await db
+        .prepare(`SELECT * FROM element_photos WHERE element_id = ? AND id IN (${photoPlaceholders})`)
+        .all(element.id, ...photoIds);
+      attachments = await Promise.all(photoRows.map(async (photo) => {
+        const delivery = await storedFileDelivery(photo.storage_key, 'photo', config);
+        const buffer = delivery.contents || fs.readFileSync(delivery.path);
+        return { filename: photo.original_filename || `photo-${photo.id}.jpg`, contentType: photo.mime_type, buffer };
+      }));
+    }
 
     const placeholders = userIds.map(() => '?').join(',');
     const validRecipients = await db
@@ -228,6 +245,7 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate, notif
       surveyName: survey.name,
       message,
       surveyUrl,
+      photoCount: attachments.length,
     });
     let emailsSent = 0;
     const emailFailures = [];
@@ -246,7 +264,7 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate, notif
       });
       if (row.email) {
         try {
-          const result = await sendEmail(config, { to: row.email, ...emailTemplate });
+          const result = await sendEmail(config, { to: row.email, ...emailTemplate, attachments });
           if (result?.sent) emailsSent += 1;
         } catch (error) {
           console.error('Failed to send element-update notification email:', error.message);

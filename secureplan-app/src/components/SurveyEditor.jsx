@@ -8,7 +8,7 @@ import { FIT_PLAN_ZOOM, MAX_PLAN_ZOOM, MIN_PLAN_ZOOM } from './planGestures.js';
 import DeviceGlyph from './DeviceGlyph.jsx';
 import { exportSurveyPdf } from './surveyPdfExport.js';
 import {
-  ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  ArrowLeft, ArrowUpRight, Bell, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   Circle, Cloud, Copy, Download, Eye, FilePlus, History, Layers, ListChecks, Minus, Moon, Move, MousePointer2,
   Pencil, Plus, Radio, RotateCw, Ruler, Slash, Square, Sun, Trash2, Type, Users, X,
 } from 'lucide-react';
@@ -227,7 +227,9 @@ function LibraryPanel({ activeTool, profiles, visibleLayers, canEdit, doorFuncti
 function NotifyTeammatesButton({ element }) {
   const [open, setOpen] = useState(false);
   const [teammates, setTeammates] = useState([]);
+  const [photos, setPhotos] = useState([]);
   const [selected, setSelected] = useState(new Set());
+  const [selectedPhotos, setSelectedPhotos] = useState(new Set());
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState('');
@@ -237,6 +239,8 @@ function NotifyTeammatesButton({ element }) {
     setStatus('');
     try { setTeammates(normalizeList(await api.notifyRecipients(element.id))); }
     catch { setTeammates([]); }
+    try { setPhotos(normalizeList(await api.photos(element.id))); }
+    catch { setPhotos([]); }
   };
 
   const toggle = (id) => setSelected((current) => {
@@ -245,15 +249,23 @@ function NotifyTeammatesButton({ element }) {
     return next;
   });
 
+  const togglePhoto = (id) => setSelectedPhotos((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id);
+    else if (next.size < 5) next.add(id);
+    return next;
+  });
+
   const send = async () => {
     if (!selected.size) return;
     setSending(true);
     try {
-      const result = await api.notifyAboutElement(element.id, { userIds: [...selected], message: message.trim() || undefined });
+      const result = await api.notifyAboutElement(element.id, { userIds: [...selected], photoIds: [...selectedPhotos], message: message.trim() || undefined });
       const count = result?.notified ?? selected.size;
       const emailNote = result?.emailsSent ? `, ${result.emailsSent} by email` : '';
       setStatus(`Notified ${count} teammate${count === 1 ? '' : 's'}${emailNote}.`);
       setSelected(new Set());
+      setSelectedPhotos(new Set());
       setMessage('');
     } catch (error) { setStatus(error.message); }
     finally { setSending(false); }
@@ -278,6 +290,31 @@ function NotifyTeammatesButton({ element }) {
                 ))}
               </div>
             )}
+          {photos.length > 0 && (
+            <div className="notify-teammates__photos">
+              <span className="notify-teammates__photos-label">Attach photos (up to 5)</span>
+              <div className="notify-teammates__photo-grid">
+                {photos.map((photo) => {
+                  const isSelected = selectedPhotos.has(photo.id);
+                  const disabled = !isSelected && selectedPhotos.size >= 5;
+                  return (
+                    <button
+                      key={photo.id}
+                      type="button"
+                      className={`notify-teammates__photo ${isSelected ? 'selected' : ''}`}
+                      disabled={disabled}
+                      onClick={() => togglePhoto(photo.id)}
+                      aria-pressed={isSelected}
+                      aria-label={photo.caption || 'Photo'}
+                    >
+                      <img src={api.photoUrl(photo.id)} alt={photo.caption || ''} loading="lazy" />
+                      {isSelected && <span className="notify-teammates__photo-check" aria-hidden="true"><Check size={13} /></span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <textarea rows="2" placeholder="Optional note (e.g. what changed)" value={message} onChange={(event) => setMessage(event.target.value)} />
           <div className="notify-teammates__actions">
             <button type="button" className="button button--ghost" onClick={() => setOpen(false)}>Cancel</button>
