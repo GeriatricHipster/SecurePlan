@@ -14,6 +14,19 @@ const IMAGE_EXTENSIONS = new Map([
   ['image/heif', '.heif'],
 ]);
 
+const VIDEO_TYPES = new Set(['video/webm', 'video/mp4']);
+const VIDEO_EXTENSIONS = new Map([
+  ['video/webm', '.webm'],
+  ['video/mp4', '.mp4'],
+]);
+
+const KIND_DIR_KEYS = { survey: 'surveyFilesDir', photo: 'photoFilesDir', video: 'videoFilesDir' };
+const KIND_CLOUD_PREFIXES = { survey: 'surveys', photo: 'photos', video: 'videos' };
+
+function directoryForKind(kind, config) {
+  return config[KIND_DIR_KEYS[kind] || 'photoFilesDir'];
+}
+
 export function validatePdfUpload(file) {
   if (!file) throw badRequest('A PDF file is required.', { field: 'pdf' });
   const descriptor = fs.openSync(file.path, 'r');
@@ -43,6 +56,21 @@ export function validatePhotoUpload(file) {
   }
 }
 
+export function validateVideoUpload(file) {
+  if (!file) throw badRequest('A video recording is required.', { field: 'video' });
+  if (!VIDEO_TYPES.has(file.mimetype)) {
+    throw badRequest('Video must be WebM or MP4.', { field: 'video' });
+  }
+  const bytes = fs.readFileSync(file.path, { encoding: null, flag: 'r' }).subarray(0, 12);
+  const isWebm = bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3;
+  const brand = bytes.subarray(4, 12).toString('ascii');
+  const isMp4 = brand.includes('ftyp');
+  if (!isWebm && !isMp4) {
+    throw badRequest('The uploaded video format could not be verified.', { field: 'video' });
+  }
+}
+
+
 export async function storePdf(file, config) {
   const storageKey = config.cloudMode ? `surveys/${crypto.randomUUID()}.pdf` : `${crypto.randomUUID()}.pdf`;
   if (config.cloudMode) await uploadCloudFile(file, storageKey, 'application/pdf', config);
@@ -58,16 +86,24 @@ export async function storePhoto(file, config) {
   return storageKey;
 }
 
+export async function storeVideo(file, config) {
+  const name = `${crypto.randomUUID()}${VIDEO_EXTENSIONS.get(file.mimetype) || '.video'}`;
+  const storageKey = config.cloudMode ? `videos/${name}` : name;
+  if (config.cloudMode) await uploadCloudFile(file, storageKey, file.mimetype, config);
+  else fs.renameSync(file.path, path.join(config.videoFilesDir, storageKey));
+  return storageKey;
+}
+
 export async function copyStoredFile(sourceKey, kind, config) {
   if (!sourceKey) return null;
   const extension = path.extname(sourceKey).slice(0, 10);
   const name = `${crypto.randomUUID()}${extension}`;
-  const targetKey = config.cloudMode ? `${kind === 'survey' ? 'surveys' : 'photos'}/${name}` : name;
+  const targetKey = config.cloudMode ? `${KIND_CLOUD_PREFIXES[kind] || 'photos'}/${name}` : name;
   if (config.cloudMode) {
     const { error } = await storage(config).copy(sourceKey, targetKey);
     if (error) throw new Error('Cloud file copy failed.');
   } else {
-    const sourceDirectory = kind === 'survey' ? config.surveyFilesDir : config.photoFilesDir;
+    const sourceDirectory = directoryForKind(kind, config);
     fs.copyFileSync(path.join(sourceDirectory, path.basename(sourceKey)), path.join(sourceDirectory, targetKey));
   }
   return targetKey;
@@ -80,7 +116,7 @@ export async function deleteStoredFile(storageKey, kind, config) {
     if (error) throw new Error('Cloud file deletion failed.');
     return;
   }
-  const directory = kind === 'survey' ? config.surveyFilesDir : config.photoFilesDir;
+  const directory = directoryForKind(kind, config);
   try {
     fs.unlinkSync(path.join(directory, path.basename(storageKey)));
   } catch (error) {
@@ -98,7 +134,7 @@ export function cleanTemporaryUpload(file) {
 }
 
 export function storedFilePath(storageKey, kind, config) {
-  const directory = kind === 'survey' ? config.surveyFilesDir : config.photoFilesDir;
+  const directory = directoryForKind(kind, config);
   return path.join(directory, path.basename(storageKey));
 }
 

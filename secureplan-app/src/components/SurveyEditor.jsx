@@ -10,7 +10,7 @@ import { exportSurveyPdf } from './surveyPdfExport.js';
 import {
   ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   Circle, Cloud, Copy, Download, Eye, FilePlus, History, Layers, ListChecks, Minus, Moon, Move, MousePointer2,
-  Pencil, Plus, RotateCw, Ruler, Slash, Square, Sun, Trash2, Type, X,
+  Pencil, Plus, Radio, RotateCw, Ruler, Slash, Square, Sun, Trash2, Type, Users, X,
 } from 'lucide-react';
 
 const HISTORY_ICONS = {
@@ -290,6 +290,271 @@ function NotifyTeammatesButton({ element }) {
   );
 }
 
+const MAX_REPORT_SECONDS = 300;
+
+function ReportsPanel({ surveyId, canAnnotate, notify }) {
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [stage, setStage] = useState('idle'); // idle | requesting-permission | recording | uploading
+  const [elapsed, setElapsed] = useState(0);
+  const [expandedId, setExpandedId] = useState(null);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const recorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const timerRef = useRef(null);
+  const pollRef = useRef(null);
+
+  const load = async () => {
+    try {
+      const result = await api.reports(surveyId);
+      setReports(normalizeList(result?.reports ?? result));
+    } catch (error) { notify(error.message); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, [surveyId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const hasProcessing = reports.some((report) => report.status === 'processing');
+    if (hasProcessing && !pollRef.current) {
+      pollRef.current = window.setInterval(load, 3000);
+    } else if (!hasProcessing && pollRef.current) {
+      window.clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    return () => { if (pollRef.current) { window.clearInterval(pollRef.current); pollRef.current = null; } };
+  }, [reports]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => () => {
+    if (streamRef.current) streamRef.current.getTracks().forEach((track) => track.stop());
+    if (timerRef.current) window.clearInterval(timerRef.current);
+    if (pollRef.current) window.clearInterval(pollRef.current);
+  }, []);
+
+  const cleanupStream = () => {
+    if (streamRef.current) { streamRef.current.getTracks().forEach((track) => track.stop()); streamRef.current = null; }
+    if (timerRef.current) { window.clearInterval(timerRef.current); timerRef.current = null; }
+  };
+
+  const stopRecording = () => {
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
+  };
+
+  const startRecording = async () => {
+    setStage('requesting-permission');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: true,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.muted = true; videoRef.current.play().catch(() => {}); }
+      const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+        ? 'video/webm;codecs=vp9,opus'
+        : MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : 'video/mp4';
+      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 700_000 });
+      chunksRef.current = [];
+      recorder.ondataavailable = (event) => { if (event.data.size > 0) chunksRef.current.push(event.data); };
+      recorder.onstop = () => handleRecordingStop(mimeType.split(';')[0]);
+      recorder.start();
+      recorderRef.current = recorder;
+      setElapsed(0);
+      setStage('recording');
+      timerRef.current = window.setInterval(() => {
+        setElapsed((current) => {
+          const next = current + 1;
+          if (next >= MAX_REPORT_SECONDS) stopRecording();
+          return next;
+        });
+      }, 1000);
+    } catch (error) {
+      setStage('idle');
+      notify(error.message || 'Could not access the camera and microphone.');
+    }
+  };
+
+  const handleRecordingStop = async (mimeType) => {
+    const finalElapsed = elapsed;
+    cleanupStream();
+    const blob = new Blob(chunksRef.current, { type: mimeType });
+    chunksRef.current = [];
+    if (blob.size > 24 * 1024 * 1024) {
+      setStage('idle');
+      notify('That recording is too large (over 24MB). Try a shorter one.');
+      return;
+    }
+    if (blob.size < 1000) {
+      setStage('idle');
+      return;
+    }
+    setStage('uploading');
+    try {
+      const form = new FormData();
+      form.append('video', blob, mimeType.includes('mp4') ? 'recording.mp4' : 'recording.webm');
+      form.append('durationSeconds', String(finalElapsed));
+      await api.createReport(surveyId, form);
+      notify('Recording uploaded — generating your report now.');
+      await load();
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setStage('idle');
+    }
+  };
+
+  const cancelRecording = () => {
+    if (recorderRef.current) { recorderRef.current.ondataavailable = null; recorderRef.current.onstop = null; stopRecording(); }
+    cleanupStream();
+    chunksRef.current = [];
+    setStage('idle');
+  };
+
+  const removeReport = async (reportId) => {
+    try { await api.deleteReport(reportId); setReports((current) => current.filter((report) => report.id !== reportId)); }
+    catch (error) { notify(error.message); }
+  };
+
+  const formatElapsed = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+
+  return (
+    <div className="reports-panel">
+      {!canAnnotate ? (
+        <p className="muted">You don't have permission to record voice reports on this survey.</p>
+      ) : stage === 'idle' ? (
+        <button type="button" className="button button--primary reports-panel__record-button" onClick={startRecording}>
+          <Radio aria-hidden="true" size={16} /> Start recording
+        </button>
+      ) : stage === 'requesting-permission' ? (
+        <p className="muted">Waiting for camera and microphone permission…</p>
+      ) : stage === 'uploading' ? (
+        <div className="loading-panel"><Spinner label="Uploading recording…" /></div>
+      ) : (
+        <div className="reports-panel__recording">
+          <video ref={videoRef} className="reports-panel__preview" playsInline muted />
+          <div className="reports-panel__recording-bar">
+            <span className="reports-panel__rec-dot" aria-hidden="true" />
+            <span>{formatElapsed(elapsed)} / {formatElapsed(MAX_REPORT_SECONDS)}</span>
+            <button type="button" className="button button--ghost" onClick={cancelRecording}>Cancel</button>
+            <button type="button" className="button button--primary" onClick={stopRecording}>Stop &amp; upload</button>
+          </div>
+        </div>
+      )}
+
+      <div className="reports-panel__list">
+        {loading ? (
+          <div className="loading-panel"><Spinner label="Loading reports…" /></div>
+        ) : !reports.length ? (
+          <p className="muted">No voice reports recorded yet.</p>
+        ) : reports.map((report) => (
+          <div key={report.id} className="report-card">
+            <button type="button" className="report-card__header" onClick={() => setExpandedId((current) => current === report.id ? null : report.id)}>
+              <span className={`report-card__status report-card__status--${report.status}`}>{report.status === 'processing' ? 'Processing…' : report.status === 'failed' ? 'Failed' : 'Ready'}</span>
+              <span className="report-card__title">{report.title}</span>
+              <time>{formatWhen(report.createdAt)}</time>
+            </button>
+            {expandedId === report.id && (
+              <div className="report-card__body">
+                {report.status === 'processing' && <p className="muted">Transcribing and writing the report — this usually takes under a minute.</p>}
+                {report.status === 'failed' && <p className="notice notice--error">{report.errorMessage || 'Something went wrong generating this report.'}</p>}
+                {report.hasVideo && <video className="report-card__video" src={api.reportVideoUrl(report.id)} controls preload="metadata" />}
+                {report.reportText && (
+                  <div className="report-card__text">
+                    {report.reportText.split('\n').map((line, index) => <p key={index}>{line}</p>)}
+                  </div>
+                )}
+                {report.transcript && !report.reportText && (
+                  <div className="report-card__text"><p><em>Transcript:</em> {report.transcript}</p></div>
+                )}
+                <button type="button" className="button button--ghost report-card__delete" onClick={() => removeReport(report.id)}>Delete report</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AssignedUsersPanel({ surveyId, notify }) {
+  const [assignments, setAssignments] = useState([]);
+  const [assignable, setAssignable] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [assignmentsResult, assignableResult] = await Promise.all([
+        api.surveyAssignments(surveyId),
+        api.assignableUsers(surveyId),
+      ]);
+      setAssignments(normalizeList(assignmentsResult?.assignments ?? assignmentsResult));
+      setAssignable(normalizeList(assignableResult?.users ?? assignableResult));
+    } catch (error) { notify(error.message); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, [surveyId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const assign = async (userId) => {
+    setBusy(true);
+    try { await api.assignToSurvey(surveyId, userId); await load(); }
+    catch (error) { notify(error.message); }
+    finally { setBusy(false); }
+  };
+
+  const unassign = async (userId) => {
+    setBusy(true);
+    try { await api.unassignFromSurvey(surveyId, userId); await load(); }
+    catch (error) { notify(error.message); }
+    finally { setBusy(false); }
+  };
+
+  if (loading) return <div className="loading-panel"><Spinner label="Loading assignments…" /></div>;
+
+  const assignedIds = new Set(assignments.map((user) => user.id));
+  const unassigned = assignable.filter((user) => !assignedIds.has(user.id));
+
+  return (
+    <div className="assigned-users">
+      <p className="muted">Viewers and installers only see surveys they're specifically assigned to here. Other roles (editor and above) always see every survey on the site.</p>
+      <div className="assigned-users__section">
+        <h3>Assigned to this survey</h3>
+        {assignments.length === 0
+          ? <p className="muted">No one is assigned yet — no viewers or installers can see this survey until you add someone below.</p>
+          : (
+            <ul className="assigned-users__list">
+              {assignments.map((user) => (
+                <li key={user.id}>
+                  <span className="mini-avatar" aria-hidden="true">{initials(user.name)}</span>
+                  <span className="assigned-users__name">{user.name}</span>
+                  <button type="button" className="button button--ghost" disabled={busy} onClick={() => unassign(user.id)}>Remove</button>
+                </li>
+              ))}
+            </ul>
+          )}
+      </div>
+      <div className="assigned-users__section">
+        <h3>Add someone</h3>
+        {unassigned.length === 0
+          ? <p className="muted">Everyone eligible (viewers and installers with site access) is already assigned.</p>
+          : (
+            <ul className="assigned-users__list">
+              {unassigned.map((user) => (
+                <li key={user.id}>
+                  <span className="mini-avatar" aria-hidden="true">{initials(user.name)}</span>
+                  <span className="assigned-users__name">{user.name} <small>({user.role})</small></span>
+                  <button type="button" className="button button--secondary" disabled={busy} onClick={() => assign(user.id)}>Add</button>
+                </li>
+              ))}
+            </ul>
+          )}
+      </div>
+    </div>
+  );
+}
+
 function DeviceLifecyclePanel({ element, canAnnotate, onPatch }) {
   const metadata = metadataOf(element);
   const asset = metadata.asset || {};
@@ -560,6 +825,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
   const planStageRef = useRef(null);
   const canEdit = roleCanEdit(user.role);
   const canAnnotate = roleCanAnnotate(user.role);
+  const canManageAssignments = ['owner', 'admin'].includes(user.role);
   const selected = elements.find((element) => element.id === selectedId) || null;
   const orientation = Number(survey?.rotation ?? survey?.orientation ?? 0);
 
@@ -982,6 +1248,8 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
           {canEdit && <button type="button" className="button button--ghost" onClick={rotate} title="Rotate survey clockwise"><RotateCw aria-hidden="true" size={16} /><span className="button-label">Rotate {orientation}°</span></button>}
           <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'schedule' })}><ListChecks aria-hidden="true" size={16} /><span className="button-label">Schedule</span></button>
           <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'history' })}><History aria-hidden="true" size={16} /><span className="button-label">History</span></button>
+          <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'reports' })}><Radio aria-hidden="true" size={16} /><span className="button-label">Reports</span></button>
+          {canManageAssignments && <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'assignments' })}><Users aria-hidden="true" size={16} /><span className="button-label">Assigned</span></button>}
           <button type="button" className="button button--secondary" onClick={toggleTheme} title="Toggle dark mode">{theme === 'dark' ? <Sun aria-hidden="true" size={16} /> : <Moon aria-hidden="true" size={16} />}<span className="button-label">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button>
           <button type="button" className="button button--secondary" onClick={exportPdf} disabled={pdfBusy} title="Export a PDF summary of plotted devices"><Download aria-hidden="true" size={16} /><span className="button-label">{pdfBusy ? 'Exporting…' : 'Export PDF'}</span></button>
         </div>
@@ -1008,6 +1276,8 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
 
       <Modal open={modal?.type === 'schedule'} title="Device schedule" description={`${elements.filter((element) => element.category !== 'markup').length} plotted security components`} onClose={() => setModal(null)} wide><Schedule elements={elements} onSelect={setSelectedId} onClose={() => setModal(null)} /></Modal>
       <Modal open={modal?.type === 'history'} title="Survey history" description="Who plotted, edited, or removed items, and when." onClose={() => setModal(null)} wide>{modal?.type === 'history' && <HistoryPanel surveyId={surveyId} notify={notify} />}</Modal>
+      <Modal open={modal?.type === 'reports'} title="Voice reports" description="Record a spoken walkthrough and get an AI-written field report." onClose={() => setModal(null)} wide>{modal?.type === 'reports' && <ReportsPanel surveyId={surveyId} canAnnotate={canAnnotate} notify={notify} />}</Modal>
+      <Modal open={modal?.type === 'assignments'} title="Assigned users" description="Control which viewers and installers can see this survey." onClose={() => setModal(null)} wide>{modal?.type === 'assignments' && <AssignedUsersPanel surveyId={surveyId} notify={notify} />}</Modal>
       <ProfileBuilder open={modal?.type === 'profile'} onClose={() => setModal(null)} onCreate={createProfile} />
       <ConfirmDialog open={modal?.type === 'delete-element'} title="Delete this element?" onClose={() => setModal(null)} onConfirm={deleteSelected}><p><strong>{selected?.label}</strong> and its notes and cloud photos will be permanently deleted.</p></ConfirmDialog>
     </main>

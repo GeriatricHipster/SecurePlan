@@ -13,9 +13,10 @@ export function createConfig(overrides = {}) {
   const uploadsDir = path.join(dataDir, 'uploads');
   const surveyFilesDir = path.join(uploadsDir, 'surveys');
   const photoFilesDir = path.join(uploadsDir, 'photos');
+  const videoFilesDir = path.join(uploadsDir, 'videos');
   const temporaryFilesDir = path.join(uploadsDir, 'tmp');
 
-  for (const directory of [dataDir, uploadsDir, surveyFilesDir, photoFilesDir, temporaryFilesDir]) {
+  for (const directory of [dataDir, uploadsDir, surveyFilesDir, photoFilesDir, videoFilesDir, temporaryFilesDir]) {
     fs.mkdirSync(directory, { recursive: true, mode: 0o750 });
   }
 
@@ -62,6 +63,7 @@ export function createConfig(overrides = {}) {
     uploadsDir,
     surveyFilesDir,
     photoFilesDir,
+    videoFilesDir,
     temporaryFilesDir,
     jwtSecret,
     setupCode,
@@ -86,6 +88,8 @@ export function createConfig(overrides = {}) {
     emailFromMailbox: overrides.emailFromMailbox ?? process.env.EMAIL_FROM_MAILBOX ?? '',
     resendApiKey: overrides.resendApiKey ?? process.env.RESEND_API_KEY ?? '',
     resendFrom: overrides.resendFrom ?? process.env.RESEND_FROM ?? '',
+    gmailUser: overrides.gmailUser ?? process.env.GMAIL_USER ?? '',
+    gmailAppPassword: overrides.gmailAppPassword ?? process.env.GMAIL_APP_PASSWORD ?? '',
     trustProxy: parseTrustProxy(overrides.trustProxy ?? process.env.TRUST_PROXY, nodeEnv === 'production' ? 1 : false),
     staticDir: path.resolve(
       overrides.staticDir || process.env.STATIC_DIR || path.join(serverDirectory, '..', 'dist'),
@@ -98,6 +102,14 @@ export function createConfig(overrides = {}) {
       'MAX_PDF_BYTES',
     ),
     maxPhotoBytes: boundedNumber(overrides.maxPhotoBytes ?? process.env.MAX_PHOTO_BYTES, 20 * 1024 * 1024, 1, 250 * 1024 * 1024, 'MAX_PHOTO_BYTES'),
+    maxVideoBytes: boundedNumber(overrides.maxVideoBytes ?? process.env.MAX_VIDEO_BYTES, 24 * 1024 * 1024, 1, 24 * 1024 * 1024, 'MAX_VIDEO_BYTES'),
+    openaiApiKey: overrides.openaiApiKey ?? process.env.OPENAI_API_KEY ?? '',
+    openaiTranscribeModel: overrides.openaiTranscribeModel ?? process.env.OPENAI_TRANSCRIBE_MODEL ?? '',
+    openaiChatModel: overrides.openaiChatModel ?? process.env.OPENAI_CHAT_MODEL ?? '',
+    azureOpenaiEndpoint: (overrides.azureOpenaiEndpoint ?? process.env.AZURE_OPENAI_ENDPOINT ?? '').replace(/\/+$/, ''),
+    azureOpenaiApiKey: overrides.azureOpenaiApiKey ?? process.env.AZURE_OPENAI_API_KEY ?? '',
+    azureOpenaiTranscribeDeployment: overrides.azureOpenaiTranscribeDeployment ?? process.env.AZURE_OPENAI_TRANSCRIBE_DEPLOYMENT ?? '',
+    azureOpenaiChatDeployment: overrides.azureOpenaiChatDeployment ?? process.env.AZURE_OPENAI_CHAT_DEPLOYMENT ?? '',
     minFreeStorageBytes: boundedNumber(
       overrides.minFreeStorageBytes ?? process.env.MIN_FREE_STORAGE_BYTES,
       1024 * 1024,

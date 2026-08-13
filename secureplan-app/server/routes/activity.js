@@ -20,11 +20,11 @@ export function createActivityRouter({ db, auth }) {
         const survey = await getSurvey(db, surveyId);
         effectiveSiteId = survey.site_id;
         const role = await assertSiteAccess(db, req.user, survey.site_id);
-        isViewerRestricted = role === 'viewer';
+        isViewerRestricted = role === 'viewer' || role === 'installer';
         if (isViewerRestricted) await assertSurveyAssignment(db, req.user, role, surveyId);
       } else if (siteId) {
         const role = await assertSiteAccess(db, req.user, siteId);
-        isViewerRestricted = role === 'viewer';
+        isViewerRestricted = role === 'viewer' || role === 'installer';
       } else if (!req.user.workspace_access && req.user.role !== 'owner' && req.user.role !== 'admin') {
         isViewerRestricted = true;
       }

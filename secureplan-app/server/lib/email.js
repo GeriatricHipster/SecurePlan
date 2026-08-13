@@ -1,5 +1,9 @@
+import nodemailer from 'nodemailer';
+
 let cachedToken = null;
 let cachedTokenExpiresAt = 0;
+let cachedGmailTransporter = null;
+let cachedGmailKey = null;
 
 async function getGraphAccessToken(config) {
   if (cachedToken && Date.now() < cachedTokenExpiresAt - 30_000) return cachedToken;
@@ -30,6 +34,10 @@ function isGraphConfigured(config) {
 
 function isResendConfigured(config) {
   return Boolean(config.resendApiKey);
+}
+
+function isGmailConfigured(config) {
+  return Boolean(config.gmailUser && config.gmailAppPassword);
 }
 
 async function sendViaGraph(config, { to, subject, html }) {
@@ -81,13 +89,44 @@ async function sendViaResend(config, { to, subject, html, text }) {
   return { sent: true, provider: 'resend' };
 }
 
-export async function sendEmail(config, { to, subject, html, text }) {
+function getGmailTransporter(config) {
+  const key = `${config.gmailUser}\n${config.gmailAppPassword}`;
+  if (cachedGmailTransporter && cachedGmailKey === key) return cachedGmailTransporter;
+  cachedGmailTransporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: config.gmailUser, pass: config.gmailAppPassword },
+  });
+  cachedGmailKey = key;
+  return cachedGmailTransporter;
+}
+
+async function sendViaGmail(config, { to, subject, html, text, attachments }) {
+  const transporter = getGmailTransporter(config);
+  try {
+    await transporter.sendMail({
+      from: `"SecurePlan Surveyor" <${config.gmailUser}>`,
+      to,
+      subject,
+      html,
+      text,
+      attachments,
+    });
+    return { sent: true, provider: 'gmail' };
+  } catch (error) {
+    throw new Error(`Email send failed via Gmail: ${error.message || error.code || 'unknown error'}`);
+  }
+}
+
+export async function sendEmail(config, { to, subject, html, text, attachments }) {
   // Prefer Microsoft Graph (the university's own M365 tenant) whenever it's configured.
-  // Resend is a temporary fallback while the Azure app registration is pending with IT -
-  // once Graph is configured, it's used automatically with no code changes needed.
+  // Gmail SMTP is a reliable free option that works without a verified domain, and can send
+  // to anyone (unlike Resend's test domain, which can only send to the account owner).
+  // Resend is the last-resort fallback. Whichever is configured is used automatically -
+  // switching providers later needs no code changes, just environment variables.
   if (isGraphConfigured(config)) return sendViaGraph(config, { to, subject, html });
+  if (isGmailConfigured(config)) return sendViaGmail(config, { to, subject, html, text, attachments });
   if (isResendConfigured(config)) return sendViaResend(config, { to, subject, html, text });
-  console.warn(`No email provider is configured (Graph or Resend); skipping email to ${to} ("${subject}").`);
+  console.warn(`No email provider is configured (Graph, Gmail, or Resend); skipping email to ${to} ("${subject}").`);
   return { skipped: true };
 }
 

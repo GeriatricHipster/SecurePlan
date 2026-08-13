@@ -183,6 +183,23 @@ export function createDatabase(config) {
     CREATE INDEX IF NOT EXISTS idx_security_events_created ON security_events(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_security_events_type ON security_events(event_type, created_at DESC);
 
+    CREATE TABLE IF NOT EXISTS survey_reports (
+      id TEXT PRIMARY KEY,
+      survey_id TEXT NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+      created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+      title TEXT NOT NULL DEFAULT 'Field report',
+      status TEXT NOT NULL DEFAULT 'processing',
+      video_storage_key TEXT,
+      duration_seconds REAL,
+      transcript TEXT,
+      report_text TEXT,
+      error_message TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_survey_reports_survey ON survey_reports(survey_id, created_at DESC);
+
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

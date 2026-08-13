@@ -155,7 +155,7 @@ export async function assertSiteAccess(db, user, siteId, minimumRole = 'viewer')
 }
 
 export async function assertSurveyAssignment(db, user, role, surveyId) {
-  if (role !== 'viewer') return;
+  if (role !== 'viewer' && role !== 'installer') return;
   const assignment = await db
     .prepare('SELECT 1 FROM survey_assignments WHERE survey_id = ? AND user_id = ?')
     .get(surveyId, user.id);

@@ -34,7 +34,7 @@ export function createSurveysRouter({ db, config, auth, emitSurveyUpdate, emitSi
       params.push(folderId || null);
     }
     let assignmentClause = '';
-    if (role === 'viewer') {
+    if (role === 'viewer' || role === 'installer') {
       assignmentClause = 'AND EXISTS (SELECT 1 FROM survey_assignments sa WHERE sa.survey_id = s.id AND sa.user_id = ?)';
       params.push(req.user.id);
     }
@@ -375,13 +375,13 @@ export function createSurveysRouter({ db, config, auth, emitSurveyUpdate, emitSi
     res.json({ data: { deletedId: survey.id }, success: true });
   });
 
-  router.get('/surveys/:surveyId/assignable-viewers', async (req, res) => {
+  router.get('/surveys/:surveyId/assignable-users', async (req, res) => {
     const survey = await getSurvey(db, idValue(req.params.surveyId, 'surveyId'));
     await assertSiteAccess(db, req.user, survey.site_id, 'admin');
     const rows = await db
-      .prepare("SELECT id, name, email FROM users WHERE role = 'viewer' AND disabled_at IS NULL ORDER BY name COLLATE NOCASE")
+      .prepare("SELECT id, name, email, role FROM users WHERE role IN ('viewer', 'installer') AND disabled_at IS NULL ORDER BY name COLLATE NOCASE")
       .all();
-    res.json({ data: rows, viewers: rows });
+    res.json({ data: rows, users: rows });
   });
 
   router.get('/surveys/:surveyId/assignments', async (req, res) => {
@@ -404,7 +404,7 @@ export function createSurveysRouter({ db, config, auth, emitSurveyUpdate, emitSi
     const userId = idValue(req.body?.userId, 'userId');
     const target = await db.prepare('SELECT id, role FROM users WHERE id = ? AND disabled_at IS NULL').get(userId);
     if (!target) throw notFound('User');
-    if (target.role !== 'viewer') throw badRequest('Only viewer-role users can be assigned to specific surveys.', { field: 'userId' });
+    if (!['viewer', 'installer'].includes(target.role)) throw badRequest('Only viewer or installer role users can be assigned to specific surveys.', { field: 'userId' });
     const now = new Date().toISOString();
     await db.prepare(
       `INSERT INTO survey_assignments (survey_id, user_id, added_by, created_at)

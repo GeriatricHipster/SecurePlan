@@ -22,6 +22,7 @@ import { createSearchRouter } from './routes/search.js';
 import { createActivityRouter } from './routes/activity.js';
 import { createDashboardRouter } from './routes/dashboard.js';
 import { createSecurityRouter } from './routes/security.js';
+import { createReportsRouter } from './routes/reports.js';
 
 export function createApplication(overrides = {}) {
   const config = createConfig(overrides);
@@ -173,6 +174,7 @@ export function createApplication(overrides = {}) {
   app.use('/api', createActivityRouter(routerContext));
   app.use('/api', createDashboardRouter(routerContext));
   app.use('/api', createSecurityRouter(routerContext));
+  app.use('/api', createReportsRouter(routerContext));
 
   app.use('/api', (req, res) => {
     res.status(404).json({
