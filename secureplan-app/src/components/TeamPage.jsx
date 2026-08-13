@@ -47,6 +47,8 @@ function SecurityLogPanel({ notify }) {
           <div className="security-log__body">
             <p><strong>{EVENT_LABELS[event.eventType] || event.eventType}</strong>{event.userName ? ` — ${event.userName}` : event.userEmail ? ` — ${event.userEmail}` : ''}</p>
             <small>{event.ipAddress ? `From ${event.ipAddress} · ` : ''}{event.details?.path ? `${event.details.method || ''} ${event.details.path}` : ''}</small>
+            {event.details?.error && <p className="security-log__error">{event.details.error}</p>}
+            {event.details?.reason && <p className="security-log__error">{event.details.reason}</p>}
           </div>
           <time title={new Date(event.createdAt).toLocaleString()}>{formatWhen(event.createdAt)}</time>
         </li>
