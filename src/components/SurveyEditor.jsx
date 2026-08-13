@@ -7,6 +7,85 @@ import { DEFAULT_ICON_COLOR, DEFAULT_PROFILE, DEVICE_CATEGORIES, DEVICE_WORKFLOW
 import { FIT_PLAN_ZOOM, MAX_PLAN_ZOOM, MIN_PLAN_ZOOM } from './planGestures.js';
 import DeviceGlyph from './DeviceGlyph.jsx';
 import { exportSurveyPdf } from './surveyPdfExport.js';
+import {
+  ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  Circle, Cloud, Copy, Download, Eye, FilePlus, History, Layers, ListChecks, Minus, Moon, Move, MousePointer2,
+  Pencil, Plus, RotateCw, Ruler, Slash, Square, Sun, Trash2, Type, X,
+} from 'lucide-react';
+
+const HISTORY_ICONS = {
+  'element.created': FilePlus,
+  'element.updated': Pencil,
+  'element.deleted': Trash2,
+  'survey.updated': Pencil,
+  'survey.copied': Copy,
+  'survey.moved': FilePlus,
+  'survey.rotated': RotateCw,
+};
+
+function describeHistoryEntry(entry) {
+  const { action, details = {} } = entry;
+  switch (action) {
+    case 'element.created': return <>plotted <strong>{details.label || details.type || 'a device'}</strong></>;
+    case 'element.updated': return <>updated <strong>{details.label || 'a device'}</strong></>;
+    case 'element.deleted': return <>removed <strong>{details.label || 'a device'}</strong></>;
+    case 'survey.updated': return <>updated survey details</>;
+    case 'survey.copied': return <>copied this survey</>;
+    case 'survey.moved': return <>moved this survey</>;
+    case 'survey.rotated': return <>rotated the plan {details.rotation != null ? `to ${details.rotation}°` : ''}</>;
+    default: return action.replace('.', ' ');
+  }
+}
+
+function HistoryPanel({ surveyId, notify }) {
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      setLoading(true);
+      try {
+        const result = await api.activity({ surveyId, limit: 100 });
+        if (active) setEntries(normalizeList(result?.activity ?? result));
+      } catch (error) {
+        if (active) notify(error.message);
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [surveyId, notify]);
+
+  if (loading) return <div className="loading-panel"><Spinner label="Loading history…" /></div>;
+  if (!entries.length) return <p className="muted">No activity recorded on this survey yet.</p>;
+  return (
+    <ul className="activity-feed">
+      {entries.map((entry) => {
+        const Icon = HISTORY_ICONS[entry.action] || Pencil;
+        return (
+          <li key={entry.id} className="activity-feed__item">
+            <span className="activity-feed__icon" aria-hidden="true"><Icon size={15} /></span>
+            <span className="mini-avatar" aria-hidden="true">{initials(entry.actorName)}</span>
+            <p><strong>{entry.actorName}</strong> {describeHistoryEntry(entry)}</p>
+            <time title={new Date(entry.createdAt).toLocaleString()}>{formatWhen(entry.createdAt)}</time>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+const TOOL_ICONS = {
+  select: MousePointer2,
+  line: Slash,
+  arrow: ArrowUpRight,
+  rectangle: Square,
+  ellipse: Circle,
+  text: Type,
+  measure: Ruler,
+  cloud: Cloud,
+};
 
 const LAYER_IDS = [...DEVICE_CATEGORIES.map((category) => category.id), 'custom', 'markup'];
 
@@ -69,11 +148,26 @@ function LibraryPanel({ activeTool, profiles, visibleLayers, canEdit, doorFuncti
     event.dataTransfer.setData('application/x-secureplan-component', JSON.stringify(payload));
     event.dataTransfer.setData('text/plain', payload.label || payload.name || 'SecurePlan component');
   };
+
+  if (!canEdit) {
+    return (
+      <aside className="editor-panel library-panel library-panel--field" aria-label="Layers">
+        <div className="editor-panel__heading"><div><p className="eyebrow">Viewing</p><h2>Layers</h2></div><button type="button" className="icon-button mobile-only" onClick={onClose} aria-label="Close layers panel">×</button></div>
+        <div className="field-mode-note"><Eye aria-hidden="true" size={16} /><p>You can view devices, update install status, and add notes or photos. Tap a device on the plan to get started.</p></div>
+        <div className="library-scroll">
+          <div className="layer-list layer-list--field">
+            {LAYER_IDS.map((layer) => <label key={layer}><input type="checkbox" checked={visibleLayers.has(layer)} onChange={() => onLayer(layer)} /><span className="category-dot" style={{ backgroundColor: categoryFor(layer)?.color || (layer === 'markup' ? '#46545f' : '#13795b') }} /><span>{categoryFor(layer)?.name || (layer === 'markup' ? 'Markup' : 'Custom')}</span></label>)}
+          </div>
+        </div>
+      </aside>
+    );
+  }
+
   return (
     <aside className="editor-panel library-panel" aria-label="Component library">
       <div className="editor-panel__heading"><div><p className="eyebrow">Plotting</p><h2>Components</h2></div><button type="button" className="icon-button mobile-only" onClick={onClose} aria-label="Close component library">×</button></div>
       <div className="markup-tools" role="toolbar" aria-label="Drawing tools">
-        {MARKUP_TOOLS.map((tool) => <button key={tool.type} type="button" aria-label={tool.label} title={tool.label} aria-pressed={activeTool.type === tool.type} className={activeTool.type === tool.type ? 'active' : ''} onClick={() => onTool({ kind: 'markup', ...tool })} disabled={!canEdit && tool.type !== 'select'}><span aria-hidden="true">{tool.symbol}</span><small>{tool.label}</small></button>)}
+        {MARKUP_TOOLS.map((tool) => { const Icon = TOOL_ICONS[tool.type] || MousePointer2; return <button key={tool.type} type="button" aria-label={tool.label} title={tool.label} aria-pressed={activeTool.type === tool.type} className={activeTool.type === tool.type ? 'active' : ''} onClick={() => onTool({ kind: 'markup', ...tool })} disabled={!canEdit && tool.type !== 'select'}><Icon aria-hidden="true" size={18} strokeWidth={2} /><small>{tool.label}</small></button>; })}
       </div>
       {activeTool.type === 'measure' && (
         <div className="measure-scale-config">
@@ -115,11 +209,11 @@ function LibraryPanel({ activeTool, profiles, visibleLayers, canEdit, doorFuncti
               const payload = { kind: 'profile', ...profile, components };
               return <button type="button" draggable={canEdit} onDragStart={(event) => startDrag(event, payload)} key={profile.id} className={active ? 'active' : ''} aria-pressed={active} disabled={!canEdit} onClick={() => onTool(payload)}><span className="profile-stack" aria-hidden="true">{components.slice(0, 4).map((component, index) => <i key={`${component.type}-${index}`}>{component.symbol || itemFor(component.category, component.type)?.symbol || '?'}</i>)}</span><span><strong>{profile.name}</strong><small>{components.map((component) => component.symbol || itemFor(component.category, component.type)?.symbol).filter(Boolean).join(' · ') || profile.description}</small></span></button>;
             })}
-            {canEdit && <button type="button" className="new-profile-button" onClick={onBuildProfile}><span aria-hidden="true">＋</span>Create icon profile</button>}
+            {canEdit && <button type="button" className="new-profile-button" onClick={onBuildProfile}><Plus aria-hidden="true" size={16} />Create icon profile</button>}
           </div>
         </details>
         <details className="component-group layer-group">
-          <summary><span aria-hidden="true">◫</span><strong>Layers</strong><span>{visibleLayers.size}/{LAYER_IDS.length}</span></summary>
+          <summary><Layers aria-hidden="true" size={16} /><strong>Layers</strong><span>{visibleLayers.size}/{LAYER_IDS.length}</span></summary>
           <div className="layer-list">
             {LAYER_IDS.map((layer) => <label key={layer}><input type="checkbox" checked={visibleLayers.has(layer)} onChange={() => onLayer(layer)} /><span className="category-dot" style={{ backgroundColor: categoryFor(layer)?.color || (layer === 'markup' ? '#46545f' : '#13795b') }} /><span>{categoryFor(layer)?.name || (layer === 'markup' ? 'Markup' : 'Custom')}</span></label>)}
           </div>
@@ -130,7 +224,73 @@ function LibraryPanel({ activeTool, profiles, visibleLayers, canEdit, doorFuncti
   );
 }
 
-function DeviceLifecyclePanel({ element, canEdit, onPatch }) {
+function NotifyTeammatesButton({ element }) {
+  const [open, setOpen] = useState(false);
+  const [teammates, setTeammates] = useState([]);
+  const [selected, setSelected] = useState(new Set());
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [status, setStatus] = useState('');
+
+  const openPicker = async () => {
+    setOpen(true);
+    setStatus('');
+    try { setTeammates(normalizeList(await api.notifyRecipients(element.id))); }
+    catch { setTeammates([]); }
+  };
+
+  const toggle = (id) => setSelected((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const send = async () => {
+    if (!selected.size) return;
+    setSending(true);
+    try {
+      const result = await api.notifyAboutElement(element.id, { userIds: [...selected], message: message.trim() || undefined });
+      const count = result?.notified ?? selected.size;
+      const emailNote = result?.emailsSent ? `, ${result.emailsSent} by email` : '';
+      setStatus(`Notified ${count} teammate${count === 1 ? '' : 's'}${emailNote}.`);
+      setSelected(new Set());
+      setMessage('');
+    } catch (error) { setStatus(error.message); }
+    finally { setSending(false); }
+  };
+
+  return (
+    <div className="notify-teammates">
+      <button type="button" className="button button--secondary" onClick={() => (open ? setOpen(false) : openPicker())}>
+        <Bell aria-hidden="true" size={15} /> Notify teammates
+      </button>
+      {open && (
+        <div className="notify-teammates__panel">
+          {teammates.length === 0
+            ? <p className="muted">No teammates found.</p>
+            : (
+              <div className="notify-teammates__list">
+                {teammates.map((member) => (
+                  <label key={member.id}>
+                    <input type="checkbox" checked={selected.has(member.id)} onChange={() => toggle(member.id)} />
+                    <span>{member.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          <textarea rows="2" placeholder="Optional note (e.g. what changed)" value={message} onChange={(event) => setMessage(event.target.value)} />
+          <div className="notify-teammates__actions">
+            <button type="button" className="button button--ghost" onClick={() => setOpen(false)}>Cancel</button>
+            <button type="button" className="button button--primary" disabled={sending || !selected.size} onClick={send}>{sending ? 'Sending…' : 'Send notification'}</button>
+          </div>
+          {status && <p className="notify-teammates__status">{status}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DeviceLifecyclePanel({ element, canAnnotate, onPatch }) {
   const metadata = metadataOf(element);
   const asset = metadata.asset || {};
   const [form, setForm] = useState({});
@@ -153,29 +313,30 @@ function DeviceLifecyclePanel({ element, canEdit, onPatch }) {
   return <section className="device-lifecycle" aria-label="Device lifecycle">
     <div className="section-title"><h3>Lifecycle & field status</h3><span className="workflow-badge" style={{ '--workflow-color': workflowStatusFor({ metadata: { ...metadata, workflowStatus: form.workflowStatus } }).color, '--workflow-text-color': workflowStatusFor({ metadata: { ...metadata, workflowStatus: form.workflowStatus } }).textColor }}>{workflowStatusFor({ metadata: { ...metadata, workflowStatus: form.workflowStatus } }).label}</span></div>
     <div className="form-grid form-grid--two">
-      <Field label="Installation status"><select value={form.workflowStatus || 'planned'} disabled={!canEdit} onChange={(event) => { const workflowStatus = event.target.value; update('workflowStatus', workflowStatus); onPatch({ metadata: { ...metadata, workflowStatus } }); }}>{DEVICE_WORKFLOW_STATUSES.map((status) => <option key={status.id} value={status.id}>{status.label}</option>)}</select></Field>
-      <Field label="Assigned to"><input value={form.assignee || ''} disabled={!canEdit} placeholder="Technician or vendor" onChange={(event) => update('assignee', event.target.value)} onBlur={() => saveWorkflow('assignee')} /></Field>
-      <Field label="Target date"><input type="date" value={form.dueDate || ''} disabled={!canEdit} onChange={(event) => update('dueDate', event.target.value)} onBlur={() => saveWorkflow('dueDate')} /></Field>
+      <Field label="Installation status"><select value={form.workflowStatus || 'planned'} disabled={!canAnnotate} onChange={(event) => { const workflowStatus = event.target.value; update('workflowStatus', workflowStatus); onPatch({ metadata: { ...metadata, workflowStatus } }); }}>{DEVICE_WORKFLOW_STATUSES.map((status) => <option key={status.id} value={status.id}>{status.label}</option>)}</select></Field>
+      <Field label="Assigned to"><input value={form.assignee || ''} disabled={!canAnnotate} placeholder="Technician or vendor" onChange={(event) => update('assignee', event.target.value)} onBlur={() => saveWorkflow('assignee')} /></Field>
+      <Field label="Target date"><input type="date" value={form.dueDate || ''} disabled={!canAnnotate} onChange={(event) => update('dueDate', event.target.value)} onBlur={() => saveWorkflow('dueDate')} /></Field>
       <Field label="Progress"><div className="workflow-progress"><span style={{ width: `${workflowStatusFor({ metadata: { workflowStatus: form.workflowStatus } }).progress}%`, backgroundColor: workflowStatusFor({ metadata: { workflowStatus: form.workflowStatus } }).color }} /><output>{workflowStatusFor({ metadata: { workflowStatus: form.workflowStatus } }).progress}%</output></div></Field>
     </div>
     <details className="asset-record"><summary><strong>Asset record</strong><span>Manufacturer, model, serial, network and warranty</span></summary><div className="form-grid form-grid--two">
-      <Field label="Manufacturer"><input value={form.manufacturer || ''} disabled={!canEdit} onChange={(event) => update('manufacturer', event.target.value)} onBlur={() => saveAsset('manufacturer')} /></Field>
-      <Field label="Model"><input value={form.model || ''} disabled={!canEdit} onChange={(event) => update('model', event.target.value)} onBlur={() => saveAsset('model')} /></Field>
-      <Field label="Part number"><input value={form.partNumber || ''} disabled={!canEdit} onChange={(event) => update('partNumber', event.target.value)} onBlur={() => saveAsset('partNumber')} /></Field>
-      <Field label="Serial number"><input value={form.serialNumber || ''} disabled={!canEdit} onChange={(event) => update('serialNumber', event.target.value)} onBlur={() => saveAsset('serialNumber')} /></Field>
-      <Field label="IP address"><input value={form.ipAddress || ''} disabled={!canEdit} inputMode="decimal" onChange={(event) => update('ipAddress', event.target.value)} onBlur={() => saveAsset('ipAddress')} /></Field>
-      <Field label="MAC address"><input value={form.macAddress || ''} disabled={!canEdit} autoCapitalize="characters" onChange={(event) => update('macAddress', event.target.value)} onBlur={() => saveAsset('macAddress')} /></Field>
-      <Field label="Installed"><input type="date" value={form.installDate || ''} disabled={!canEdit} onChange={(event) => update('installDate', event.target.value)} onBlur={() => saveAsset('installDate')} /></Field>
-      <Field label="Warranty expires"><input type="date" value={form.warrantyExpiry || ''} disabled={!canEdit} onChange={(event) => update('warrantyExpiry', event.target.value)} onBlur={() => saveAsset('warrantyExpiry')} /></Field>
+      <Field label="Manufacturer"><input value={form.manufacturer || ''} disabled={!canAnnotate} onChange={(event) => update('manufacturer', event.target.value)} onBlur={() => saveAsset('manufacturer')} /></Field>
+      <Field label="Model"><input value={form.model || ''} disabled={!canAnnotate} onChange={(event) => update('model', event.target.value)} onBlur={() => saveAsset('model')} /></Field>
+      <Field label="Part number"><input value={form.partNumber || ''} disabled={!canAnnotate} onChange={(event) => update('partNumber', event.target.value)} onBlur={() => saveAsset('partNumber')} /></Field>
+      <Field label="Serial number"><input value={form.serialNumber || ''} disabled={!canAnnotate} onChange={(event) => update('serialNumber', event.target.value)} onBlur={() => saveAsset('serialNumber')} /></Field>
+      <Field label="IP address"><input value={form.ipAddress || ''} disabled={!canAnnotate} inputMode="decimal" onChange={(event) => update('ipAddress', event.target.value)} onBlur={() => saveAsset('ipAddress')} /></Field>
+      <Field label="MAC address"><input value={form.macAddress || ''} disabled={!canAnnotate} autoCapitalize="characters" onChange={(event) => update('macAddress', event.target.value)} onBlur={() => saveAsset('macAddress')} /></Field>
+      <Field label="Installed"><input type="date" value={form.installDate || ''} disabled={!canAnnotate} onChange={(event) => update('installDate', event.target.value)} onBlur={() => saveAsset('installDate')} /></Field>
+      <Field label="Warranty expires"><input type="date" value={form.warrantyExpiry || ''} disabled={!canAnnotate} onChange={(event) => update('warrantyExpiry', event.target.value)} onBlur={() => saveAsset('warrantyExpiry')} /></Field>
     </div></details>
   </section>;
 }
 
-function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, onPatch, onDuplicate, onDelete, onAddNote, onAddPhoto, photoBusy, onClose, onCollapse }) {
+function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, onPatch, onPreview, onDuplicate, onDelete, onAddNote, onAddPhoto, photoBusy, onClose, onCollapse }) {
   const [form, setForm] = useState({
-    label: '', color: '#46545f', size: 42, rotation: 0, doorFunction: 'controlled', fovColor: '#1769aa', fovLength: 0.22, fovSpread: 60, fovRotation: 0,
+    label: '', color: '#46545f', size: 42, rotation: 0, doorFunction: 'controlled', fovColor: '#1769aa', fovLength: 0.22, fovSpread: 60, fovRotation: 0, fovs: null,
   });
   const [noteText, setNoteText] = useState('');
+  const labelSaveTimer = useRef(null);
   const [noteBusy, setNoteBusy] = useState(false);
   const [noteError, setNoteError] = useState('');
   const [photoCaption, setPhotoCaption] = useState('');
@@ -193,6 +354,7 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
       fovLength: Number(metadata.fovLength ?? 0.22),
       fovSpread: Number(metadata.fovSpread ?? 60),
       fovRotation: Number(metadata.fovRotation ?? 0),
+      fovs: Array.isArray(metadata.fovs) ? metadata.fovs : null,
     });
   }, [element?.id, element?.label, element?.color, element?.rotation, element?.metadata?.doorFunction]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -205,8 +367,8 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
   if (!element) {
     return (
       <aside className="editor-panel inspector-panel" aria-label="Element properties">
-        <div className="editor-panel__heading"><div><p className="eyebrow">Details</p><h2>Properties</h2></div><button type="button" className="icon-button mobile-only" onClick={onClose} aria-label="Close properties">×</button><button type="button" className="icon-button desktop-only" onClick={onCollapse} aria-label="Collapse properties panel" title="Collapse panel">»</button></div>
-        <div className="inspector-empty"><span aria-hidden="true">↖</span><h3>Select an element</h3><p>Choose a plotted device or markup to edit its details, notes, and photos.</p></div>
+        <div className="editor-panel__heading"><div><p className="eyebrow">Details</p><h2>Properties</h2></div><button type="button" className="icon-button mobile-only" onClick={onClose} aria-label="Close properties"><X aria-hidden="true" size={18} /></button><button type="button" className="icon-button desktop-only" onClick={onCollapse} aria-label="Collapse properties panel" title="Collapse panel"><ChevronsRight aria-hidden="true" size={16} /></button></div>
+        <div className="inspector-empty"><MousePointer2 aria-hidden="true" size={28} /><h3>Select an element</h3><p>Choose a plotted device or markup to edit its details, notes, and photos.</p></div>
       </aside>
     );
   }
@@ -228,11 +390,11 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
 
   return (
     <aside className="editor-panel inspector-panel" aria-label={`Properties for ${element.label}`}>
-      <div className="editor-panel__heading"><div><p className="eyebrow">Selected element</p><h2>{element.label}</h2></div><button type="button" className="icon-button mobile-only" onClick={onClose} aria-label="Close properties">×</button><button type="button" className="icon-button desktop-only" onClick={onCollapse} aria-label="Collapse properties panel" title="Collapse panel">»</button></div>
+      <div className="editor-panel__heading"><div><p className="eyebrow">Selected element</p><h2>{element.label}</h2></div><button type="button" className="icon-button mobile-only" onClick={onClose} aria-label="Close properties"><X aria-hidden="true" size={18} /></button><button type="button" className="icon-button desktop-only" onClick={onCollapse} aria-label="Collapse properties panel" title="Collapse panel"><ChevronsRight aria-hidden="true" size={16} /></button></div>
       <div className="inspector-scroll">
         <section className="inspector-section">
           <div className="element-identity"><span className="library-symbol" style={{ '--symbol-color': form.color }}><DeviceGlyph type={element.type} symbol={elementSymbol(element)} label={element.label} iconSrc={itemFor(element.category, element.type)?.reportIcon} color={form.color} /></span><div><strong>{categoryFor(element.category)?.name || (element.category === 'markup' ? 'Markup' : 'Custom')}</strong><span>{itemFor(element.category, element.type)?.label || element.type.replaceAll('_', ' ')}</span></div></div>
-          <Field label="Element label"><input value={form.label} disabled={!canEdit} onChange={(e) => setForm({ ...form, label: e.target.value })} onBlur={() => form.label !== element.label && onPatch({ label: form.label })} /></Field>
+          <Field label="Element label"><input value={form.label} disabled={!canEdit} onChange={(e) => { const value = e.target.value; setForm({ ...form, label: value }); onPreview(element.id, { label: value }); if (labelSaveTimer.current) window.clearTimeout(labelSaveTimer.current); labelSaveTimer.current = window.setTimeout(() => onPatch({ label: value }), 500); }} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} onBlur={() => { if (labelSaveTimer.current) window.clearTimeout(labelSaveTimer.current); if (form.label !== element.label) onPatch({ label: form.label }); }} /></Field>
           {isDoorType(element.type) && <div className="door-function-field"><Field label="Door function"><select value={form.doorFunction} disabled={!canEdit} onChange={(event) => { const option = doorFunctionFor(event.target.value); setForm((current) => ({ ...current, doorFunction: option.id, color: option.color })); onPatch({ color: option.color, metadata: { ...metadata, doorFunction: option.id } }); }}>{DOOR_FUNCTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></Field><div className="door-function-key" aria-label="Door function colors">{DOOR_FUNCTIONS.map((option) => <span key={option.id}><i style={{ backgroundColor: option.color }} />{option.label}</span>)}</div><p>Changing the door function automatically applies its standard icon color. You can still choose a custom color below.</p></div>}
           <div className="form-grid form-grid--two">
             <fieldset className="field color-field"><legend className="field__label">Icon color</legend><div className="color-control"><input type="color" aria-label="Choose icon color" value={form.color} disabled={!canEdit} onChange={(e) => setForm({ ...form, color: e.target.value })} onBlur={() => form.color !== elementColor(element) && onPatch({ color: form.color })} /><input aria-label="Icon color hex value" value={form.color} disabled={!canEdit} pattern="#[0-9a-fA-F]{6}" onChange={(e) => setForm({ ...form, color: e.target.value })} onBlur={() => /^#[0-9a-f]{6}$/i.test(form.color) && onPatch({ color: form.color })} /></div></fieldset>
@@ -244,34 +406,41 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
               <legend>Camera field of view</legend>
               {element.type === 'multisensor_camera' ? (
                 <div className="multisensor-fov-list">
-                  {cameraFieldsFor(element).map((fov, index, currentFovs) => <fieldset key={fov.id || index} className="multisensor-fov-control"><legend>View {index + 1}</legend>
-                    <label>Color <input type="color" value={fov.color || elementColor(element)} disabled={!canEdit} onChange={(event) => { const fovs = currentFovs.map((item, itemIndex) => itemIndex === index ? { ...item, color: event.target.value } : item); onPatch({ metadata: { ...metadata, fovs } }); }} /></label>
-                    <Field label="Direction"><div className="range-control"><input type="range" min="0" max="359" value={Number(fov.rotation || 0)} disabled={!canEdit} onChange={(event) => { const fovs = currentFovs.map((item, itemIndex) => itemIndex === index ? { ...item, rotation: Number(event.target.value) } : item); onPatch({ metadata: { ...metadata, fovs } }); }} /><output>{Number(fov.rotation || 0)}°</output></div></Field>
-                    <Field label="Length"><div className="range-control"><input type="range" min="0.05" max="0.75" step="0.01" value={Number(fov.length || 0.22)} disabled={!canEdit} onChange={(event) => { const fovs = currentFovs.map((item, itemIndex) => itemIndex === index ? { ...item, length: Number(event.target.value) } : item); onPatch({ metadata: { ...metadata, fovs } }); }} /><output>{Math.round(Number(fov.length || 0.22) * 100)}%</output></div></Field>
-                    <Field label="Spread"><div className="range-control"><input type="range" min="5" max="180" step="5" value={Number(fov.spread || 60)} disabled={!canEdit} onChange={(event) => { const fovs = currentFovs.map((item, itemIndex) => itemIndex === index ? { ...item, spread: Number(event.target.value) } : item); onPatch({ metadata: { ...metadata, fovs } }); }} /><output>{Number(fov.spread || 60)}°</output></div></Field>
-                  </fieldset>)}
+                  {(form.fovs || cameraFieldsFor(element)).map((fov, index, currentFovs) => {
+                    const updateFov = (patch) => {
+                      const nextFovs = currentFovs.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item);
+                      setForm((current) => ({ ...current, fovs: nextFovs }));
+                    };
+                    const commitFovs = () => onPatch({ metadata: { ...metadata, fovs: form.fovs || currentFovs } });
+                    return <fieldset key={fov.id || index} className="multisensor-fov-control"><legend>View {index + 1}</legend>
+                      <label>Color <input type="color" value={fov.color || elementColor(element)} disabled={!canEdit} onChange={(event) => updateFov({ color: event.target.value })} onBlur={commitFovs} /></label>
+                      <Field label="Direction"><div className="range-control"><input type="range" min="0" max="359" value={Number(fov.rotation || 0)} disabled={!canEdit} onChange={(event) => updateFov({ rotation: Number(event.target.value) })} onPointerUp={commitFovs} onKeyUp={commitFovs} /><output>{Number(fov.rotation || 0)}°</output></div></Field>
+                      <Field label="Length"><div className="range-control"><input type="range" min="0.05" max="0.75" step="0.01" value={Number(fov.length || 0.22)} disabled={!canEdit} onChange={(event) => updateFov({ length: Number(event.target.value) })} onPointerUp={commitFovs} onKeyUp={commitFovs} /><output>{Math.round(Number(fov.length || 0.22) * 100)}%</output></div></Field>
+                      <Field label="Spread"><div className="range-control"><input type="range" min="5" max="180" step="5" value={Number(fov.spread || 60)} disabled={!canEdit} onChange={(event) => updateFov({ spread: Number(event.target.value) })} onPointerUp={commitFovs} onKeyUp={commitFovs} /><output>{Number(fov.spread || 60)}°</output></div></Field>
+                    </fieldset>;
+                  })}
                 </div>
               ) : <>
               <fieldset className="field color-field">
                 <legend className="field__label">Cone color</legend>
                 <div className="color-control">
-                  <input type="color" aria-label="Choose camera cone color" value={form.fovColor} disabled={!canEdit} onChange={(e) => setForm({ ...form, fovColor: e.target.value })} onBlur={() => onPatch({ metadata: { ...metadata, fovColor: form.fovColor } })} />
-                  <input aria-label="Camera cone color hex value" value={form.fovColor} disabled={!canEdit} pattern="#[0-9a-fA-F]{6}" onChange={(e) => setForm({ ...form, fovColor: e.target.value })} onBlur={() => /^#[0-9a-f]{6}$/i.test(form.fovColor) && onPatch({ metadata: { ...metadata, fovColor: form.fovColor } })} />
+                  <input type="color" aria-label="Choose camera cone color" value={form.fovColor} disabled={!canEdit} onChange={(e) => setForm({ ...form, fovColor: e.target.value })} onBlur={() => onPatch({ metadata: { ...metadata, fovColor: form.fovColor, fovLength: form.fovLength, fovSpread: form.fovSpread, fovRotation: form.fovRotation } })} />
+                  <input aria-label="Camera cone color hex value" value={form.fovColor} disabled={!canEdit} pattern="#[0-9a-fA-F]{6}" onChange={(e) => setForm({ ...form, fovColor: e.target.value })} onBlur={() => /^#[0-9a-f]{6}$/i.test(form.fovColor) && onPatch({ metadata: { ...metadata, fovColor: form.fovColor, fovLength: form.fovLength, fovSpread: form.fovSpread, fovRotation: form.fovRotation } })} />
                 </div>
               </fieldset>
               <Field label="Cone length">
-                <div className="range-control"><input type="range" min="0.05" max="0.75" step="0.01" value={form.fovLength} disabled={!canEdit} onChange={(e) => setForm({ ...form, fovLength: Number(e.target.value) })} onPointerUp={() => onPatch({ metadata: { ...metadata, fovLength: form.fovLength } })} onKeyUp={() => onPatch({ metadata: { ...metadata, fovLength: form.fovLength } })} /><output>{Math.round(form.fovLength * 100)}%</output></div>
+                <div className="range-control"><input type="range" min="0.05" max="0.75" step="0.01" value={form.fovLength} disabled={!canEdit} onChange={(e) => setForm({ ...form, fovLength: Number(e.target.value) })} onPointerUp={() => onPatch({ metadata: { ...metadata, fovColor: form.fovColor, fovLength: form.fovLength, fovSpread: form.fovSpread, fovRotation: form.fovRotation } })} onKeyUp={() => onPatch({ metadata: { ...metadata, fovColor: form.fovColor, fovLength: form.fovLength, fovSpread: form.fovSpread, fovRotation: form.fovRotation } })} /><output>{Math.round(form.fovLength * 100)}%</output></div>
               </Field>
               <Field label="Cone spread">
-                <div className="range-control"><input type="range" min="5" max="180" step="5" value={form.fovSpread} disabled={!canEdit} onChange={(e) => setForm({ ...form, fovSpread: Number(e.target.value) })} onPointerUp={() => onPatch({ metadata: { ...metadata, fovSpread: form.fovSpread } })} onKeyUp={() => onPatch({ metadata: { ...metadata, fovSpread: form.fovSpread } })} /><output>{form.fovSpread}°</output></div>
+                <div className="range-control"><input type="range" min="5" max="180" step="5" value={form.fovSpread} disabled={!canEdit} onChange={(e) => setForm({ ...form, fovSpread: Number(e.target.value) })} onPointerUp={() => onPatch({ metadata: { ...metadata, fovColor: form.fovColor, fovLength: form.fovLength, fovSpread: form.fovSpread, fovRotation: form.fovRotation } })} onKeyUp={() => onPatch({ metadata: { ...metadata, fovColor: form.fovColor, fovLength: form.fovLength, fovSpread: form.fovSpread, fovRotation: form.fovRotation } })} /><output>{form.fovSpread}°</output></div>
               </Field>
-              <Field label="Cone direction"><div className="range-control"><input type="range" min="0" max="359" step="1" value={form.fovRotation} disabled={!canEdit} onChange={(e) => setForm({ ...form, fovRotation: Number(e.target.value) })} onPointerUp={() => onPatch({ metadata: { ...metadata, fovRotation: form.fovRotation } })} onKeyUp={() => onPatch({ metadata: { ...metadata, fovRotation: form.fovRotation } })} /><output>{form.fovRotation}°</output></div></Field>
+              <Field label="Cone direction"><div className="range-control"><input type="range" min="0" max="359" step="1" value={form.fovRotation} disabled={!canEdit} onChange={(e) => setForm({ ...form, fovRotation: Number(e.target.value) })} onPointerUp={() => onPatch({ metadata: { ...metadata, fovColor: form.fovColor, fovLength: form.fovLength, fovSpread: form.fovSpread, fovRotation: form.fovRotation } })} onKeyUp={() => onPatch({ metadata: { ...metadata, fovColor: form.fovColor, fovLength: form.fovLength, fovSpread: form.fovSpread, fovRotation: form.fovRotation } })} /><output>{form.fovRotation}°</output></div></Field>
               </>}
               <p>The cone direction is independent from the camera icon rotation.</p>
             </fieldset>
           )}
           {element.category !== 'markup' && Array.isArray(metadata.components) && metadata.components.length > 0 && <fieldset className="assembly-components"><legend>Attached components</legend>{metadata.components.map((component, index) => <div key={`${component.type}-${index}`}><span><strong>{component.symbol}</strong> {component.label}</span>{canEdit && <button type="button" className="icon-button" aria-label={`Remove ${component.label}`} onClick={() => onPatch({ metadata: { ...metadata, components: metadata.components.filter((_, itemIndex) => itemIndex !== index) } })}>×</button>}</div>)}</fieldset>}
-          {element.category !== 'markup' && <DeviceLifecyclePanel element={element} canEdit={canEdit} onPatch={onPatch} />}
+          {element.category !== 'markup' && <DeviceLifecyclePanel element={element} canAnnotate={canAnnotate} onPatch={onPatch} />}
           <p className="edit-attribution">Last edited by {element.updatedBy?.name || element.updated_by_name || 'a team member'} · {formatWhen(element.updatedAt || element.updated_at)}</p>
           {canEdit && <div className="button-group button-group--wide"><button type="button" className="button button--secondary" onClick={onDuplicate}>Duplicate</button><button type="button" className="button button--ghost danger-text" onClick={onDelete}>Delete</button></div>}
         </section>
@@ -284,8 +453,8 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
 
         <section className="inspector-section">
           <div className="section-title"><h3>Cloud photos</h3><span>{photos.length}</span></div>
-          {photos.length > 0 && <div className="photo-grid">{photos.map((photo) => <CloudPhoto key={photo.id} photo={photo} elementLabel={element.label} />)}</div>}
-          {canAnnotate && <div className="photo-upload"><Field label="Photo caption"><input value={photoCaption} onChange={(e) => setPhotoCaption(e.target.value)} placeholder="Optional field note" /></Field><label className={`button button--secondary upload-button ${photoBusy ? 'disabled' : ''}`}><input type="file" accept="image/jpeg,image/png,image/webp,image/heic" capture="environment" disabled={photoBusy} onChange={(e) => { const file = e.target.files?.[0]; if (file) onAddPhoto(file, photoCaption).then(() => setPhotoCaption('')); e.target.value = ''; }} /><span>{photoBusy ? 'Uploading to cloud…' : 'Take or upload photo'}</span></label><p className="cloud-note"><span aria-hidden="true">☁</span> Photos are uploaded to the workspace and are not stored in this app on your device.</p></div>}
+          {photos.length > 0 ? <div className="photo-grid">{photos.map((photo) => <CloudPhoto key={photo.id} photo={photo} elementLabel={element.label} />)}</div> : <p className="muted">No photos on this element yet.</p>}
+          {canAnnotate && <div className="photo-upload"><Field label="Photo caption"><input value={photoCaption} onChange={(e) => setPhotoCaption(e.target.value)} placeholder="Optional field note" /></Field><label className={`button button--secondary upload-button ${photoBusy ? 'disabled' : ''}`}><input type="file" accept="image/jpeg,image/png,image/webp,image/heic" capture="environment" disabled={photoBusy} onChange={(e) => { const file = e.target.files?.[0]; if (file) onAddPhoto(file, photoCaption).then(() => setPhotoCaption('')); e.target.value = ''; }} /><span>{photoBusy ? 'Uploading to cloud…' : 'Take or upload photo'}</span></label><p className="cloud-note"><Cloud aria-hidden="true" size={14} /> Photos are uploaded to the workspace and are not stored in this app on your device.</p></div>}
         </section>
       </div>
     </aside>
@@ -542,6 +711,31 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
     }
   };
 
+  const nestOnto = async (draggedId, targetId) => {
+    if (!canEdit) return;
+    const dragged = elements.find((element) => element.id === draggedId);
+    const target = elements.find((element) => element.id === targetId && element.category !== 'markup');
+    if (!dragged || !target) return;
+    const targetMetadata = metadataOf(target);
+    const components = Array.isArray(targetMetadata.components) ? targetMetadata.components : [];
+    const component = { category: dragged.category, type: dragged.type, label: dragged.label, symbol: elementSymbol(dragged), color: elementColor(dragged), ...(dragged.metadata?.doorFunction ? { doorFunction: dragged.metadata.doorFunction } : {}) };
+    if (components.some((item) => item.category === component.category && item.type === component.type)) {
+      notify(`${dragged.label} is already part of ${target.label}.`);
+      return;
+    }
+    try {
+      const metadata = { ...targetMetadata, components: [...components, component] };
+      const updated = await api.updateElement(target.id, { metadata });
+      await api.deleteElement(dragged.id);
+      setElements((current) => current
+        .filter((element) => element.id !== dragged.id)
+        .map((element) => element.id === target.id ? normalizeElement({ ...element, ...updated, metadata }) : element));
+      setSelectedId(target.id);
+      touch();
+      notify(`${dragged.label} merged into ${target.label}.`);
+    } catch (error) { notify(error.message); }
+  };
+
   const dropComponent = async (payload, point, targetId) => {
     if (!payload || !canEdit) return;
     if (targetId && payload.kind === 'device') {
@@ -584,8 +778,9 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
     let x = start.x; let y = start.y; let width = end.x - start.x; let height = end.y - start.y;
     if (!['line', 'arrow'].includes(type)) { x = Math.min(start.x, end.x); y = Math.min(start.y, end.y); width = Math.abs(end.x - start.x); height = Math.abs(end.y - start.y); }
     if (Math.abs(width) < 0.005 && Math.abs(height) < 0.005 && type !== 'text') return;
+    const defaultLabel = type === 'text' ? 'Callout' : type[0].toUpperCase() + type.slice(1);
     try {
-      await createOne({ category: 'markup', type, label: type === 'text' ? 'Callout' : type[0].toUpperCase() + type.slice(1), x, y, width: type === 'text' ? 0.14 : width, height: type === 'text' ? 0.05 : height, rotation: 0, color: '#b4232d', metadata: type === 'text' ? { fontSize: 18 } : {} });
+      await createOne({ category: 'markup', type, label: defaultLabel, x, y, width: type === 'text' ? 0.14 : width, height: type === 'text' ? 0.05 : height, rotation: 0, color: '#b4232d', metadata: type === 'text' ? { fontSize: 18 } : {} });
       setActiveTool({ kind: 'markup', type: 'select', label: 'Select' });
     } catch (error) { notify(error.message); }
   };
@@ -595,20 +790,37 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
     if (commit) api.updateElement(id, { x, y }).then(touch).catch((error) => { notify(error.message); reloadElements(); });
   };
 
+  const patchSequenceRef = useRef({});
+  const nextPatchSequence = (id) => {
+    const next = (patchSequenceRef.current[id] || 0) + 1;
+    patchSequenceRef.current[id] = next;
+    return next;
+  };
+  const isLatestPatch = (id, sequence) => patchSequenceRef.current[id] === sequence;
+
   const resizeElement = (id, values, commit) => {
     setElements((current) => current.map((element) => element.id === id ? normalizeElement({ ...element, ...values }) : element));
-    if (commit) api.updateElement(id, values).then((updated) => { setElements((current) => current.map((element) => element.id === id ? normalizeElement({ ...element, ...updated }) : element)); touch(); }).catch((error) => { notify(error.message); reloadElements(); });
+    if (commit) {
+      const sequence = nextPatchSequence(id);
+      api.updateElement(id, values)
+        .then((updated) => { if (isLatestPatch(id, sequence)) { setElements((current) => current.map((element) => element.id === id ? normalizeElement({ ...element, ...updated }) : element)); touch(); } })
+        .catch((error) => { if (isLatestPatch(id, sequence)) { notify(error.message); reloadElements(); } });
+    }
   };
 
   const patchSelected = async (values) => {
     if (!selected) return;
+    const targetId = selected.id;
     const previous = selected;
-    setElements((current) => current.map((element) => element.id === selected.id ? normalizeElement({ ...element, ...values }) : element));
+    const sequence = nextPatchSequence(targetId);
+    setElements((current) => current.map((element) => element.id === targetId ? normalizeElement({ ...element, ...values }) : element));
     try {
-      const updated = await api.updateElement(selected.id, values);
-      setElements((current) => current.map((element) => element.id === selected.id ? normalizeElement({ ...element, ...updated }) : element));
+      const updated = await api.updateElement(targetId, values);
+      if (!isLatestPatch(targetId, sequence)) return;
+      setElements((current) => current.map((element) => element.id === targetId ? normalizeElement({ ...element, ...updated }) : element));
       touch();
     } catch (error) {
+      if (!isLatestPatch(targetId, sequence)) return;
       setElements((current) => current.map((element) => element.id === previous.id ? previous : element));
       notify(error.message);
     }
@@ -617,9 +829,18 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
   const patchElement = async (id, values) => {
     const previous = elements.find((element) => element.id === id);
     if (!previous) return;
+    const sequence = nextPatchSequence(id);
     setElements((current) => current.map((element) => element.id === id ? normalizeElement({ ...element, ...values }) : element));
-    try { const updated = await api.updateElement(id, values); setElements((current) => current.map((element) => element.id === id ? normalizeElement({ ...element, ...updated }) : element)); touch(); }
-    catch (error) { setElements((current) => current.map((element) => element.id === id ? previous : element)); notify(error.message); }
+    try {
+      const updated = await api.updateElement(id, values);
+      if (!isLatestPatch(id, sequence)) return;
+      setElements((current) => current.map((element) => element.id === id ? normalizeElement({ ...element, ...updated }) : element));
+      touch();
+    } catch (error) {
+      if (!isLatestPatch(id, sequence)) return;
+      setElements((current) => current.map((element) => element.id === id ? previous : element));
+      notify(error.message);
+    }
   };
 
   const previewElement = (id, values) => {
@@ -634,6 +855,33 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
       notify('Element duplicated.');
     } catch (error) { notify(error.message); }
   };
+
+  const clipboardRef = useRef(null);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (!canEdit) return;
+      const targetTag = event.target?.tagName;
+      if (targetTag === 'INPUT' || targetTag === 'TEXTAREA' || event.target?.isContentEditable) return;
+      if (!(event.metaKey || event.ctrlKey)) return;
+      const key = event.key.toLowerCase();
+      if (key === 'c') {
+        if (!selected) return;
+        clipboardRef.current = selected;
+        notify(`${selected.label} copied.`);
+      } else if (key === 'v') {
+        if (!clipboardRef.current) return;
+        event.preventDefault();
+        const source = clipboardRef.current;
+        const { id, createdAt, created_at, updatedAt, updated_at, ...copy } = source;
+        createOne({ ...copy, label: `${source.label} copy`, x: Math.min(1, Number(source.x) + 0.03), y: Math.min(1, Number(source.y) + 0.03) })
+          .then(() => notify(`${source.label} pasted.`))
+          .catch((error) => notify(error.message));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selected, canEdit, notify]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const deleteSelected = async () => {
     if (!selected) return;
@@ -667,23 +915,16 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
 
   const exportPdf = async () => {
     setPdfBusy(true);
-    const previousZoom = zoom;
     let planImageDataUrl = null;
     try {
       let site = { name: '' };
       try { site = await api.site(siteId); } catch { /* fall back to a blank site name rather than blocking the export */ }
 
-      if (planStageRef.current) {
+      if (planStageRef.current?.captureFloorPlanImage) {
         try {
-          setZoom(1);
-          await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-          const { default: html2canvas } = await import('html2canvas');
-          const canvas = await html2canvas(planStageRef.current, { backgroundColor: '#ffffff', useCORS: true, scale: 2 });
-          planImageDataUrl = canvas.toDataURL('image/png');
+          planImageDataUrl = await planStageRef.current.captureFloorPlanImage();
         } catch {
           // If the floor plan image can't be captured for any reason, continue with a text-only export instead of blocking it.
-        } finally {
-          setZoom(previousZoom);
         }
       }
 
@@ -733,15 +974,16 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
   return (
     <main id="main-content" className="survey-editor">
       <header className="editor-header">
-        <button type="button" className="icon-button" onClick={() => navigate(siteId ? `sites/${siteId}` : 'sites')} aria-label="Back to site"><span aria-hidden="true">←</span></button>
+        <button type="button" className="icon-button" onClick={() => navigate(siteId ? `sites/${siteId}` : 'sites')} aria-label="Back to site"><ArrowLeft aria-hidden="true" size={18} /></button>
         <div className="editor-title"><h1>{survey.name}</h1><span>Last edited by {lastEditor} · {formatWhen(survey.updatedAt || survey.updated_at)}</span></div>
         <div className="editor-header__spacer" />
         <Presence users={presence.length ? presence : [user]} status={syncStatus} />
         <div className="editor-actions">
-          <button type="button" className="button button--ghost" onClick={rotate} disabled={!canEdit} title="Rotate survey clockwise"><span aria-hidden="true">↻</span><span className="button-label">Rotate {orientation}°</span></button>
-          <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'schedule' })}><span aria-hidden="true">☷</span><span className="button-label">Schedule</span></button>
-          <button type="button" className="button button--secondary" onClick={toggleTheme} title="Toggle dark mode"><span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span><span className="button-label">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button>
-          <button type="button" className="button button--secondary" onClick={exportPdf} disabled={pdfBusy} title="Export a PDF summary of plotted devices"><span aria-hidden="true">⬇</span><span className="button-label">{pdfBusy ? 'Exporting…' : 'Export PDF'}</span></button>
+          {canEdit && <button type="button" className="button button--ghost" onClick={rotate} title="Rotate survey clockwise"><RotateCw aria-hidden="true" size={16} /><span className="button-label">Rotate {orientation}°</span></button>}
+          <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'schedule' })}><ListChecks aria-hidden="true" size={16} /><span className="button-label">Schedule</span></button>
+          <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'history' })}><History aria-hidden="true" size={16} /><span className="button-label">History</span></button>
+          <button type="button" className="button button--secondary" onClick={toggleTheme} title="Toggle dark mode">{theme === 'dark' ? <Sun aria-hidden="true" size={16} /> : <Moon aria-hidden="true" size={16} />}<span className="button-label">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button>
+          <button type="button" className="button button--secondary" onClick={exportPdf} disabled={pdfBusy} title="Export a PDF summary of plotted devices"><Download aria-hidden="true" size={16} /><span className="button-label">{pdfBusy ? 'Exporting…' : 'Export PDF'}</span></button>
         </div>
       </header>
 
@@ -751,20 +993,21 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
 
         <section className="canvas-panel">
           <div className="canvas-toolbar" aria-label="Plan view controls">
-            <div className="page-controls"><button type="button" className="icon-button" aria-label="Previous PDF page" disabled={pageInfo.page <= 1} onClick={() => setPageInfo((current) => ({ ...current, page: current.page - 1 }))}>‹</button><span>Page {pageInfo.page} of {pageInfo.pages}</span><button type="button" className="icon-button" aria-label="Next PDF page" disabled={pageInfo.page >= pageInfo.pages} onClick={() => setPageInfo((current) => ({ ...current, page: current.page + 1 }))}>›</button></div>
-            <div className="zoom-controls"><button type="button" className="icon-button" aria-label="Zoom out" onClick={() => setZoom((value) => Math.max(MIN_PLAN_ZOOM, Number((value - 0.1).toFixed(2))))}>−</button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button type="button" className="icon-button" aria-label="Zoom in" onClick={() => setZoom((value) => Math.min(MAX_PLAN_ZOOM, Number((value + 0.1).toFixed(2))))}>＋</button><button type="button" className="button button--ghost fit-button" onClick={() => setZoom(FIT_PLAN_ZOOM)}>Fit</button></div>
+            <div className="page-controls"><button type="button" className="icon-button" aria-label="Previous PDF page" disabled={pageInfo.page <= 1} onClick={() => setPageInfo((current) => ({ ...current, page: current.page - 1 }))}><ChevronLeft aria-hidden="true" size={18} /></button><span>Page {pageInfo.page} of {pageInfo.pages}</span><button type="button" className="icon-button" aria-label="Next PDF page" disabled={pageInfo.page >= pageInfo.pages} onClick={() => setPageInfo((current) => ({ ...current, page: current.page + 1 }))}><ChevronRight aria-hidden="true" size={18} /></button></div>
+            <div className="zoom-controls"><button type="button" className="icon-button" aria-label="Zoom out" onClick={() => setZoom((value) => Math.max(MIN_PLAN_ZOOM, Number((value - 0.1).toFixed(2))))}><Minus aria-hidden="true" size={16} /></button><output aria-live="polite">{Math.round(zoom * 100)}%</output><button type="button" className="icon-button" aria-label="Zoom in" onClick={() => setZoom((value) => Math.min(MAX_PLAN_ZOOM, Number((value + 0.1).toFixed(2))))}><Plus aria-hidden="true" size={16} /></button><button type="button" className="button button--ghost fit-button" onClick={() => setZoom(FIT_PLAN_ZOOM)}>Fit</button></div>
           </div>
-          <PdfPlan survey={survey} orientation={orientation} pageNumber={pageInfo.page} onPageInfo={setPageInfo} zoom={zoom} onZoom={setZoom} elements={elements} visibleLayers={visibleLayers} selectedId={selectedId} activeTool={activeTool} canEdit={canEdit} onPlace={place} onDropComponent={dropComponent} onDraw={draw} onPreviewElement={previewElement} onPatchElement={patchElement} onResizeElement={resizeElement} onSelect={setSelectedId} onMove={move} onDeleteSelected={() => selected && setModal({ type: 'delete-element' })} notify={notify} stageRef={planStageRef} scalePaperInches={scaleDraft.scalePaperInches} scaleRealFeet={scaleDraft.scaleRealFeet} />
+          <PdfPlan survey={survey} orientation={orientation} pageNumber={pageInfo.page} onPageInfo={setPageInfo} zoom={zoom} onZoom={setZoom} elements={elements} visibleLayers={visibleLayers} selectedId={selectedId} activeTool={activeTool} canEdit={canEdit} onPlace={place} onDropComponent={dropComponent} onNestOnto={nestOnto} onDraw={draw} onPreviewElement={previewElement} onPatchElement={patchElement} onResizeElement={resizeElement} onSelect={setSelectedId} onMove={move} onDeleteSelected={() => selected && setModal({ type: 'delete-element' })} notify={notify} stageRef={planStageRef} scalePaperInches={scaleDraft.scalePaperInches} scaleRealFeet={scaleDraft.scaleRealFeet} />
           <div className="mobile-canvas-hint" aria-hidden="true">1 finger moves · 2 fingers zoom</div>
         </section>
 
-        <div className={`mobile-editor-drawer mobile-editor-drawer--right ${mobilePanel === 'inspector' ? 'open' : ''}`}><InspectorPanel element={selected} notes={notes} notesLoading={notesLoading} canEdit={canEdit} canAnnotate={canAnnotate} onPatch={patchSelected} onDuplicate={duplicateSelected} onDelete={() => setModal({ type: 'delete-element' })} onAddNote={addNote} onAddPhoto={addPhoto} photoBusy={photoBusy} onClose={() => setMobilePanel(null)} onCollapse={() => setInspectorCollapsed(true)} /></div>
-        {inspectorCollapsed && <button type="button" className="inspector-reopen-tab desktop-only" onClick={() => setInspectorCollapsed(false)} aria-label="Show properties panel" title="Show properties panel"><span aria-hidden="true">«</span></button>}
+        <div className={`mobile-editor-drawer mobile-editor-drawer--right ${mobilePanel === 'inspector' ? 'open' : ''}`}><InspectorPanel element={selected} notes={notes} notesLoading={notesLoading} canEdit={canEdit} canAnnotate={canAnnotate} onPatch={patchSelected} onPreview={previewElement} onDuplicate={duplicateSelected} onDelete={() => setModal({ type: 'delete-element' })} onAddNote={addNote} onAddPhoto={addPhoto} photoBusy={photoBusy} onClose={() => setMobilePanel(null)} onCollapse={() => setInspectorCollapsed(true)} /></div>
+        {inspectorCollapsed && <button type="button" className="inspector-reopen-tab desktop-only" onClick={() => setInspectorCollapsed(false)} aria-label="Show properties panel" title="Show properties panel"><ChevronsLeft aria-hidden="true" size={16} /></button>}
       </div>
 
-      <nav className="editor-mobile-nav" aria-label="Survey editor panels"><button type="button" className={mobilePanel === 'library' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'library' ? null : 'library')}><span aria-hidden="true">＋</span>Add</button><button type="button" className={activeTool.type === 'select' && !mobilePanel ? 'active' : ''} onClick={() => { setActiveTool({ kind: 'markup', type: 'select', label: 'Select' }); setMobilePanel(null); }}><span aria-hidden="true">✥</span>Move</button><button type="button" className={mobilePanel === 'inspector' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'inspector' ? null : 'inspector')} disabled={!selected}><span aria-hidden="true">☷</span>{selected ? 'Details' : 'Select item'}</button></nav>
+      <nav className="editor-mobile-nav" aria-label="Survey editor panels"><button type="button" className={mobilePanel === 'library' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'library' ? null : 'library')}>{canEdit ? <Plus aria-hidden="true" size={18} /> : <Layers aria-hidden="true" size={18} />}{canEdit ? 'Add' : 'Layers'}</button><button type="button" className={activeTool.type === 'select' && !mobilePanel ? 'active' : ''} onClick={() => { setActiveTool({ kind: 'markup', type: 'select', label: 'Select' }); setMobilePanel(null); }}><Move aria-hidden="true" size={18} />Move</button><button type="button" className={mobilePanel === 'inspector' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'inspector' ? null : 'inspector')} disabled={!selected}><ListChecks aria-hidden="true" size={18} />{selected ? 'Details' : 'Select item'}</button></nav>
 
       <Modal open={modal?.type === 'schedule'} title="Device schedule" description={`${elements.filter((element) => element.category !== 'markup').length} plotted security components`} onClose={() => setModal(null)} wide><Schedule elements={elements} onSelect={setSelectedId} onClose={() => setModal(null)} /></Modal>
+      <Modal open={modal?.type === 'history'} title="Survey history" description="Who plotted, edited, or removed items, and when." onClose={() => setModal(null)} wide>{modal?.type === 'history' && <HistoryPanel surveyId={surveyId} notify={notify} />}</Modal>
       <ProfileBuilder open={modal?.type === 'profile'} onClose={() => setModal(null)} onCreate={createProfile} />
       <ConfirmDialog open={modal?.type === 'delete-element'} title="Delete this element?" onClose={() => setModal(null)} onConfirm={deleteSelected}><p><strong>{selected?.label}</strong> and its notes and cloud photos will be permanently deleted.</p></ConfirmDialog>
     </main>
