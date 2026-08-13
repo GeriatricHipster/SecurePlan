@@ -341,6 +341,21 @@ const POSTGRES_SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS idx_survey_report_photos_report ON survey_report_photos(report_id);
 
+  CREATE TABLE IF NOT EXISTS element_checklist_items (
+    id TEXT PRIMARY KEY,
+    element_id TEXT NOT NULL REFERENCES elements(id) ON DELETE CASCADE,
+    item_key TEXT,
+    label TEXT NOT NULL,
+    status TEXT NOT NULL,
+    status_options_json TEXT NOT NULL DEFAULT '[]',
+    is_custom INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_element_checklist_items_element ON element_checklist_items(element_id, sort_order);
+
   CREATE TABLE IF NOT EXISTS password_reset_tokens (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

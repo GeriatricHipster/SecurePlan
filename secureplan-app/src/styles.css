@@ -3387,6 +3387,86 @@ h3 {
   margin-top: 12px;
 }
 
+.checklist-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.checklist-section__title {
+  margin: 0;
+  color: var(--ink);
+  font-size: .82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+
+.checklist-section__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.checklist-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.checklist-row__label {
+  font-size: .85rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.checklist-row select {
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--page);
+  color: var(--ink);
+  font-size: .82rem;
+}
+
+.checklist-row__remove {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  place-items: center;
+}
+
+.checklist-row__remove:hover {
+  background: var(--surface-soft);
+  color: var(--red);
+}
+
+.checklist-section__add-button {
+  align-self: flex-start;
+}
+
+.checklist-section__add-row {
+  display: flex;
+  gap: 6px;
+}
+
+.checklist-section__add-row input {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--page);
+  color: var(--ink);
+  font-size: .85rem;
+}
+
 .notify-teammates__panel {
   display: flex;
   flex-direction: column;

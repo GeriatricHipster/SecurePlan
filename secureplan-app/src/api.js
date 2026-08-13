@@ -446,6 +446,10 @@ export const api = {
   deleteElement: (id) => request(`/api/elements/${id}`, json('DELETE')),
   notes: (id) => request(`/api/elements/${id}/notes`),
   photos: (id) => request(`/api/elements/${id}/photos`),
+  checklist: (elementId) => request(`/api/elements/${elementId}/checklist`),
+  addChecklistItem: (elementId, values) => request(`/api/elements/${elementId}/checklist`, json('POST', values)),
+  updateChecklistItem: (itemId, values) => request(`/api/checklist-items/${itemId}`, json('PATCH', values)),
+  deleteChecklistItem: (itemId) => request(`/api/checklist-items/${itemId}`, json('DELETE')),
   addNote: (id, text) => request(`/api/elements/${id}/notes`, json('POST', { text })),
   addPhoto: (id, file, caption = '') => {
     const form = new FormData();

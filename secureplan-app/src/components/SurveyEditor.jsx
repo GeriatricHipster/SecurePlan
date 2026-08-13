@@ -633,6 +633,86 @@ function AssignedUsersPanel({ surveyId, notify }) {
   );
 }
 
+function ChecklistSection({ element, canAnnotate }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [newLabel, setNewLabel] = useState('');
+  const [error, setError] = useState('');
+
+  const load = async () => {
+    try {
+      const result = await api.checklist(element.id);
+      setItems(normalizeList(result?.items ?? result));
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, [element.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const updateStatus = async (itemId, status) => {
+    setItems((current) => current.map((item) => item.id === itemId ? { ...item, status } : item));
+    try { await api.updateChecklistItem(itemId, { status }); }
+    catch (err) { setError(err.message); load(); }
+  };
+
+  const addItem = async () => {
+    if (!newLabel.trim()) return;
+    try {
+      const result = await api.addChecklistItem(element.id, { label: newLabel.trim() });
+      setItems((current) => [...current, result?.data ?? result]);
+      setNewLabel('');
+      setAdding(false);
+    } catch (err) { setError(err.message); }
+  };
+
+  const removeItem = async (itemId) => {
+    try { await api.deleteChecklistItem(itemId); setItems((current) => current.filter((item) => item.id !== itemId)); }
+    catch (err) { setError(err.message); }
+  };
+
+  if (loading) return null;
+
+  return (
+    <div className="checklist-section">
+      <h3 className="checklist-section__title">Checklist</h3>
+      {error && <p className="notice notice--error">{error}</p>}
+      {items.length === 0 && !adding && <p className="muted">No checklist items yet.</p>}
+      {items.length > 0 && (
+        <div className="checklist-section__list">
+          {items.map((item) => (
+            <div key={item.id} className="checklist-row">
+              <span className="checklist-row__label">{item.label}</span>
+              <select value={item.status} disabled={!canAnnotate} onChange={(event) => updateStatus(item.id, event.target.value)}>
+                {item.statusOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+              {canAnnotate && <button type="button" className="checklist-row__remove" onClick={() => removeItem(item.id)} aria-label={`Remove ${item.label}`}><X size={13} /></button>}
+            </div>
+          ))}
+        </div>
+      )}
+      {canAnnotate && (
+        adding ? (
+          <div className="checklist-section__add-row">
+            <input
+              type="text"
+              placeholder="Item name"
+              value={newLabel}
+              onChange={(event) => setNewLabel(event.target.value)}
+              autoFocus
+              onKeyDown={(event) => { if (event.key === 'Enter') addItem(); if (event.key === 'Escape') { setAdding(false); setNewLabel(''); } }}
+            />
+            <button type="button" className="button button--ghost" onClick={() => { setAdding(false); setNewLabel(''); }}>Cancel</button>
+            <button type="button" className="button button--secondary" onClick={addItem}>Add</button>
+          </div>
+        ) : (
+          <button type="button" className="button button--ghost checklist-section__add-button" onClick={() => setAdding(true)}><Plus size={14} aria-hidden="true" /> Add checklist item</button>
+        )
+      )}
+    </div>
+  );
+}
+
 function DeviceLifecyclePanel({ element, canAnnotate, onPatch }) {
   const metadata = metadataOf(element);
   const asset = metadata.asset || {};
@@ -661,6 +741,8 @@ function DeviceLifecyclePanel({ element, canAnnotate, onPatch }) {
       <Field label="Target date"><input type="date" value={form.dueDate || ''} disabled={!canAnnotate} onChange={(event) => update('dueDate', event.target.value)} onBlur={() => saveWorkflow('dueDate')} /></Field>
       <Field label="Progress"><div className="workflow-progress"><span style={{ width: `${workflowStatusFor({ metadata: { workflowStatus: form.workflowStatus } }).progress}%`, backgroundColor: workflowStatusFor({ metadata: { workflowStatus: form.workflowStatus } }).color }} /><output>{workflowStatusFor({ metadata: { workflowStatus: form.workflowStatus } }).progress}%</output></div></Field>
     </div>
+    <NotifyTeammatesButton element={element} />
+    <ChecklistSection element={element} canAnnotate={canAnnotate} />
     <details className="asset-record"><summary><strong>Asset record</strong><span>Manufacturer, model, serial, network and warranty</span></summary><div className="form-grid form-grid--two">
       <Field label="Manufacturer"><input value={form.manufacturer || ''} disabled={!canAnnotate} onChange={(event) => update('manufacturer', event.target.value)} onBlur={() => saveAsset('manufacturer')} /></Field>
       <Field label="Model"><input value={form.model || ''} disabled={!canAnnotate} onChange={(event) => update('model', event.target.value)} onBlur={() => saveAsset('model')} /></Field>

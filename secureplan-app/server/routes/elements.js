@@ -3,10 +3,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import multer from 'multer';
 import { assertSiteAccess, hasRole } from '../lib/auth.js';
-import { badRequest, forbidden } from '../lib/errors.js';
+import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { deleteStoredFile, cleanTemporaryUpload, storePhoto, storedFileDelivery, validatePhotoUpload } from '../lib/storage.js';
 import { getElement, getNote, getPhoto, getProfile, getSurvey } from '../lib/resources.js';
 import { serializeElement, serializeNote, serializePhoto } from '../lib/serializers.js';
+import { checklistTemplateFor, CUSTOM_CHECKLIST_STATUS_OPTIONS } from '../lib/checklistTemplates.js';
 import {
   booleanValue,
   colorValue,
@@ -439,6 +440,92 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate, notif
     })();
     emitSurveyUpdate(note.survey_id, 'note.deleted', req.user, { elementId: note.element_id, noteId: note.id });
     res.json({ data: { deletedId: note.id }, success: true });
+  });
+
+  function serializeChecklistItem(row) {
+    return {
+      id: row.id,
+      elementId: row.element_id,
+      itemKey: row.item_key,
+      label: row.label,
+      status: row.status,
+      statusOptions: JSON.parse(row.status_options_json || '[]'),
+      isCustom: Boolean(row.is_custom),
+      sortOrder: row.sort_order,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  async function getChecklistItem(itemId) {
+    const row = await db.prepare('SELECT * FROM element_checklist_items WHERE id = ?').get(itemId);
+    if (!row) throw notFound('Checklist item');
+    return row;
+  }
+
+  const listChecklistHandler = async (req, res) => {
+    const element = await getElement(db, idValue(req.params.elementId, 'elementId'));
+    await assertSiteAccess(db, req.user, element.site_id);
+    let rows = await db.prepare('SELECT * FROM element_checklist_items WHERE element_id = ? ORDER BY sort_order').all(element.id);
+    if (!rows.length) {
+      const template = checklistTemplateFor(element.type);
+      if (template) {
+        const now = new Date().toISOString();
+        for (let index = 0; index < template.length; index += 1) {
+          const templateItem = template[index];
+          await db.prepare(
+            `INSERT INTO element_checklist_items
+              (id, element_id, item_key, label, status, status_options_json, is_custom, sort_order, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+          ).run(crypto.randomUUID(), element.id, templateItem.key, templateItem.label, templateItem.options[0], JSON.stringify(templateItem.options), index, now, now);
+        }
+        rows = await db.prepare('SELECT * FROM element_checklist_items WHERE element_id = ? ORDER BY sort_order').all(element.id);
+      }
+    }
+    const items = rows.map(serializeChecklistItem);
+    res.json({ data: items, items });
+  };
+  router.get('/elements/:elementId/checklist', listChecklistHandler);
+  router.get('/devices/:elementId/checklist', listChecklistHandler);
+
+  router.post('/elements/:elementId/checklist', async (req, res) => {
+    const element = await getElement(db, idValue(req.params.elementId, 'elementId'));
+    await assertSiteAccess(db, req.user, element.site_id, 'installer');
+    const label = stringValue(req.body?.label, 'label', { max: 100 });
+    const maxSortRow = await db.prepare('SELECT MAX(sort_order) AS maxSort FROM element_checklist_items WHERE element_id = ?').get(element.id);
+    const sortOrder = (maxSortRow?.maxSort ?? -1) + 1;
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+    await db.prepare(
+      `INSERT INTO element_checklist_items
+        (id, element_id, item_key, label, status, status_options_json, is_custom, sort_order, created_at, updated_at)
+       VALUES (?, ?, NULL, ?, ?, ?, 1, ?, ?, ?)`,
+    ).run(id, element.id, label, CUSTOM_CHECKLIST_STATUS_OPTIONS[0], JSON.stringify(CUSTOM_CHECKLIST_STATUS_OPTIONS), sortOrder, now, now);
+    await logActivity(db, { surveyId: element.survey_id, siteId: element.site_id, elementId: element.id, actorId: req.user.id, action: 'checklist.item_added', details: { label } });
+    const row = await db.prepare('SELECT * FROM element_checklist_items WHERE id = ?').get(id);
+    res.status(201).json({ data: serializeChecklistItem(row) });
+  });
+
+  router.patch('/checklist-items/:itemId', async (req, res) => {
+    const item = await getChecklistItem(idValue(req.params.itemId, 'itemId'));
+    const element = await getElement(db, item.element_id);
+    await assertSiteAccess(db, req.user, element.site_id, 'installer');
+    const status = stringValue(req.body?.status, 'status', { max: 100 });
+    const options = JSON.parse(item.status_options_json || '[]');
+    if (options.length && !options.includes(status)) throw badRequest('That status is not valid for this item.', { field: 'status' });
+    const now = new Date().toISOString();
+    await db.prepare('UPDATE element_checklist_items SET status = ?, updated_at = ? WHERE id = ?').run(status, now, item.id);
+    await logActivity(db, { surveyId: element.survey_id, siteId: element.site_id, elementId: element.id, actorId: req.user.id, action: 'checklist.item_updated', details: { label: item.label, status } });
+    const row = await db.prepare('SELECT * FROM element_checklist_items WHERE id = ?').get(item.id);
+    res.json({ data: serializeChecklistItem(row) });
+  });
+
+  router.delete('/checklist-items/:itemId', async (req, res) => {
+    const item = await getChecklistItem(idValue(req.params.itemId, 'itemId'));
+    const element = await getElement(db, item.element_id);
+    await assertSiteAccess(db, req.user, element.site_id, 'installer');
+    await db.prepare('DELETE FROM element_checklist_items WHERE id = ?').run(item.id);
+    res.json({ data: { deletedId: item.id } });
   });
 
   const listPhotosHandler = async (req, res) => {
