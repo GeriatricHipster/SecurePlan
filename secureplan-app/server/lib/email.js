@@ -10,6 +10,7 @@ async function getGraphAccessToken(config) {
   const tokenUrl = `https://login.microsoftonline.com/${config.azureTenantId}/oauth2/v2.0/token`;
   const response = await fetch(tokenUrl, {
     method: 'POST',
+    signal: AbortSignal.timeout(10_000),
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       client_id: config.azureClientId,
@@ -46,6 +47,7 @@ async function sendViaGraph(config, { to, subject, html, attachments }) {
     `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(config.emailFromMailbox)}/sendMail`,
     {
       method: 'POST',
+      signal: AbortSignal.timeout(10_000),
       headers: {
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
@@ -76,6 +78,7 @@ async function sendViaGraph(config, { to, subject, html, attachments }) {
 async function sendViaResend(config, { to, subject, html, text, attachments }) {
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
+    signal: AbortSignal.timeout(10_000),
     headers: {
       Authorization: `Bearer ${config.resendApiKey}`,
       'Content-Type': 'application/json',
@@ -105,6 +108,9 @@ function getGmailTransporter(config) {
   cachedGmailTransporter = nodemailer.createTransport({
     service: 'gmail',
     auth: { user: config.gmailUser, pass: config.gmailAppPassword },
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 10_000,
   });
   cachedGmailKey = key;
   return cachedGmailTransporter;
@@ -195,6 +201,38 @@ export function passwordResetEmailTemplate({ resetUrl }) {
     subject: 'Reset your SecurePlan password',
     html,
     text: `Reset your SecurePlan Surveyor password: ${resetUrl} (expires in 1 hour)`,
+  };
+}
+
+function escapeHtml(text) {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function textToHtmlParagraphs(text) {
+  return String(text || '')
+    .split('\n')
+    .filter((line) => line.trim())
+    .map((line) => `<p style="margin:0 0 10px;">${escapeHtml(line)}</p>`)
+    .join('');
+}
+
+export function surveyReportEmailTemplate({ senderName, title, bodyText, surveyName, surveyUrl, photoCount = 0 }) {
+  const html = emailShell(escapeHtml(title) || 'Field report', `
+    <p style="color:#748089;font-size:13px;">${senderName || 'A teammate'} shared a report from <strong>${surveyName || 'a survey'}</strong>.</p>
+    <div style="background:#f4f5f6;border-radius:8px;padding:16px 18px;margin:16px 0;">${textToHtmlParagraphs(bodyText)}</div>
+    ${photoCount > 0 ? `<p style="color:#748089;font-size:13px;">${photoCount} photo${photoCount === 1 ? '' : 's'} attached.</p>` : ''}
+    <p style="text-align:center;margin:24px 0;">
+      <a href="${surveyUrl}" style="display:inline-block;background:#b4232d;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:700;">Open survey</a>
+    </p>
+  `);
+  return {
+    subject: `${title || 'Field report'} — ${surveyName || 'SecurePlan Surveyor'}`,
+    html,
+    text: `${senderName || 'A teammate'} shared a report from ${surveyName || 'a survey'}.\n\n${bodyText}${photoCount > 0 ? `\n\n(${photoCount} photo${photoCount === 1 ? '' : 's'} attached.)` : ''}\n\nOpen the survey: ${surveyUrl}`,
   };
 }
 

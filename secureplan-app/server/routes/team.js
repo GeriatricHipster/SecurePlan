@@ -119,13 +119,12 @@ export function createTeamRouter({ db, config, auth, emitSiteUpdate, disconnectU
         siteName: row.site_name || null,
         appUrl: config.frontendOrigin || 'https://app.secureplan.example',
       });
-      try {
-        await sendEmail(config, { to: email, ...template });
-        await logSecurityEvent(db, { eventType: 'invite.email_sent', userId: req.user.id, req, details: { invitationId: id, email } });
-      } catch (error) {
-        console.error('Failed to send invite email:', error.message);
-        await logSecurityEvent(db, { eventType: 'invite.email_failed', severity: 'warning', userId: req.user.id, req, details: { invitationId: id, email, error: error.message } });
-      }
+      sendEmail(config, { to: email, ...template })
+        .then(() => logSecurityEvent(db, { eventType: 'invite.email_sent', userId: req.user.id, req, details: { invitationId: id, email } }))
+        .catch((error) => {
+          console.error('Failed to send invite email:', error.message);
+          return logSecurityEvent(db, { eventType: 'invite.email_failed', severity: 'warning', userId: req.user.id, req, details: { invitationId: id, email, error: error.message } });
+        });
     }
     res.status(201).json({ data: { ...invitation, code }, invitation, code });
   };

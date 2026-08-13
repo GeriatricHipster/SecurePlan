@@ -390,7 +390,9 @@ export const api = {
   reports: (surveyId) => request(`/api/surveys/${surveyId}/reports`),
   createReport: (surveyId, form) => request(`/api/surveys/${surveyId}/reports`, { method: 'POST', body: form }),
   deleteReport: (reportId) => request(`/api/reports/${reportId}`, json('DELETE')),
-  reportVideoUrl: (reportId) => apiUrl(`/api/reports/${reportId}/video`),
+  reportRecipients: (surveyId) => request(`/api/surveys/${surveyId}/report-recipients`),
+  sendReport: (reportId, values) => request(`/api/reports/${reportId}/send`, json('POST', values)),
+  reportPhotoUrl: (photoId) => apiUrl(`/api/report-photos/${photoId}/file`),
   securityEvents: (limit = 100) => request(`/api/security-events?limit=${limit}`),
   site: (id) => request(`/api/sites/${id}`),
   createSite: (values) => request('/api/sites', json('POST', values)),
@@ -454,6 +456,11 @@ export const api = {
   photoUrl: (id) => apiUrl(`/api/photos/${id}/file`),
   photoBlob: async (id) => {
     const response = await fetchApi(`/api/photos/${id}/file`);
+    if (!response.ok) throw new Error(`Photo download failed (${response.status}).`);
+    return response.blob();
+  },
+  reportPhotoBlob: async (id) => {
+    const response = await fetchApi(`/api/report-photos/${id}/file`);
     if (!response.ok) throw new Error(`Photo download failed (${response.status}).`);
     return response.blob();
   },

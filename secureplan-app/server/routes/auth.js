@@ -94,11 +94,16 @@ export function createAuthRouter({ db, config, auth, disconnectUser }) {
       ).run(crypto.randomUUID(), user.id, hashResetToken(token), expiresAt, now);
       const resetUrl = `${config.frontendOrigin || ''}/#/reset-password?token=${encodeURIComponent(token)}`;
       const template = passwordResetEmailTemplate({ resetUrl });
-      try {
-        await sendEmail(config, { to: user.email, ...template });
-      } catch (error) {
-        console.error('Failed to send password reset email:', error.message);
-      }
+      // Fire-and-forget: don't make the person wait on the email send (which can be slow, or hang
+      // entirely if a network path is blocked). The response below returns immediately either way.
+      sendEmail(config, { to: user.email, ...template })
+        .then((result) => {
+          if (result?.skipped) return logSecurityEvent(db, { eventType: 'password.reset_email_skipped', severity: 'warning', userId: user.id, req, details: { reason: 'No email provider configured.' } });
+        })
+        .catch((error) => {
+          console.error('Failed to send password reset email:', error.message);
+          return logSecurityEvent(db, { eventType: 'password.reset_email_failed', severity: 'warning', userId: user.id, req, details: { error: error.message } });
+        });
       await logSecurityEvent(db, { eventType: 'password.reset_requested', userId: user.id, req });
     } else {
       await logSecurityEvent(db, { eventType: 'password.reset_requested_unknown_email', severity: 'warning', emailAttempted: email, req });

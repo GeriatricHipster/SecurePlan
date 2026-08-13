@@ -329,6 +329,18 @@ const POSTGRES_SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS idx_survey_reports_survey ON survey_reports(survey_id, created_at DESC);
 
+  CREATE TABLE IF NOT EXISTS survey_report_photos (
+    id TEXT PRIMARY KEY,
+    report_id TEXT NOT NULL REFERENCES survey_reports(id) ON DELETE CASCADE,
+    storage_key TEXT NOT NULL,
+    original_filename TEXT,
+    mime_type TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_survey_report_photos_report ON survey_report_photos(report_id);
+
   CREATE TABLE IF NOT EXISTS password_reset_tokens (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
