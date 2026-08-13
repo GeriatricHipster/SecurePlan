@@ -21,17 +21,16 @@ function initialTheme() {
 }
 
 function routeFromHash() {
-  const hash = window.location.hash.replace(/^#\/?/, '');
-  const parts = hash.split('/').filter(Boolean);
+  const [rawPath, rawQuery] = window.location.hash.replace(/^#\/?/, '').split('?');
+  const parts = rawPath.split('/').filter(Boolean);
+  const params = new URLSearchParams(rawQuery || '');
   if (parts[0] === 'sites' && parts[1]) return { page: 'site', siteId: parts[1] };
   if (parts[0] === 'sites') return { page: 'sites' };
   if (parts[0] === 'surveys' && parts[1]) {
-    const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
-    return { page: 'survey', surveyId: parts[1].split('?')[0], siteId: params.get('site') || '' };
+    return { page: 'survey', surveyId: parts[1], siteId: params.get('site') || '' };
   }
   if (parts[0] === 'team') return { page: 'team' };
   if (parts[0] === 'reset-password') {
-    const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
     return { page: 'reset-password', token: params.get('token') || '' };
   }
   return { page: 'home' };
