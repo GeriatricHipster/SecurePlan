@@ -1,8 +1,8 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
-import { api, nativeTransport } from './api.js';
+import { api, nativeTransport, normalizeList } from './api.js';
 import { OwnerSetup, ResetPassword, SignIn } from './components/AuthScreens.jsx';
-import { Brand, Modal, Spinner, initials } from './components/Common.jsx';
+import { Brand, Modal, Spinner, formatWhen, initials } from './components/Common.jsx';
 import HomeDashboard from './components/HomeDashboard.jsx';
 import SitesDashboard from './components/SitesDashboard.jsx';
 import SiteWorkspace from './components/SiteWorkspace.jsx';
@@ -135,7 +135,7 @@ function ThemeButton({ theme, onToggle }) {
   );
 }
 
-function AppHeader({ user, route, onLogout, theme, onToggleTheme, isOnline }) {
+function AppHeader({ user, route, onLogout, theme, onToggleTheme, isOnline, unreadCount, onOpenInbox }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -154,6 +154,10 @@ function AppHeader({ user, route, onLogout, theme, onToggleTheme, isOnline }) {
         </span>
         <FullScreenToggle />
       </div>
+      <button type="button" className="icon-button inbox-button" onClick={onOpenInbox} aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}>
+        <Bell aria-hidden="true" size={18} />
+        {unreadCount > 0 && <span className="inbox-button__badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}
+      </button>
       <SearchButton />
       <ThemeButton theme={theme} onToggle={onToggleTheme} />
       <details className="account-menu" open={menuOpen} onToggle={(e) => setMenuOpen(e.currentTarget.open)}>
@@ -185,6 +189,64 @@ function MobileNav({ route, user }) {
   );
 }
 
+let baseFaviconImagePromise = null;
+function loadBaseFaviconImage() {
+  if (baseFaviconImagePromise) return baseFaviconImagePromise;
+  baseFaviconImagePromise = new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = '/app-icon.svg';
+  });
+  return baseFaviconImagePromise;
+}
+
+async function updateFaviconBadge(count) {
+  try {
+    if ('setAppBadge' in navigator) {
+      if (count > 0) navigator.setAppBadge(count).catch(() => {});
+      else navigator.clearAppBadge?.().catch(() => {});
+    }
+    const baseImage = await loadBaseFaviconImage();
+    if (!baseImage) return;
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, size, size);
+    ctx.drawImage(baseImage, 0, 0, size, size);
+    if (count > 0) {
+      const label = count > 99 ? '99+' : String(count);
+      const radius = label.length > 2 ? 20 : 16;
+      const cx = size - radius * 0.72;
+      const cy = radius * 0.72;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fillStyle = '#b4232d';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold ${label.length > 2 ? 15 : 20}px -apple-system, Segoe UI, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, cx, cy + 1);
+    }
+    let link = document.querySelector('link[rel="icon"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.type = 'image/png';
+    link.href = canvas.toDataURL('image/png');
+  } catch {
+    // The favicon badge is a nice-to-have - never let it break the app.
+  }
+}
+
 function playNotificationChime() {
   try {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -210,6 +272,58 @@ function playNotificationChime() {
   }
 }
 
+function NotificationInboxModal({ open, onClose, onCountChange }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    let active = true;
+    setLoading(true);
+    api.notifications().then((result) => {
+      if (!active) return;
+      setItems(normalizeList(result?.notifications ?? result));
+    }).catch(() => {}).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    // Mark everything read the moment the inbox opens, and clear the badge to match.
+    api.markAllNotificationsRead().then(() => {
+      onCountChange(0);
+      setItems((current) => current.map((item) => ({ ...item, read: true })));
+    }).catch(() => {});
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openItem = (item) => {
+    onClose();
+    if (item.linkPath) navigate(item.linkPath);
+  };
+
+  return (
+    <Modal open={open} title="Notifications" description="Updates from your team." onClose={onClose} wide>
+      {loading ? (
+        <div className="loading-panel"><Spinner label="Loading…" /></div>
+      ) : !items.length ? (
+        <p className="muted">Nothing here yet.</p>
+      ) : (
+        <ul className="notification-inbox">
+          {items.map((item) => (
+            <li key={item.id} className={`notification-inbox__item ${item.read ? '' : 'notification-inbox__item--unread'}`}>
+              <button type="button" onClick={() => openItem(item)}>
+                <strong>{item.title}</strong>
+                {item.body && <p>{item.body}</p>}
+                <time>{formatWhen(item.createdAt)}</time>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Modal>
+  );
+}
+
 export default function App() {
   const [status, setStatus] = useState('loading');
   const [setupRequired, setSetupRequired] = useState(false);
@@ -220,6 +334,9 @@ export default function App() {
   const [theme, setTheme] = useState(initialTheme);
   const [isOnline, setIsOnline] = useState(window.navigator.onLine);
   const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showInbox, setShowInbox] = useState(false);
+  const [showMissedPrompt, setShowMissedPrompt] = useState(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -251,6 +368,22 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!user?.id) return;
+    let active = true;
+    api.unreadNotificationCount().then((result) => {
+      if (!active) return;
+      const count = result?.count ?? 0;
+      setUnreadCount(count);
+      if (count > 0) setShowMissedPrompt(true);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [user?.id]);
+
+  useEffect(() => {
+    updateFaviconBadge(unreadCount);
+  }, [unreadCount]);
+
+  useEffect(() => {
     if (!user?.id) return undefined;
     if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
       Notification.requestPermission().catch(() => {});
@@ -262,6 +395,7 @@ export default function App() {
     const socket = nativeTransport.isNative ? io(nativeTransport.apiOrigin, socketOptions) : io(socketOptions);
     socket.on('user:notification', (notification) => {
       setNotifications((current) => [notification, ...current].slice(0, 5));
+      setUnreadCount((current) => current + 1);
       playNotificationChime();
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
         try {
@@ -377,7 +511,7 @@ export default function App() {
   return (
     <>
       <div className={`app-shell app-shell--${route.page}`}>
-        {route.page !== 'survey' && <AppHeader user={user} route={route} onLogout={logout} theme={theme} onToggleTheme={toggleTheme} isOnline={isOnline} />}
+        {route.page !== 'survey' && <AppHeader user={user} route={route} onLogout={logout} theme={theme} onToggleTheme={toggleTheme} isOnline={isOnline} unreadCount={unreadCount} onOpenInbox={() => { setShowInbox(true); setShowMissedPrompt(false); }} />}
         {!isOnline && <div className="offline-banner" role="status">Offline mode is on. Your edits will queue locally and sync when the connection returns.</div>}
         {route.page === 'home' && <HomeDashboard {...context} />}
         {route.page === 'sites' && <SitesDashboard {...context} />}
@@ -407,6 +541,15 @@ export default function App() {
             ))}
           </div>
         )}
+        {showMissedPrompt && unreadCount > 0 && (
+          <div className="missed-prompt" role="status">
+            <span className="missed-prompt__icon" aria-hidden="true"><Bell size={16} /></span>
+            <span className="missed-prompt__text">You've missed {unreadCount} update{unreadCount === 1 ? '' : 's'} while you were away.</span>
+            <button type="button" className="button button--primary missed-prompt__view" onClick={() => { setShowInbox(true); setShowMissedPrompt(false); }}>View</button>
+            <button type="button" className="missed-prompt__dismiss" onClick={() => setShowMissedPrompt(false)} aria-label="Dismiss"><XIcon size={14} /></button>
+          </div>
+        )}
+        <NotificationInboxModal open={showInbox} onClose={() => setShowInbox(false)} onCountChange={setUnreadCount} />
         <div className={`toast ${toast ? 'toast--visible' : ''}`} role="status" aria-live="polite">{toast}</div>
       </div>
     </>

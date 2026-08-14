@@ -8,7 +8,7 @@ import { deleteStoredFile, cleanTemporaryUpload, storePhoto, storedFileDelivery,
 import { getSurvey } from '../lib/resources.js';
 import { sendEmail, surveyReportEmailTemplate } from '../lib/email.js';
 import { idValue, jsonArray, safeFilename, stringValue } from '../lib/validation.js';
-import { logActivity, logSecurityEvent } from '../db.js';
+import { createUserNotification, logActivity, logSecurityEvent } from '../db.js';
 
 function serializeReportPhoto(row) {
   return {
@@ -34,7 +34,7 @@ function serializeReport(row, photos) {
   };
 }
 
-export function createReportsRouter({ db, config, auth }) {
+export function createReportsRouter({ db, config, auth, notifyUser }) {
   const router = Router();
   const photoUpload = multer({
     dest: config.temporaryFilesDir,
@@ -182,6 +182,27 @@ export function createReportsRouter({ db, config, auth }) {
     let emailsSent = 0;
     const failures = [];
     for (const recipient of validRecipients) {
+      const title = `${req.user.name || 'A teammate'} sent you a report`;
+      const body = report.title ? `"${report.title}" from ${survey.name}` : `A report from ${survey.name}`;
+      notifyUser?.(recipient.id, {
+        type: 'report.sent',
+        title,
+        body,
+        surveyId: survey.id,
+        surveyName: survey.name,
+        siteId: survey.site_id,
+        senderName: req.user.name,
+      });
+      await createUserNotification(db, {
+        userId: recipient.id,
+        type: 'report.sent',
+        title,
+        body,
+        senderName: req.user.name,
+        surveyId: survey.id,
+        siteId: survey.site_id,
+        linkPath: `surveys/${survey.id}?site=${survey.site_id}`,
+      });
       if (!recipient.email) continue;
       try {
         const result = await sendEmail(config, { to: recipient.email, ...template, attachments });

@@ -531,6 +531,101 @@ h3 {
   place-items: center;
 }
 
+.missed-prompt {
+  position: fixed;
+  z-index: 2050;
+  top: calc(16px + env(safe-area-inset-top));
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(440px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  transform: translateX(-50%);
+  animation: notification-in .2s ease-out;
+}
+
+.missed-prompt__icon {
+  display: grid;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--red-soft);
+  color: var(--red-dark);
+  place-items: center;
+}
+
+.missed-prompt__text {
+  flex: 1;
+  color: var(--ink);
+  font-size: .85rem;
+  font-weight: 600;
+}
+
+.missed-prompt__view {
+  flex-shrink: 0;
+}
+
+.missed-prompt__dismiss {
+  display: grid;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  place-items: center;
+}
+
+.notification-inbox {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notification-inbox__item button {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+}
+
+.notification-inbox__item button:hover {
+  background: var(--surface-soft);
+}
+
+.notification-inbox__item--unread button {
+  background: color-mix(in srgb, var(--red) 6%, transparent);
+}
+
+.notification-inbox__item strong {
+  display: block;
+  color: var(--ink);
+  font-size: .88rem;
+}
+
+.notification-inbox__item p {
+  margin: 3px 0 4px;
+  color: var(--ink-soft);
+  font-size: .82rem;
+}
+
+.notification-inbox__item time {
+  color: var(--muted);
+  font-size: .74rem;
+}
+
 /* Authentication */
 
 .auth-page {
@@ -797,6 +892,27 @@ h3 {
 .header-spacer,
 .editor-header__spacer {
   flex: 1;
+}
+
+.inbox-button {
+  position: relative;
+}
+
+.inbox-button__badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: grid;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--red);
+  color: white;
+  font-size: .65rem;
+  font-weight: 800;
+  place-items: center;
+  line-height: 1;
 }
 
 .account-menu {

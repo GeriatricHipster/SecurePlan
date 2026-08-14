@@ -468,6 +468,10 @@ export const api = {
     if (!response.ok) throw new Error(`Photo download failed (${response.status}).`);
     return response.blob();
   },
+  notifications: (limit = 50) => request(`/api/notifications?limit=${limit}`),
+  unreadNotificationCount: () => request('/api/notifications/unread-count'),
+  markNotificationRead: (id) => request(`/api/notifications/${id}/read`, json('POST')),
+  markAllNotificationsRead: () => request('/api/notifications/mark-all-read', json('POST')),
   profiles: () => request('/api/profiles'),
   createProfile: (values) => request('/api/profiles', json('POST', values)),
   updateProfile: (id, values) => request(`/api/profiles/${id}`, json('PATCH', values)),

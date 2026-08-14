@@ -19,7 +19,7 @@ import {
   safeFilename,
   stringValue,
 } from '../lib/validation.js';
-import { logActivity, logSecurityEvent, touchSurvey } from '../db.js';
+import { createUserNotification, logActivity, logSecurityEvent, touchSurvey } from '../db.js';
 import { sendEmail, elementUpdateEmailTemplate } from '../lib/email.js';
 
 export function createElementsRouter({ db, config, auth, emitSurveyUpdate, notifyUser }) {
@@ -255,16 +255,28 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate, notif
     const emailFailures = [];
 
     for (const row of validRecipients) {
+      const title = `${req.user.name || 'A teammate'} flagged an update`;
+      const body = message || `${element.label || 'A device'} was updated on "${survey.name}".`;
       notifyUser?.(row.id, {
         type: 'element.notify',
-        title: `${req.user.name || 'A teammate'} flagged an update`,
-        body: message || `${element.label || 'A device'} was updated on "${survey.name}".`,
+        title,
+        body,
         elementId: element.id,
         elementLabel: element.label,
         surveyId: survey.id,
         surveyName: survey.name,
         siteId: survey.site_id,
         senderName: req.user.name,
+      });
+      await createUserNotification(db, {
+        userId: row.id,
+        type: 'element.notify',
+        title,
+        body,
+        senderName: req.user.name,
+        surveyId: survey.id,
+        siteId: survey.site_id,
+        linkPath: `surveys/${survey.id}?site=${survey.site_id}`,
       });
       if (row.email) {
         try {
