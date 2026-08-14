@@ -472,6 +472,15 @@ export const api = {
   unreadNotificationCount: () => request('/api/notifications/unread-count'),
   markNotificationRead: (id) => request(`/api/notifications/${id}/read`, json('POST')),
   markAllNotificationsRead: () => request('/api/notifications/mark-all-read', json('POST')),
+  messages: (limit = 100) => request(`/api/messages?limit=${limit}`),
+  createMessage: (form) => request('/api/messages', { method: 'POST', body: form }),
+  deleteMessage: (id) => request(`/api/messages/${id}`, json('DELETE')),
+  messageAttachmentUrl: (id) => apiUrl(`/api/message-attachments/${id}/file`),
+  messageAttachmentBlob: async (id) => {
+    const response = await fetchApi(`/api/message-attachments/${id}/file`);
+    if (!response.ok) throw new Error(`Attachment download failed (${response.status}).`);
+    return response.blob();
+  },
   profiles: () => request('/api/profiles'),
   createProfile: (values) => request('/api/profiles', json('POST', values)),
   updateProfile: (id, values) => request(`/api/profiles/${id}`, json('PATCH', values)),

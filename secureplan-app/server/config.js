@@ -103,6 +103,7 @@ export function createConfig(overrides = {}) {
     ),
     maxPhotoBytes: boundedNumber(overrides.maxPhotoBytes ?? process.env.MAX_PHOTO_BYTES, 20 * 1024 * 1024, 1, 250 * 1024 * 1024, 'MAX_PHOTO_BYTES'),
     maxVideoBytes: boundedNumber(overrides.maxVideoBytes ?? process.env.MAX_VIDEO_BYTES, 24 * 1024 * 1024, 1, 24 * 1024 * 1024, 'MAX_VIDEO_BYTES'),
+    maxMessageVideoBytes: boundedNumber(overrides.maxMessageVideoBytes ?? process.env.MAX_MESSAGE_VIDEO_BYTES, 100 * 1024 * 1024, 1, 250 * 1024 * 1024, 'MAX_MESSAGE_VIDEO_BYTES'),
     openaiApiKey: overrides.openaiApiKey ?? process.env.OPENAI_API_KEY ?? '',
     openaiTranscribeModel: overrides.openaiTranscribeModel ?? process.env.OPENAI_TRANSCRIBE_MODEL ?? '',
     openaiChatModel: overrides.openaiChatModel ?? process.env.OPENAI_CHAT_MODEL ?? '',

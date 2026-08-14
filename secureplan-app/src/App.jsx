@@ -7,9 +7,10 @@ import HomeDashboard from './components/HomeDashboard.jsx';
 import SitesDashboard from './components/SitesDashboard.jsx';
 import SiteWorkspace from './components/SiteWorkspace.jsx';
 import TeamPage from './components/TeamPage.jsx';
+import MessagesPage from './components/MessagesPage.jsx';
 import InstallAppPrompt from './components/InstallAppPrompt.jsx';
 import FullScreenToggle from './components/FullScreenToggle.jsx';
-import { Bell, ChevronDown, FileText, Home as HomeIcon, LayoutGrid, MapPin, Moon, Search, Sun, Users, X as XIcon } from 'lucide-react';
+import { Bell, ChevronDown, FileText, Home as HomeIcon, LayoutGrid, MapPin, MessageSquare, Moon, Search, Sun, Users, X as XIcon } from 'lucide-react';
 const SurveyEditor = lazy(() => import('./components/SurveyEditor.jsx'));
 
 const THEME_STORAGE_KEY = 'secureplan-theme';
@@ -30,6 +31,7 @@ function routeFromHash() {
     return { page: 'survey', surveyId: parts[1], siteId: params.get('site') || '' };
   }
   if (parts[0] === 'team') return { page: 'team' };
+  if (parts[0] === 'messages') return { page: 'messages' };
   if (parts[0] === 'reset-password') {
     return { page: 'reset-password', token: params.get('token') || '' };
   }
@@ -146,6 +148,7 @@ function AppHeader({ user, route, onLogout, theme, onToggleTheme, isOnline, unre
       <nav className="desktop-nav" aria-label="Primary navigation">
         <button type="button" className={route.page === 'home' ? 'active' : ''} onClick={() => navigate('home')}>Home</button>
         <button type="button" className={route.page === 'sites' || route.page === 'site' ? 'active' : ''} onClick={() => navigate('sites')}>Sites</button>
+        <button type="button" className={route.page === 'messages' ? 'active' : ''} onClick={() => navigate('messages')}>Messages</button>
         {['owner', 'admin'].includes(user.role) && <button type="button" className={route.page === 'team' ? 'active' : ''} onClick={() => navigate('team')}>Team</button>}
       </nav>
       <div className="header-actions">
@@ -180,10 +183,12 @@ function AppHeader({ user, route, onLogout, theme, onToggleTheme, isOnline, unre
 
 function MobileNav({ route, user }) {
   if (route.page === 'survey') return null;
+  const itemCount = ['owner', 'admin'].includes(user.role) ? 4 : 3;
   return (
-    <nav className={`mobile-nav ${['owner', 'admin'].includes(user.role) ? 'mobile-nav--triple' : ''}`} aria-label="Mobile navigation">
+    <nav className={`mobile-nav mobile-nav--count-${itemCount}`} aria-label="Mobile navigation">
       <button type="button" className={route.page === 'home' ? 'active' : ''} onClick={() => navigate('home')}><HomeIcon aria-hidden="true" size={20} />Home</button>
       <button type="button" className={route.page === 'sites' || route.page === 'site' ? 'active' : ''} onClick={() => navigate('sites')}><LayoutGrid aria-hidden="true" size={20} />Sites</button>
+      <button type="button" className={route.page === 'messages' ? 'active' : ''} onClick={() => navigate('messages')}><MessageSquare aria-hidden="true" size={20} />Messages</button>
       {['owner', 'admin'].includes(user.role) && <button type="button" className={route.page === 'team' ? 'active' : ''} onClick={() => navigate('team')}><Users aria-hidden="true" size={20} />Team</button>}
     </nav>
   );
@@ -521,6 +526,7 @@ export default function App() {
             <SurveyEditor {...context} surveyId={route.surveyId} siteId={route.siteId} />
           </Suspense>
         )}
+        {route.page === 'messages' && <MessagesPage {...context} />}
         {route.page === 'team' && <TeamPage {...context} />}
         <MobileNav route={route} user={user} />
         <InstallAppPrompt />
