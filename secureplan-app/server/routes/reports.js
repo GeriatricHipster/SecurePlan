@@ -193,16 +193,20 @@ export function createReportsRouter({ db, config, auth, notifyUser }) {
         siteId: survey.site_id,
         senderName: req.user.name,
       });
-      await createUserNotification(db, {
-        userId: recipient.id,
-        type: 'report.sent',
-        title,
-        body,
-        senderName: req.user.name,
-        surveyId: survey.id,
-        siteId: survey.site_id,
-        linkPath: `surveys/${survey.id}?site=${survey.site_id}`,
-      });
+      try {
+        await createUserNotification(db, {
+          userId: recipient.id,
+          type: 'report.sent',
+          title,
+          body,
+          senderName: req.user.name,
+          surveyId: survey.id,
+          siteId: survey.site_id,
+          linkPath: `surveys/${survey.id}?site=${survey.site_id}`,
+        });
+      } catch (error) {
+        console.error('Failed to record persistent notification (continuing anyway):', error.message);
+      }
       if (!recipient.email) continue;
       try {
         const result = await sendEmail(config, { to: recipient.email, ...template, attachments });

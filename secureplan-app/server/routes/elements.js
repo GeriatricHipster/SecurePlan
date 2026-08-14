@@ -268,16 +268,20 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate, notif
         siteId: survey.site_id,
         senderName: req.user.name,
       });
-      await createUserNotification(db, {
-        userId: row.id,
-        type: 'element.notify',
-        title,
-        body,
-        senderName: req.user.name,
-        surveyId: survey.id,
-        siteId: survey.site_id,
-        linkPath: `surveys/${survey.id}?site=${survey.site_id}`,
-      });
+      try {
+        await createUserNotification(db, {
+          userId: row.id,
+          type: 'element.notify',
+          title,
+          body,
+          senderName: req.user.name,
+          surveyId: survey.id,
+          siteId: survey.site_id,
+          linkPath: `surveys/${survey.id}?site=${survey.site_id}`,
+        });
+      } catch (error) {
+        console.error('Failed to record persistent notification (continuing anyway):', error.message);
+      }
       if (row.email) {
         try {
           const result = await sendEmail(config, { to: row.email, ...emailTemplate, attachments });
