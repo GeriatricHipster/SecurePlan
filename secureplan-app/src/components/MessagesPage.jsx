@@ -41,6 +41,9 @@ export default function MessagesPage({ user, notify }) {
   const [pendingFiles, setPendingFiles] = useState([]);
   const [sending, setSending] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [recipientPickerOpen, setRecipientPickerOpen] = useState(false);
+  const [recipients, setRecipients] = useState([]);
+  const [selectedRecipients, setSelectedRecipients] = useState(new Set());
   const fileInputRef = useRef(null);
   const feedEndRef = useRef(null);
   const pollRef = useRef(null);
@@ -85,6 +88,23 @@ export default function MessagesPage({ user, notify }) {
     });
   };
 
+  const openRecipientPicker = async () => {
+    setRecipientPickerOpen((current) => !current);
+    if (recipients.length) return;
+    try {
+      const result = await api.messageRecipients();
+      setRecipients(normalizeList(result?.recipients ?? result));
+    } catch (error) {
+      notify(error.message);
+    }
+  };
+
+  const toggleRecipient = (id) => setSelectedRecipients((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
   const send = async () => {
     if (!bodyText.trim() && !pendingFiles.length) return;
     setSending(true);
@@ -92,6 +112,7 @@ export default function MessagesPage({ user, notify }) {
       const form = new FormData();
       if (bodyText.trim()) form.append('bodyText', bodyText.trim());
       pendingFiles.forEach((item) => form.append('attachments', item.file));
+      if (selectedRecipients.size) form.append('recipientIds', JSON.stringify([...selectedRecipients]));
       await api.createMessage(form);
       pendingFiles.forEach((item) => URL.revokeObjectURL(item.previewUrl));
       setBodyText('');
@@ -144,6 +165,9 @@ export default function MessagesPage({ user, notify }) {
                 <div className="message-row__body">
                   <div className="message-row__meta">
                     <strong>{message.senderName || 'Someone'}</strong>
+                    {message.isTargeted && (
+                      <span className="message-row__to">to {message.recipients.map((r) => r.name).join(', ')}</span>
+                    )}
                     <time>{formatWhen(message.createdAt)}</time>
                     {canDelete && <button type="button" className="message-row__delete" onClick={() => setConfirmDeleteId(message.id)} aria-label="Delete message"><Trash2 size={13} /></button>}
                   </div>
@@ -162,6 +186,32 @@ export default function MessagesPage({ user, notify }) {
       )}
 
       <div className="messages-composer">
+        <div className="messages-composer__to-row">
+          <button type="button" className="messages-composer__to-button" onClick={openRecipientPicker}>
+            To: <strong>{selectedRecipients.size ? `${selectedRecipients.size} selected` : 'Everyone'}</strong>
+          </button>
+        </div>
+        {recipientPickerOpen && (
+          <div className="messages-composer__recipients">
+            <label className="messages-composer__recipients-all">
+              <input type="checkbox" checked={selectedRecipients.size === 0} onChange={() => setSelectedRecipients(new Set())} />
+              <span>Everyone</span>
+            </label>
+            {recipients.length === 0 ? (
+              <p className="muted">No other teammates found.</p>
+            ) : (
+              <div className="messages-composer__recipients-list">
+                {recipients.map((recipient) => (
+                  <label key={recipient.id}>
+                    <input type="checkbox" checked={selectedRecipients.has(recipient.id)} onChange={() => toggleRecipient(recipient.id)} />
+                    <span>{recipient.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+            <button type="button" className="button button--secondary" onClick={() => setRecipientPickerOpen(false)}>Done</button>
+          </div>
+        )}
         {pendingFiles.length > 0 && (
           <div className="messages-composer__previews">
             {pendingFiles.map((item, index) => (

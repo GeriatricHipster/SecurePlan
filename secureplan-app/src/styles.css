@@ -771,6 +771,81 @@ h3 {
   border-top: 1px solid var(--line);
 }
 
+.messages-composer__to-row {
+  display: flex;
+}
+
+.messages-composer__to-button {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--ink-soft);
+  font-size: .78rem;
+}
+
+.messages-composer__to-button strong {
+  color: var(--ink);
+}
+
+.messages-composer__recipients {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.messages-composer__recipients-all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 700;
+  font-size: .85rem;
+}
+
+.messages-composer__recipients-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.messages-composer__recipients-list label,
+.messages-composer__recipients-all {
+  cursor: pointer;
+}
+
+.messages-composer__recipients-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  border-radius: 7px;
+  font-size: .85rem;
+}
+
+.messages-composer__recipients-list label:hover {
+  background: var(--surface-soft);
+}
+
+.messages-composer__recipients input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--red);
+}
+
+.message-row__to {
+  color: var(--muted);
+  font-size: .76rem;
+  font-style: italic;
+}
+
 .messages-composer__previews {
   display: flex;
   flex-wrap: wrap;

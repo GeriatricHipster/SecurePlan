@@ -248,6 +248,7 @@ export function createDatabase(config) {
       id TEXT PRIMARY KEY,
       sender_id TEXT REFERENCES users(id) ON DELETE SET NULL,
       body_text TEXT,
+      is_broadcast INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL
     );
 
@@ -264,6 +265,15 @@ export function createDatabase(config) {
 
     CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_message_attachments_message ON message_attachments(message_id);
+
+    CREATE TABLE IF NOT EXISTS message_recipients (
+      id TEXT PRIMARY KEY,
+      message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_message_recipients_message ON message_recipients(message_id);
+    CREATE INDEX IF NOT EXISTS idx_message_recipients_user ON message_recipients(user_id);
 
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
       id TEXT PRIMARY KEY,
