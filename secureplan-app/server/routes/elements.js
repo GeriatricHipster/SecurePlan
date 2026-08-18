@@ -558,11 +558,11 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate, notif
       const element = await getElement(db, idValue(req.params.elementId, 'elementId'));
       await assertSiteAccess(db, req.user, element.site_id, 'installer');
       validatePhotoUpload(req.file);
+      const caption = optionalNullableString(req.body?.caption, 'caption', 1000) ?? null;
+      const storageKey = await storePhoto(req.file, config);
       const originalFilename = safeFilename(req.file.originalname || 'survey-photo');
       const mimeType = req.file.mimetype;
       const sizeBytes = req.file.size;
-      const caption = optionalNullableString(req.body?.caption, 'caption', 1000) ?? null;
-      const storageKey = await storePhoto(req.file, config);
       req.file = null;
       const id = crypto.randomUUID();
       const now = new Date().toISOString();

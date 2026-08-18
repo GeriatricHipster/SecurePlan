@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
+import convertHeic from 'heic-convert';
 import { badRequest } from './errors.js';
 
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif']);
@@ -14,10 +15,11 @@ const IMAGE_EXTENSIONS = new Map([
   ['image/heif', '.heif'],
 ]);
 
-const VIDEO_TYPES = new Set(['video/webm', 'video/mp4']);
+const VIDEO_TYPES = new Set(['video/webm', 'video/mp4', 'video/quicktime']);
 const VIDEO_EXTENSIONS = new Map([
   ['video/webm', '.webm'],
   ['video/mp4', '.mp4'],
+  ['video/quicktime', '.mov'],
 ]);
 
 const KIND_DIR_KEYS = { survey: 'surveyFilesDir', photo: 'photoFilesDir', video: 'videoFilesDir' };
@@ -78,7 +80,24 @@ export async function storePdf(file, config) {
   return storageKey;
 }
 
+async function convertHeicToJpegIfNeeded(file) {
+  if (file.mimetype !== 'image/heic' && file.mimetype !== 'image/heif') return;
+  try {
+    const inputBuffer = fs.readFileSync(file.path);
+    const outputBuffer = await convertHeic({ buffer: inputBuffer, format: 'JPEG', quality: 0.9 });
+    fs.writeFileSync(file.path, outputBuffer);
+    file.mimetype = 'image/jpeg';
+    file.size = outputBuffer.length;
+    if (file.originalname) file.originalname = file.originalname.replace(/\.(heic|heif)$/i, '.jpg');
+  } catch (error) {
+    // If conversion fails for any reason, fall through and store the original HEIC -
+    // it just won't render outside Safari, which is the pre-existing behavior, not a new failure.
+    console.error('HEIC to JPEG conversion failed, storing original file:', error.message);
+  }
+}
+
 export async function storePhoto(file, config) {
+  await convertHeicToJpegIfNeeded(file);
   const name = `${crypto.randomUUID()}${IMAGE_EXTENSIONS.get(file.mimetype) || '.image'}`;
   const storageKey = config.cloudMode ? `photos/${name}` : name;
   if (config.cloudMode) await uploadCloudFile(file, storageKey, file.mimetype, config);

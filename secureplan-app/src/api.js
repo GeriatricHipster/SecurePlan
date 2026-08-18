@@ -474,6 +474,7 @@ export const api = {
   markAllNotificationsRead: () => request('/api/notifications/mark-all-read', json('POST')),
   messages: (limit = 100) => request(`/api/messages?limit=${limit}`),
   createMessage: (form) => request('/api/messages', { method: 'POST', body: form }),
+  messageRecipients: () => request('/api/message-recipients'),
   deleteMessage: (id) => request(`/api/messages/${id}`, json('DELETE')),
   messageAttachmentUrl: (id) => apiUrl(`/api/message-attachments/${id}/file`),
   messageAttachmentBlob: async (id) => {
