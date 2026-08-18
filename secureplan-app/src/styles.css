@@ -4898,6 +4898,10 @@ td button {
     font-size: 1.15rem;
   }
 
+  .messages-page {
+    height: calc(100dvh - 65px - env(safe-area-inset-top) - 66px - env(safe-area-inset-bottom));
+  }
+
   .mobile-nav button.active {
     background: var(--red-soft);
     color: var(--red-dark);
