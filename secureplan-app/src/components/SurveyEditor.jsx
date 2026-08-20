@@ -1059,6 +1059,7 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, si
   });
   const [noteText, setNoteText] = useState('');
   const labelSaveTimer = useRef(null);
+  const nameBuilderAppliedRef = useRef(false);
   const [noteBusy, setNoteBusy] = useState(false);
   const [noteError, setNoteError] = useState('');
   const [photoCaption, setPhotoCaption] = useState('');
@@ -1117,13 +1118,14 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, si
       <div className="inspector-scroll">
         <section className="inspector-section">
           <div className="element-identity"><span className="library-symbol" style={{ '--symbol-color': form.color }}><DeviceGlyph type={element.type} symbol={elementSymbol(element)} label={element.label} iconSrc={itemFor(element.category, element.type)?.reportIcon} color={form.color} /></span><div><strong>{categoryFor(element.category)?.name || (element.category === 'markup' ? 'Markup' : 'Custom')}</strong><span>{itemFor(element.category, element.type)?.label || element.type.replaceAll('_', ' ')}</span></div></div>
-          <Field label="Element label"><input value={form.label} disabled={!canEdit} onChange={(e) => { const value = e.target.value; setForm({ ...form, label: value }); if (labelSaveTimer.current) window.clearTimeout(labelSaveTimer.current); labelSaveTimer.current = window.setTimeout(() => onPatch({ label: value }), 500); }} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} onBlur={() => { if (labelSaveTimer.current) window.clearTimeout(labelSaveTimer.current); if (form.label !== element.label) onPatch({ label: form.label }); }} /></Field>
+          <Field label="Element label"><input value={form.label} disabled={!canEdit} onChange={(e) => { const value = e.target.value; setForm({ ...form, label: value }); if (labelSaveTimer.current) window.clearTimeout(labelSaveTimer.current); labelSaveTimer.current = window.setTimeout(() => onPatch({ label: value }), 500); }} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} onBlur={() => { if (labelSaveTimer.current) window.clearTimeout(labelSaveTimer.current); if (nameBuilderAppliedRef.current) { nameBuilderAppliedRef.current = false; return; } if (form.label !== element.label) onPatch({ label: form.label }); }} /></Field>
           {canEdit && !nameBuilderOpen && <button type="button" className="button button--ghost name-builder-toggle" onClick={() => setNameBuilderOpen(true)}>Build name from convention</button>}
           {canEdit && nameBuilderOpen && (
             <NameBuilder
               siteName={siteName}
               onClose={() => setNameBuilderOpen(false)}
               onApply={(generatedName) => {
+                nameBuilderAppliedRef.current = true;
                 setForm((current) => ({ ...current, label: generatedName }));
                 onPatch({ label: generatedName });
               }}

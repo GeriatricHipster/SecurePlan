@@ -72,8 +72,26 @@ function describeActivity(entry) {
   }
 }
 
+function dedupeActivity(entries) {
+  const deduped = [];
+  for (const entry of entries) {
+    const previous = deduped[deduped.length - 1];
+    if (previous
+      && previous.actorName === entry.actorName
+      && previous.action === entry.action
+      && previous.surveyName === entry.surveyName
+      && JSON.stringify(previous.details || {}) === JSON.stringify(entry.details || {})
+      && Math.abs(new Date(previous.createdAt) - new Date(entry.createdAt)) < 10_000) {
+      continue;
+    }
+    deduped.push(entry);
+  }
+  return deduped;
+}
+
 function ActivityFeed({ entries }) {
-  if (!entries.length) return null;
+  const deduped = dedupeActivity(entries);
+  if (!deduped.length) return null;
   return (
     <div className="home-activity">
       <div className="home-progress__heading">
@@ -81,7 +99,7 @@ function ActivityFeed({ entries }) {
         <p>What's changed across the workspace lately.</p>
       </div>
       <ul className="activity-feed">
-        {entries.map((entry) => {
+        {deduped.map((entry) => {
           const Icon = ACTIVITY_ICONS[entry.action] || Pencil;
           return (
             <li key={entry.id} className="activity-feed__item">
@@ -97,10 +115,13 @@ function ActivityFeed({ entries }) {
   );
 }
 
-function StatTile({ label, value, note }) {
+function StatTile({ label, value, note, icon: Icon }) {
   return (
     <div className="stat-tile">
-      <span className="stat-tile__label">{label}</span>
+      <div className="stat-tile__top">
+        <span className="stat-tile__label">{label}</span>
+        {Icon && <span className="stat-tile__icon" aria-hidden="true"><Icon size={16} /></span>}
+      </div>
       <strong className="stat-tile__value">{value}</strong>
       {note && <span className="stat-tile__note">{note}</span>}
     </div>
@@ -205,10 +226,10 @@ export default function HomeDashboard({ user, navigate, notify }) {
       {loading ? <div className="loading-panel"><Spinner label="Loading overview…" /></div> : (
         <>
           <div className="home-stats">
-            <StatTile label="Sites" value={stats.sites} note="Open locations" />
-            <StatTile label="Surveys" value={stats.surveys} note="Active floor plans" />
-            <StatTile label="Folders" value={stats.folders} note="Organized groups" />
-            <StatTile label="Plotted devices" value={stats.devices} note="Items on plans" />
+            <StatTile label="Sites" value={stats.sites} note="Open locations" icon={MapPin} />
+            <StatTile label="Surveys" value={stats.surveys} note="Active floor plans" icon={FilePlus} />
+            <StatTile label="Folders" value={stats.folders} note="Organized groups" icon={FolderPlus} />
+            <StatTile label="Plotted devices" value={stats.devices} note="Items on plans" icon={ChartBar} />
           </div>
 
           {(() => {
@@ -217,15 +238,17 @@ export default function HomeDashboard({ user, navigate, notify }) {
             return (
               <div className="home-progress">
                 <div className="home-progress__heading">
-                  <h2>Needs attention</h2>
-                  <p>Sites with the least install progress so far.</p>
+                  <div>
+                    <h2>Needs attention</h2>
+                    <p>Sites with the least install progress so far.</p>
+                  </div>
+                  <button type="button" className="button button--ghost home-progress__view-all" onClick={() => navigate('sites')}>View all sites</button>
                 </div>
                 <div className="home-progress__list">
                   {needsAttention.map((site) => (
                     <ProgressRow key={site.id} site={site} onOpen={() => navigate(`sites/${site.id}`)} />
                   ))}
                 </div>
-                <button type="button" className="button button--ghost home-progress__view-all" onClick={() => navigate('sites')}>View all sites</button>
               </div>
             );
           })()}
