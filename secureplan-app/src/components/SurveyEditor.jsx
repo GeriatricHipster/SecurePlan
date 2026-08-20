@@ -3,6 +3,7 @@ import { io } from 'socket.io-client';
 import { api, nativeTransport, normalizeList } from '../api.js';
 import { ConfirmDialog, Field, Modal, Spinner, formatWhen, initials, roleCanAnnotate, roleCanEdit } from './Common.jsx';
 import PdfPlan from './PdfPlan.jsx';
+import GanttChart from './GanttChart.jsx';
 import { DEFAULT_ICON_COLOR, DEFAULT_PROFILE, DEVICE_CATEGORIES, DEVICE_WORKFLOW_STATUSES, DOOR_FUNCTIONS, MARKUP_TOOLS, cameraFieldsFor, categoryFor, devicePlacementDefaults, doorFunctionFor, elementColor, elementSymbol, isCameraType, isDoorType, itemFor, workflowStatusFor } from './deviceLibrary.js';
 import { FIT_PLAN_ZOOM, MAX_PLAN_ZOOM, MIN_PLAN_ZOOM } from './planGestures.js';
 import DeviceGlyph from './DeviceGlyph.jsx';
@@ -1178,6 +1179,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
   const [mobilePanel, setMobilePanel] = useState(null);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   const [modal, setModal] = useState(null);
+  const [scheduleTab, setScheduleTab] = useState('devices');
   const remoteTimer = useRef(null);
   const selectedIdRef = useRef(null);
   const planStageRef = useRef(null);
@@ -1633,7 +1635,14 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
 
       <nav className="editor-mobile-nav" aria-label="Survey editor panels"><button type="button" className={mobilePanel === 'library' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'library' ? null : 'library')}>{canEdit ? <Plus aria-hidden="true" size={18} /> : <Layers aria-hidden="true" size={18} />}{canEdit ? 'Add' : 'Layers'}</button><button type="button" className={activeTool.type === 'select' && !mobilePanel ? 'active' : ''} onClick={() => { setActiveTool({ kind: 'markup', type: 'select', label: 'Select' }); setMobilePanel(null); }}><Move aria-hidden="true" size={18} />Move</button><button type="button" className={mobilePanel === 'inspector' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'inspector' ? null : 'inspector')} disabled={!selected}><ListChecks aria-hidden="true" size={18} />{selected ? 'Details' : 'Select item'}</button></nav>
 
-      <Modal open={modal?.type === 'schedule'} title="Device schedule" description={`${elements.filter((element) => element.category !== 'markup').length} plotted security components`} onClose={() => setModal(null)} wide><Schedule elements={elements} onSelect={setSelectedId} onClose={() => setModal(null)} /></Modal>
+      <Modal open={modal?.type === 'schedule'} title="Device schedule" description={`${elements.filter((element) => element.category !== 'markup').length} plotted security components`} onClose={() => setModal(null)} wide>
+        <div className="schedule-subtabs">
+          <button type="button" className={scheduleTab === 'devices' ? 'active' : ''} onClick={() => setScheduleTab('devices')}>Devices</button>
+          <button type="button" className={scheduleTab === 'gantt' ? 'active' : ''} onClick={() => setScheduleTab('gantt')}>Gantt</button>
+        </div>
+        {scheduleTab === 'devices' && <Schedule elements={elements} onSelect={setSelectedId} onClose={() => setModal(null)} />}
+        {scheduleTab === 'gantt' && modal?.type === 'schedule' && <GanttChart surveyId={surveyId} notify={notify} />}
+      </Modal>
       <Modal open={modal?.type === 'tasks'} title="Tasks" description="Track work items, who's on them, which vendor, and when they're due." onClose={() => setModal(null)} wide>{modal?.type === 'tasks' && <TasksPanel surveyId={surveyId} canAnnotate={canAnnotate} notify={notify} />}</Modal>
       <Modal open={modal?.type === 'history'} title="Survey history" description="Who plotted, edited, or removed items, and when." onClose={() => setModal(null)} wide>{modal?.type === 'history' && <HistoryPanel surveyId={surveyId} notify={notify} />}</Modal>
       <Modal open={modal?.type === 'reports'} title="Reports" description="Write up what you did, attach photos, and send it to whoever needs to know." onClose={() => setModal(null)} wide>{modal?.type === 'reports' && <ReportsPanel surveyId={surveyId} canAnnotate={canAnnotate} notify={notify} />}</Modal>

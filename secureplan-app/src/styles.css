@@ -3959,6 +3959,123 @@ h3 {
   font-size: .85rem;
 }
 
+.schedule-subtabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.schedule-subtabs button {
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: .84rem;
+  font-weight: 700;
+}
+
+.schedule-subtabs button.active {
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+
+.gantt-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gantt-chart__scale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: .74rem;
+  font-weight: 700;
+}
+
+.gantt-chart__scale span:nth-child(2) {
+  color: var(--red-dark);
+}
+
+.gantt-chart__body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.gantt-chart__today-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--red);
+  opacity: .55;
+}
+
+.gantt-row {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.gantt-row__label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.gantt-row__label strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: .82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gantt-row__label small {
+  color: var(--muted);
+  font-size: .72rem;
+}
+
+.gantt-row__track {
+  position: relative;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--surface-soft);
+}
+
+.gantt-row__bar {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  min-width: 6px;
+  border-radius: 5px;
+  background: var(--blue, #2563eb);
+}
+
+.gantt-row__bar--overdue {
+  background: var(--red);
+}
+
+.gantt-chart__undated {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: .78rem;
+}
+
+@media (max-width: 760px) {
+  .gantt-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+
 .tasks-panel {
   display: flex;
   flex-direction: column;
