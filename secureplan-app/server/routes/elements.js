@@ -8,6 +8,7 @@ import { deleteStoredFile, cleanTemporaryUpload, storePhoto, storedFileDelivery,
 import { getElement, getNote, getPhoto, getProfile, getSurvey } from '../lib/resources.js';
 import { serializeElement, serializeNote, serializePhoto } from '../lib/serializers.js';
 import { checklistTemplateFor, CUSTOM_CHECKLIST_STATUS_OPTIONS } from '../lib/checklistTemplates.js';
+import { mergedFieldOptions, rememberCustomFieldValue } from '../lib/customOptions.js';
 import {
   booleanValue,
   colorValue,
@@ -542,6 +543,21 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate, notif
     await assertSiteAccess(db, req.user, element.site_id, 'installer');
     await db.prepare('DELETE FROM element_checklist_items WHERE id = ?').run(item.id);
     res.json({ data: { deletedId: item.id } });
+  });
+
+  const DEVICE_TYPE_CODE_FIELD = 'device_type_code';
+  const DEVICE_TYPE_CODE_BASE_OPTIONS = ['(EX)', '(DC)', '(REX)', '(RDR)', '(PZO)', '(DL)', '(DRB)', '(IZ)', '(CM)'];
+
+  router.get('/device-type-codes', async (req, res) => {
+    const options = await mergedFieldOptions(db, DEVICE_TYPE_CODE_FIELD, DEVICE_TYPE_CODE_BASE_OPTIONS);
+    res.json({ data: options, options });
+  });
+
+  router.post('/device-type-codes', async (req, res) => {
+    const value = stringValue(req.body?.value, 'value', { max: 40 });
+    await rememberCustomFieldValue(db, DEVICE_TYPE_CODE_FIELD, DEVICE_TYPE_CODE_BASE_OPTIONS, value);
+    const options = await mergedFieldOptions(db, DEVICE_TYPE_CODE_FIELD, DEVICE_TYPE_CODE_BASE_OPTIONS);
+    res.status(201).json({ data: options, options });
   });
 
   const listPhotosHandler = async (req, res) => {

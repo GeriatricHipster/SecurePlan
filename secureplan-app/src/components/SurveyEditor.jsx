@@ -955,7 +955,85 @@ function DeviceLifecyclePanel({ element, canAnnotate, onPatch }) {
   </section>;
 }
 
-function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, onPatch, onPreview, onDuplicate, onDelete, onAddNote, onAddPhoto, photoBusy, onClose, onCollapse }) {
+const PANEL_NUMBER_OPTIONS = Array.from({ length: 50 }, (_, index) => String(index + 1).padStart(2, '0'));
+const LEVEL_OPTIONS = ['Lvl 0B', 'Lvl 0R', ...Array.from({ length: 20 }, (_, index) => `Lvl ${index + 1}`)];
+
+function extractBuildingNumberForName(siteName) {
+  const match = String(siteName || '').match(/^0*(\d+)/);
+  return match ? match[1].padStart(4, '0') : '';
+}
+
+function NameBuilder({ siteName, onApply, onClose }) {
+  const buildingNumber = extractBuildingNumberForName(siteName);
+  const [panel, setPanel] = useState('');
+  const [typeCodeOptions, setTypeCodeOptions] = useState(['(EX)', '(DC)', '(REX)', '(RDR)', '(PZO)', '(DL)', '(DRB)', '(IZ)', '(CM)', 'Other']);
+  const [typeCode, setTypeCode] = useState('');
+  const [customTypeCode, setCustomTypeCode] = useState('');
+  const [level, setLevel] = useState('');
+  const [room, setRoom] = useState('');
+  const [locationDescription, setLocationDescription] = useState('');
+  const [ioReference, setIoReference] = useState('');
+
+  useEffect(() => {
+    api.deviceTypeCodes().then((result) => {
+      const options = result?.options ?? result;
+      if (Array.isArray(options) && options.length) setTypeCodeOptions(options);
+    }).catch(() => {});
+  }, []);
+
+  const generate = async () => {
+    let resolvedTypeCode = typeCode === 'Other' ? customTypeCode.trim() : typeCode;
+    if (typeCode === 'Other' && resolvedTypeCode) {
+      try { await api.addDeviceTypeCode(resolvedTypeCode); } catch { /* non-critical */ }
+    }
+    const parts = [
+      [buildingNumber, panel].filter(Boolean).join(':'),
+      resolvedTypeCode,
+      room.trim(),
+      locationDescription.trim(),
+      ioReference.trim(),
+    ].filter(Boolean);
+    onApply(parts.join(' '));
+    onClose();
+  };
+
+  return (
+    <div className="name-builder">
+      <div className="name-builder__grid">
+        <Field label="Building #"><input value={buildingNumber || 'Unknown'} disabled readOnly /></Field>
+        <Field label="Panel #">
+          <select value={panel} onChange={(event) => setPanel(event.target.value)}>
+            <option value="">—</option>
+            {PANEL_NUMBER_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+          </select>
+        </Field>
+        <Field label="Type code">
+          <select value={typeCode} onChange={(event) => setTypeCode(event.target.value)}>
+            <option value="">—</option>
+            {typeCodeOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+          </select>
+        </Field>
+        {typeCode === 'Other' && <Field label="Custom type code"><input value={customTypeCode} onChange={(event) => setCustomTypeCode(event.target.value)} placeholder="e.g. (XYZ)" /></Field>}
+        <Field label="Level (reference only)">
+          <select value={level} onChange={(event) => setLevel(event.target.value)}>
+            <option value="">—</option>
+            {LEVEL_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+          </select>
+        </Field>
+        <Field label="Room #"><input value={room} onChange={(event) => setRoom(event.target.value)} placeholder="e.g. 100P" /></Field>
+        <Field label="Location description"><input value={locationDescription} onChange={(event) => setLocationDescription(event.target.value)} placeholder="e.g. South Main Exterior" /></Field>
+        <Field label="I/O reference (optional)"><input value={ioReference} onChange={(event) => setIoReference(event.target.value)} placeholder="e.g. I1:8" /></Field>
+      </div>
+      <p className="name-builder__hint">Level is captured for reference but isn't included in the generated name.</p>
+      <div className="name-builder__actions">
+        <button type="button" className="button button--ghost" onClick={onClose}>Cancel</button>
+        <button type="button" className="button button--primary" disabled={!buildingNumber && !panel && !room.trim()} onClick={generate}>Use this name</button>
+      </div>
+    </div>
+  );
+}
+
+function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, siteName, onPatch, onPreview, onDuplicate, onDelete, onAddNote, onAddPhoto, photoBusy, onClose, onCollapse }) {
   const [form, setForm] = useState({
     label: '', color: '#46545f', size: 42, rotation: 0, doorFunction: 'controlled', fovColor: '#1769aa', fovLength: 0.22, fovSpread: 60, fovRotation: 0, fovs: null,
   });
@@ -964,6 +1042,7 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
   const [noteBusy, setNoteBusy] = useState(false);
   const [noteError, setNoteError] = useState('');
   const [photoCaption, setPhotoCaption] = useState('');
+  const [nameBuilderOpen, setNameBuilderOpen] = useState(false);
 
   useEffect(() => {
     if (!element) return;
@@ -1019,6 +1098,17 @@ function InspectorPanel({ element, notes, notesLoading, canEdit, canAnnotate, on
         <section className="inspector-section">
           <div className="element-identity"><span className="library-symbol" style={{ '--symbol-color': form.color }}><DeviceGlyph type={element.type} symbol={elementSymbol(element)} label={element.label} iconSrc={itemFor(element.category, element.type)?.reportIcon} color={form.color} /></span><div><strong>{categoryFor(element.category)?.name || (element.category === 'markup' ? 'Markup' : 'Custom')}</strong><span>{itemFor(element.category, element.type)?.label || element.type.replaceAll('_', ' ')}</span></div></div>
           <Field label="Element label"><input value={form.label} disabled={!canEdit} onChange={(e) => { const value = e.target.value; setForm({ ...form, label: value }); if (labelSaveTimer.current) window.clearTimeout(labelSaveTimer.current); labelSaveTimer.current = window.setTimeout(() => onPatch({ label: value }), 500); }} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} onBlur={() => { if (labelSaveTimer.current) window.clearTimeout(labelSaveTimer.current); if (form.label !== element.label) onPatch({ label: form.label }); }} /></Field>
+          {canEdit && !nameBuilderOpen && <button type="button" className="button button--ghost name-builder-toggle" onClick={() => setNameBuilderOpen(true)}>Build name from convention</button>}
+          {canEdit && nameBuilderOpen && (
+            <NameBuilder
+              siteName={siteName}
+              onClose={() => setNameBuilderOpen(false)}
+              onApply={(generatedName) => {
+                setForm((current) => ({ ...current, label: generatedName }));
+                onPatch({ label: generatedName });
+              }}
+            />
+          )}
           {isDoorType(element.type) && <div className="door-function-field"><Field label="Door function"><select value={form.doorFunction} disabled={!canEdit} onChange={(event) => { const option = doorFunctionFor(event.target.value); setForm((current) => ({ ...current, doorFunction: option.id, color: option.color })); onPatch({ color: option.color, metadata: { ...metadata, doorFunction: option.id } }); }}>{DOOR_FUNCTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></Field><div className="door-function-key" aria-label="Door function colors">{DOOR_FUNCTIONS.map((option) => <span key={option.id}><i style={{ backgroundColor: option.color }} />{option.label}</span>)}</div><p>Changing the door function automatically applies its standard icon color. You can still choose a custom color below.</p></div>}
           <div className="form-grid form-grid--two">
             <fieldset className="field color-field"><legend className="field__label">Icon color</legend><div className="color-control"><input type="color" aria-label="Choose icon color" value={form.color} disabled={!canEdit} onChange={(e) => setForm({ ...form, color: e.target.value })} onBlur={() => form.color !== elementColor(element) && onPatch({ color: form.color })} /><input aria-label="Icon color hex value" value={form.color} disabled={!canEdit} pattern="#[0-9a-fA-F]{6}" onChange={(e) => setForm({ ...form, color: e.target.value })} onBlur={() => /^#[0-9a-f]{6}$/i.test(form.color) && onPatch({ color: form.color })} /></div></fieldset>
@@ -1157,6 +1247,7 @@ function ProfileBuilder({ open, onClose, onCreate }) {
 
 export default function SurveyEditor({ user, surveyId, siteId, navigate, notify, theme, toggleTheme }) {
   const [survey, setSurvey] = useState(null);
+  const [siteName, setSiteName] = useState('');
   const [scaleDraft, setScaleDraft] = useState({ scalePaperInches: 1, scaleRealFeet: 4 });
   const scaleSaveTimer = useRef(null);
   const [loadError, setLoadError] = useState('');
@@ -1213,6 +1304,11 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
         if (!active) return;
         const loadedSurvey = surveyResult?.survey || surveyResult;
         setSurvey(loadedSurvey);
+        if (loadedSurvey?.siteId) {
+          api.site(loadedSurvey.siteId).then((siteResult) => {
+            if (active) setSiteName((siteResult?.site || siteResult)?.name || '');
+          }).catch(() => {});
+        }
         setScaleDraft({
           scalePaperInches: Number(loadedSurvey?.scalePaperInches ?? 1),
           scaleRealFeet: Number(loadedSurvey?.scaleRealFeet ?? 4),
@@ -1629,7 +1725,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
           <div className="mobile-canvas-hint" aria-hidden="true">1 finger moves · 2 fingers zoom</div>
         </section>
 
-        <div className={`mobile-editor-drawer mobile-editor-drawer--right ${mobilePanel === 'inspector' ? 'open' : ''}`}><InspectorPanel element={selected} notes={notes} notesLoading={notesLoading} canEdit={canEdit} canAnnotate={canAnnotate} onPatch={patchSelected} onPreview={previewElement} onDuplicate={duplicateSelected} onDelete={() => setModal({ type: 'delete-element' })} onAddNote={addNote} onAddPhoto={addPhoto} photoBusy={photoBusy} onClose={() => setMobilePanel(null)} onCollapse={() => setInspectorCollapsed(true)} /></div>
+        <div className={`mobile-editor-drawer mobile-editor-drawer--right ${mobilePanel === 'inspector' ? 'open' : ''}`}><InspectorPanel element={selected} notes={notes} notesLoading={notesLoading} canEdit={canEdit} canAnnotate={canAnnotate} siteName={siteName} onPatch={patchSelected} onPreview={previewElement} onDuplicate={duplicateSelected} onDelete={() => setModal({ type: 'delete-element' })} onAddNote={addNote} onAddPhoto={addPhoto} photoBusy={photoBusy} onClose={() => setMobilePanel(null)} onCollapse={() => setInspectorCollapsed(true)} /></div>
         {inspectorCollapsed && <button type="button" className="inspector-reopen-tab desktop-only" onClick={() => setInspectorCollapsed(false)} aria-label="Show properties panel" title="Show properties panel"><ChevronsLeft aria-hidden="true" size={16} /></button>}
       </div>
 

@@ -5,6 +5,7 @@ import { notFound } from '../lib/errors.js';
 import { getSurvey } from '../lib/resources.js';
 import { idValue, optionalNullableString, stringValue } from '../lib/validation.js';
 import { logActivity } from '../db.js';
+import { mergedFieldOptions, rememberCustomFieldValue } from '../lib/customOptions.js';
 
 const TASK_NAME_OPTIONS = [
   'Parts Procurement',
@@ -73,26 +74,8 @@ export function createTasksRouter({ db, auth }) {
   const router = Router();
   router.use(auth.requireAuth);
 
-  async function mergedOptions(fieldType) {
-    const customRows = await db.prepare('SELECT value FROM task_custom_options WHERE field_type = ? ORDER BY value COLLATE NOCASE').all(fieldType);
-    const custom = customRows.map((row) => row.value);
-    const base = BASE_OPTIONS[fieldType] || [];
-    const seen = new Set(base.map((value) => value.toLowerCase()));
-    const extra = custom.filter((value) => !seen.has(value.toLowerCase()));
-    return [...base, ...extra, 'Other'];
-  }
-
-  async function rememberCustomValue(fieldType, value) {
-    if (!value) return;
-    const base = BASE_OPTIONS[fieldType] || [];
-    if (base.some((option) => option.toLowerCase() === value.toLowerCase())) return;
-    try {
-      await db.prepare('INSERT INTO task_custom_options (id, field_type, value, created_at) VALUES (?, ?, ?, ?)')
-        .run(crypto.randomUUID(), fieldType, value, new Date().toISOString());
-    } catch {
-      // Unique constraint means someone else already added this exact value concurrently - fine, it's there either way.
-    }
-  }
+  const mergedOptions = (fieldType) => mergedFieldOptions(db, fieldType, BASE_OPTIONS[fieldType] || []);
+  const rememberCustomValue = (fieldType, value) => rememberCustomFieldValue(db, fieldType, BASE_OPTIONS[fieldType] || [], value);
 
   router.get('/task-options', async (req, res) => {
     const [taskName, assignedTo, vendor] = await Promise.all([

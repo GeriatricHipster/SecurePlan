@@ -3802,6 +3802,56 @@ h3 {
   margin-top: 12px;
 }
 
+.name-builder-toggle {
+  margin-top: 6px;
+}
+
+.name-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.name-builder__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.name-builder__grid select,
+.name-builder__grid input {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--page);
+  color: var(--ink);
+  font-size: .82rem;
+}
+
+.name-builder__hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: .74rem;
+}
+
+.name-builder__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 760px) {
+  .name-builder__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .door-components {
   display: flex;
   flex-direction: column;
