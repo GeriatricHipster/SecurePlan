@@ -94,7 +94,7 @@ function InlineTextEditor({ element, left, top, boxWidth, boxHeight, color, onPr
   );
 }
 
-function MarkupElement({ element, orientation, selected, onPointerDown, onSelect, onEdit, editingId, onPreview, onCommit, dimensions, pointsPerPixel, scalePaperInches, scaleRealFeet }) {
+function MarkupElementBase({ element, orientation, selected, onPointerDown, onSelect, onEdit, editingId, onPreview, onCommit, dimensions, pointsPerPixel, scalePaperInches, scaleRealFeet }) {
   const x = Number(getField(element, 'x', 'x', 0.5));
   const y = Number(getField(element, 'y', 'y', 0.5));
   const width = Number(getField(element, 'width', 'width', 0.12));
@@ -145,7 +145,18 @@ function MarkupElement({ element, orientation, selected, onPointerDown, onSelect
   return <button type="button" aria-label={`${element.label} markup`} className={`markup-shape markup-shape--${element.type} ${selected ? 'selected' : ''}`} style={{ left: `${left}%`, top: `${top}%`, width: `${boxWidth}%`, height: `${boxHeight}%`, borderColor: color, borderWidth: `${strokeWidth}px`, backgroundColor: `${color}18` }} onPointerDown={(event) => onPointerDown(event, element)} onClick={(event) => { event.stopPropagation(); onSelect(element.id); }} />;
 }
 
-function DeviceElement({ element, orientation, selected, isNestTarget, onPointerDown, onSelect }) {
+const MarkupElement = React.memo(MarkupElementBase, (prev, next) => (
+  prev.element === next.element
+  && prev.orientation === next.orientation
+  && prev.selected === next.selected
+  && prev.editingId === next.editingId
+  && prev.dimensions === next.dimensions
+  && prev.pointsPerPixel === next.pointsPerPixel
+  && prev.scalePaperInches === next.scalePaperInches
+  && prev.scaleRealFeet === next.scaleRealFeet
+));
+
+function DeviceElementBase({ element, orientation, selected, isNestTarget, onPointerDown, onSelect }) {
   const point = toDisplay({ x: Number(element.x), y: Number(element.y) }, orientation);
   const size = Number(element.metadata?.size || element.size || 42);
   const rotation = Number(element.rotation || 0) + Number(orientation || 0);
@@ -210,6 +221,13 @@ function DeviceElement({ element, orientation, selected, isNestTarget, onPointer
     </button>
   );
 }
+
+const DeviceElement = React.memo(DeviceElementBase, (prev, next) => (
+  prev.element === next.element
+  && prev.orientation === next.orientation
+  && prev.selected === next.selected
+  && prev.isNestTarget === next.isNestTarget
+));
 
 function CameraFieldOfView({ element, orientation, selectedFov, onSelectFov, onFovHandleDown, canEdit }) {
   if (!isCameraType(element.type)) return null;
