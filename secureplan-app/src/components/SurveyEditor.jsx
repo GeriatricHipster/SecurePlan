@@ -964,7 +964,10 @@ function extractBuildingNumberForName(siteName) {
 }
 
 function NameBuilder({ siteName, onApply, onClose }) {
-  const buildingNumber = extractBuildingNumberForName(siteName);
+  const derivedBuildingNumber = extractBuildingNumberForName(siteName);
+  const [buildingOptions, setBuildingOptions] = useState([]);
+  const [building, setBuilding] = useState('');
+  const [customBuilding, setCustomBuilding] = useState('');
   const [panel, setPanel] = useState('');
   const [typeCodeOptions, setTypeCodeOptions] = useState(['(EX)', '(DC)', '(REX)', '(RDR)', '(PZO)', '(DL)', '(DRB)', '(IZ)', '(CM)', 'Other']);
   const [typeCode, setTypeCode] = useState('');
@@ -979,20 +982,31 @@ function NameBuilder({ siteName, onApply, onClose }) {
       const options = result?.options ?? result;
       if (Array.isArray(options) && options.length) setTypeCodeOptions(options);
     }).catch(() => {});
-  }, []);
+    api.buildings().then((result) => {
+      const options = result?.options ?? result;
+      if (Array.isArray(options) && options.length) {
+        setBuildingOptions(options);
+        const match = options.find((option) => extractBuildingNumberForName(option) === derivedBuildingNumber);
+        if (match) setBuilding(match);
+      }
+    }).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const generate = async () => {
+    let resolvedBuilding = building === 'Other' ? customBuilding.trim() : building;
+    if (building === 'Other' && resolvedBuilding) {
+      try { await api.addBuilding(resolvedBuilding); } catch { /* non-critical */ }
+    }
+    const buildingNumber = extractBuildingNumberForName(resolvedBuilding);
+
     let resolvedTypeCode = typeCode === 'Other' ? customTypeCode.trim() : typeCode;
     if (typeCode === 'Other' && resolvedTypeCode) {
       try { await api.addDeviceTypeCode(resolvedTypeCode); } catch { /* non-critical */ }
     }
-    const parts = [
-      [buildingNumber, panel].filter(Boolean).join(':'),
-      resolvedTypeCode,
-      room.trim(),
-      locationDescription.trim(),
-      ioReference.trim(),
-    ].filter(Boolean);
+
+    const buildingPanel = [buildingNumber, panel].filter(Boolean).join(':');
+    const roomAndLocation = [room.trim(), locationDescription.trim()].filter(Boolean).join(', ');
+    const parts = [buildingPanel, resolvedTypeCode, level, roomAndLocation, ioReference.trim()].filter(Boolean);
     onApply(parts.join(' '));
     onClose();
   };
@@ -1000,7 +1014,14 @@ function NameBuilder({ siteName, onApply, onClose }) {
   return (
     <div className="name-builder">
       <div className="name-builder__grid">
-        <Field label="Building #"><input value={buildingNumber || 'Unknown'} disabled readOnly /></Field>
+        <Field label="Building #">
+          <select value={building} onChange={(event) => setBuilding(event.target.value)}>
+            <option value="">—</option>
+            {buildingOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+            <option value="Other">New building…</option>
+          </select>
+        </Field>
+        {building === 'Other' && <Field label="New building (number + name)"><input value={customBuilding} onChange={(event) => setCustomBuilding(event.target.value)} placeholder="e.g. 0999 New Building" /></Field>}
         <Field label="Panel #">
           <select value={panel} onChange={(event) => setPanel(event.target.value)}>
             <option value="">—</option>
@@ -1014,7 +1035,7 @@ function NameBuilder({ siteName, onApply, onClose }) {
           </select>
         </Field>
         {typeCode === 'Other' && <Field label="Custom type code"><input value={customTypeCode} onChange={(event) => setCustomTypeCode(event.target.value)} placeholder="e.g. (XYZ)" /></Field>}
-        <Field label="Level (reference only)">
+        <Field label="Level">
           <select value={level} onChange={(event) => setLevel(event.target.value)}>
             <option value="">—</option>
             {LEVEL_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
@@ -1024,10 +1045,9 @@ function NameBuilder({ siteName, onApply, onClose }) {
         <Field label="Location description"><input value={locationDescription} onChange={(event) => setLocationDescription(event.target.value)} placeholder="e.g. South Main Exterior" /></Field>
         <Field label="I/O reference (optional)"><input value={ioReference} onChange={(event) => setIoReference(event.target.value)} placeholder="e.g. I1:8" /></Field>
       </div>
-      <p className="name-builder__hint">Level is captured for reference but isn't included in the generated name.</p>
       <div className="name-builder__actions">
         <button type="button" className="button button--ghost" onClick={onClose}>Cancel</button>
-        <button type="button" className="button button--primary" disabled={!buildingNumber && !panel && !room.trim()} onClick={generate}>Use this name</button>
+        <button type="button" className="button button--primary" disabled={!building && !panel && !room.trim()} onClick={generate}>Use this name</button>
       </div>
     </div>
   );

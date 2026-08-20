@@ -9,6 +9,7 @@ import { getElement, getNote, getPhoto, getProfile, getSurvey } from '../lib/res
 import { serializeElement, serializeNote, serializePhoto } from '../lib/serializers.js';
 import { checklistTemplateFor, CUSTOM_CHECKLIST_STATUS_OPTIONS } from '../lib/checklistTemplates.js';
 import { mergedFieldOptions, rememberCustomFieldValue } from '../lib/customOptions.js';
+import { BUILDING_LIST } from '../lib/buildingList.js';
 import {
   booleanValue,
   colorValue,
@@ -557,6 +558,20 @@ export function createElementsRouter({ db, config, auth, emitSurveyUpdate, notif
     const value = stringValue(req.body?.value, 'value', { max: 40 });
     await rememberCustomFieldValue(db, DEVICE_TYPE_CODE_FIELD, DEVICE_TYPE_CODE_BASE_OPTIONS, value);
     const options = await mergedFieldOptions(db, DEVICE_TYPE_CODE_FIELD, DEVICE_TYPE_CODE_BASE_OPTIONS);
+    res.status(201).json({ data: options, options });
+  });
+
+  const BUILDING_FIELD = 'building';
+
+  router.get('/buildings', async (req, res) => {
+    const options = await mergedFieldOptions(db, BUILDING_FIELD, BUILDING_LIST);
+    res.json({ data: options, options });
+  });
+
+  router.post('/buildings', async (req, res) => {
+    const value = stringValue(req.body?.value, 'value', { max: 200 });
+    await rememberCustomFieldValue(db, BUILDING_FIELD, BUILDING_LIST, value);
+    const options = await mergedFieldOptions(db, BUILDING_FIELD, BUILDING_LIST);
     res.status(201).json({ data: options, options });
   });
 
