@@ -2,7 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { api, normalizeList } from '../api.js';
 import { ConfirmDialog, Field, Menu, MenuButton, Modal, Spinner, formatWhen, initials, roleCanEdit, roleCanManage } from './Common.jsx';
 import { ALL_FOLDERS, folderParent, orderedFolders, surveyFolder, surveyFolderGroups } from './siteWorkspaceModel.js';
-import { ArrowLeft, ChevronDown, ChevronRight, Folder, FolderOpen, LayoutGrid, Plus, X } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, Folder, FolderOpen, LayoutGrid, Map, Plus, Users, X } from 'lucide-react';
+
+function extractBuildingNumber(siteName) {
+  const match = String(siteName || '').match(/^0*(\d+)/);
+  return match ? match[1] : null;
+}
 
 function FolderNode({ folder, folders, selectedId, depth = 0, canManage, onSelect, onAction }) {
   const children = folders.filter((candidate) => String(folderParent(candidate) ?? '') === String(folder.id));
@@ -103,8 +108,88 @@ function pathToFolder(folderId, folders) {
   return result;
 }
 
+function SiteAssignedUsersPanel({ siteId, notify }) {
+  const [assignments, setAssignments] = useState([]);
+  const [assignable, setAssignable] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [assignmentsResult, assignableResult] = await Promise.all([
+        api.siteAssignments(siteId),
+        api.assignableSiteUsers(siteId),
+      ]);
+      setAssignments(normalizeList(assignmentsResult?.assignments ?? assignmentsResult));
+      setAssignable(normalizeList(assignableResult?.users ?? assignableResult));
+    } catch (error) { notify(error.message); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, [siteId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const assign = async (userId) => {
+    setBusy(true);
+    try { await api.assignToSite(siteId, userId); await load(); }
+    catch (error) { notify(error.message); }
+    finally { setBusy(false); }
+  };
+
+  const unassign = async (userId) => {
+    setBusy(true);
+    try { await api.unassignFromSite(siteId, userId); await load(); }
+    catch (error) { notify(error.message); }
+    finally { setBusy(false); }
+  };
+
+  if (loading) return <div className="loading-panel"><Spinner label="Loading assignments…" /></div>;
+
+  const assignedIds = new Set(assignments.map((user) => user.id));
+  const unassigned = assignable.filter((user) => !assignedIds.has(user.id));
+
+  return (
+    <div className="assigned-users">
+      <p className="muted">Viewers and installers only see this site (and anything in it) if they're specifically assigned here. Other roles (editor and above) always see every site.</p>
+      <div className="assigned-users__section">
+        <h3>Assigned to this site</h3>
+        {assignments.length === 0
+          ? <p className="muted">No one is assigned yet — no viewers or installers can see this site until you add someone below.</p>
+          : (
+            <ul className="assigned-users__list">
+              {assignments.map((user) => (
+                <li key={user.id}>
+                  <span className="mini-avatar" aria-hidden="true">{initials(user.name)}</span>
+                  <span className="assigned-users__name">{user.name}</span>
+                  <button type="button" className="button button--ghost" disabled={busy} onClick={() => unassign(user.id)}>Remove</button>
+                </li>
+              ))}
+            </ul>
+          )}
+      </div>
+      <div className="assigned-users__section">
+        <h3>Add someone</h3>
+        {unassigned.length === 0
+          ? <p className="muted">Everyone eligible (viewers and installers) is already assigned.</p>
+          : (
+            <ul className="assigned-users__list">
+              {unassigned.map((user) => (
+                <li key={user.id}>
+                  <span className="mini-avatar" aria-hidden="true">{initials(user.name)}</span>
+                  <span className="assigned-users__name">{user.name} <small>({user.role})</small></span>
+                  <button type="button" className="button button--secondary" disabled={busy} onClick={() => assign(user.id)}>Add</button>
+                </li>
+              ))}
+            </ul>
+          )}
+      </div>
+    </div>
+  );
+}
+
 export default function SiteWorkspace({ user, siteId, navigate, notify }) {
   const [site, setSite] = useState(null);
+  const buildingNumber = useMemo(() => extractBuildingNumber(site?.name), [site?.name]);
   const [folders, setFolders] = useState([]);
   const [surveys, setSurveys] = useState([]);
   const [selectedFolderId, setSelectedFolderId] = useState(ALL_FOLDERS);
@@ -118,6 +203,7 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
   const [mobileFoldersOpen, setMobileFoldersOpen] = useState(false);
   const canEdit = roleCanEdit(user.role);
   const canManage = roleCanManage(user.role);
+  const canManageAssignments = ['owner', 'admin'].includes(user.role);
 
   const load = async () => {
     setLoading(true);
@@ -282,8 +368,13 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
           <p className="eyebrow">Site workspace</p>
           <h1>{site?.name}</h1>
           {site?.address && <p>{site.address}</p>}
+          {buildingNumber && (
+            <a className="campus-map-link" href={`https://map.utah.edu/?buildingnumber=${buildingNumber}`} target="_blank" rel="noreferrer">
+              <Map aria-hidden="true" size={14} /> View on campus map
+            </a>
+          )}
         </div>
-        {canEdit && <div className="workspace-heading__actions">{canManage && <button type="button" className="button button--secondary" onClick={() => startAction('folder-create', { parentId: activeFolderId })}>New folder</button>}<button type="button" className="button button--primary" onClick={() => startAction('survey-create', { folderId: activeFolderId })}><Plus aria-hidden="true" size={16} /> New survey</button></div>}
+        {canEdit && <div className="workspace-heading__actions">{canManageAssignments && <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'site-assignments' })}><Users aria-hidden="true" size={16} /> Assigned users</button>}{canManage && <button type="button" className="button button--secondary" onClick={() => startAction('folder-create', { parentId: activeFolderId })}>New folder</button>}<button type="button" className="button button--primary" onClick={() => startAction('survey-create', { folderId: activeFolderId })}><Plus aria-hidden="true" size={16} /> New survey</button></div>}
       </div>
 
       <div className="workspace-layout">
@@ -445,6 +536,8 @@ export default function SiteWorkspace({ user, siteId, navigate, notify }) {
           </div>
         </form>
       </Modal>
+
+      <Modal open={modal?.type === 'site-assignments'} title="Assigned users" description="Control which viewers and installers can see this site." onClose={() => setModal(null)} wide>{modal?.type === 'site-assignments' && <SiteAssignedUsersPanel siteId={siteId} notify={notify} />}</Modal>
 
       <ConfirmDialog open={modal?.type === 'folder-delete' || modal?.type === 'survey-delete'} title={`Delete ${modal?.type === 'folder-delete' ? 'folder' : 'survey'}?`} busy={busy} onClose={() => setModal(null)} onConfirm={remove}>
         <p><strong>{modal?.folder?.name || modal?.survey?.name}</strong> {modal?.type === 'folder-delete' ? 'and all folders and surveys inside it' : 'and all of its elements, notes, and photos'} will be permanently deleted.</p>

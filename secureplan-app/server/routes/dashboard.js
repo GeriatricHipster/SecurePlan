@@ -14,20 +14,25 @@ export function createDashboardRouter({ db, auth }) {
   const router = Router();
   router.use(auth.requireAuth);
 
-  router.get('/dashboard-summary', async (req, res) => {
-    const { id: userId, role, workspace_access: workspaceAccess } = req.user;
-
+  async function accessibleSiteIds(db, user) {
+    const { id: userId, role, workspace_access: workspaceAccess } = user;
     const siteRows = await db
       .prepare(
         `SELECT s.id
            FROM sites s
            LEFT JOIN site_members sm ON sm.site_id = s.id AND sm.user_id = ?
-          WHERE ? IN ('owner','admin') OR ? = 1 OR sm.user_id IS NOT NULL`,
+           LEFT JOIN site_assignments sa ON sa.site_id = s.id AND sa.user_id = ?
+          WHERE ? IN ('owner','admin') OR ? = 1
+             OR (sm.user_id IS NOT NULL AND (sm.role NOT IN ('viewer', 'installer') OR sa.user_id IS NOT NULL))`,
       )
-      .all(userId, role, workspaceAccess);
-    const accessibleSiteIds = new Set(siteRows.map((row) => row.id));
+      .all(userId, userId, role, workspaceAccess);
+    return new Set(siteRows.map((row) => row.id));
+  }
 
-    if (!accessibleSiteIds.size) {
+  router.get('/dashboard-summary', async (req, res) => {
+    const accessibleSiteIdSet = await accessibleSiteIds(db, req.user);
+
+    if (!accessibleSiteIdSet.size) {
       return res.json({ data: { totalDevices: 0, siteProgress: [] }, totalDevices: 0, siteProgress: [] });
     }
 
@@ -43,7 +48,7 @@ export function createDashboardRouter({ db, auth }) {
     const bySite = new Map();
     let totalDevices = 0;
     for (const row of rows) {
-      if (!accessibleSiteIds.has(row.site_id)) continue;
+      if (!accessibleSiteIdSet.has(row.site_id)) continue;
       totalDevices += 1;
       let status = 'planned';
       try { status = JSON.parse(row.metadata_json || '{}').workflowStatus || 'planned'; }
@@ -62,6 +67,33 @@ export function createDashboardRouter({ db, auth }) {
     }));
 
     res.json({ data: { totalDevices, siteProgress }, totalDevices, siteProgress });
+  });
+
+  router.get('/active-sites', async (req, res) => {
+    const accessibleSiteIdSet = await accessibleSiteIds(db, req.user);
+    if (!accessibleSiteIdSet.size) return res.json({ data: [], sites: [] });
+
+    const rows = await db
+      .prepare(
+        `SELECT a.site_id, s.name AS site_name, MAX(a.created_at) AS last_activity_at, COUNT(*) AS change_count
+           FROM activity_log a
+           JOIN sites s ON s.id = a.site_id
+          WHERE a.actor_id = ? AND a.site_id IS NOT NULL
+          GROUP BY a.site_id, s.name
+          ORDER BY last_activity_at DESC`,
+      )
+      .all(req.user.id);
+
+    const sites = rows
+      .filter((row) => accessibleSiteIdSet.has(row.site_id))
+      .map((row) => ({
+        siteId: row.site_id,
+        siteName: row.site_name,
+        lastActivityAt: row.last_activity_at,
+        changeCount: Number(row.change_count),
+      }));
+
+    res.json({ data: sites, sites });
   });
 
   return router;

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api, normalizeList } from '../api.js';
-import { Modal, Spinner, formatWhen, initials } from './Common.jsx';
-import { Activity, ChartBar, Copy, FilePlus, FolderPlus, MapPin, Pencil, RotateCw, Search, Trash2 } from 'lucide-react';
+import { Modal, Spinner, formatWhen } from './Common.jsx';
+import { Activity, ChartBar, FilePlus, FolderPlus, MapPin, Search } from 'lucide-react';
 
 const WELCOME_STORAGE_KEY = 'secureplan-welcomed';
 
@@ -30,91 +30,6 @@ function WelcomeModal({ open, onClose }) {
   );
 }
 
-const ACTIVITY_ICONS = {
-  'element.created': FilePlus,
-  'element.updated': Pencil,
-  'element.deleted': Trash2,
-  'folder.created': FolderPlus,
-  'folder.updated': Pencil,
-  'folder.deleted': Trash2,
-  'folder.copied': Copy,
-  'site.created': MapPin,
-  'site.updated': Pencil,
-  'site.copied': Copy,
-  'survey.created': FilePlus,
-  'survey.updated': Pencil,
-  'survey.copied': Copy,
-  'survey.moved': FilePlus,
-  'survey.rotated': RotateCw,
-};
-
-function describeActivity(entry) {
-  const { action, details = {}, siteName, surveyName } = entry;
-  const survey = surveyName ? `"${surveyName}"` : 'a survey';
-  const site = siteName ? `"${siteName}"` : 'a site';
-  switch (action) {
-    case 'element.created': return <>plotted <strong>{details.label || details.type || 'a device'}</strong> on {survey}</>;
-    case 'element.updated': return <>updated <strong>{details.label || 'a device'}</strong> on {survey}</>;
-    case 'element.deleted': return <>removed <strong>{details.label || 'a device'}</strong> from {survey}</>;
-    case 'folder.created': return <>created folder <strong>{details.name}</strong> in {site}</>;
-    case 'folder.updated': return <>renamed a folder in {site}</>;
-    case 'folder.deleted': return <>deleted a folder from {site}</>;
-    case 'folder.copied': return <>copied a folder in {site}</>;
-    case 'site.created': return <>created site <strong>{details.name}</strong></>;
-    case 'site.updated': return <>updated {site} details</>;
-    case 'site.copied': return <>duplicated a site</>;
-    case 'survey.created': return <>created survey <strong>{details.name}</strong> in {site}</>;
-    case 'survey.updated': return <>updated {survey}</>;
-    case 'survey.copied': return <>copied a survey</>;
-    case 'survey.moved': return <>moved a survey</>;
-    case 'survey.rotated': return <>rotated {survey}</>;
-    default: return action.replace('.', ' ');
-  }
-}
-
-function dedupeActivity(entries) {
-  const deduped = [];
-  for (const entry of entries) {
-    const previous = deduped[deduped.length - 1];
-    if (previous
-      && previous.actorName === entry.actorName
-      && previous.action === entry.action
-      && previous.surveyName === entry.surveyName
-      && JSON.stringify(previous.details || {}) === JSON.stringify(entry.details || {})
-      && Math.abs(new Date(previous.createdAt) - new Date(entry.createdAt)) < 10_000) {
-      continue;
-    }
-    deduped.push(entry);
-  }
-  return deduped;
-}
-
-function ActivityFeed({ entries }) {
-  const deduped = dedupeActivity(entries);
-  if (!deduped.length) return null;
-  return (
-    <div className="home-activity">
-      <div className="home-progress__heading">
-        <h2>Recent activity</h2>
-        <p>What's changed across the workspace lately.</p>
-      </div>
-      <ul className="activity-feed">
-        {deduped.map((entry) => {
-          const Icon = ACTIVITY_ICONS[entry.action] || Pencil;
-          return (
-            <li key={entry.id} className="activity-feed__item">
-              <span className="activity-feed__icon" aria-hidden="true"><Icon size={15} /></span>
-              <span className="mini-avatar" aria-hidden="true">{initials(entry.actorName)}</span>
-              <p><strong>{entry.actorName}</strong> {describeActivity(entry)}</p>
-              <time>{formatWhen(entry.createdAt)}</time>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
 function StatTile({ label, value, note, icon: Icon }) {
   return (
     <div className="stat-tile">
@@ -138,28 +53,11 @@ function ActionCard({ title, description, buttonText, onClick }) {
   );
 }
 
-function ProgressRow({ site, onOpen }) {
-  const hasDevices = site.deviceCount > 0;
-  const percent = hasDevices ? site.progress : 0;
-  return (
-    <button type="button" className="progress-row" onClick={onOpen}>
-      <div className="progress-row__heading">
-        <span className="progress-row__name">{site.name}</span>
-        <span className="progress-row__percent">{hasDevices ? `${percent}%` : 'No devices yet'}</span>
-      </div>
-      <div className="progress-bar" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100} aria-label={`${site.name} install progress`}>
-        <div className="progress-bar__fill" style={{ width: `${hasDevices ? percent : 0}%` }} />
-      </div>
-      <span className="progress-row__meta">{site.deviceCount} device{site.deviceCount === 1 ? '' : 's'} plotted</span>
-    </button>
-  );
-}
 
 export default function HomeDashboard({ user, navigate, notify }) {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ sites: 0, surveys: 0, folders: 0, devices: 0 });
-  const [siteProgress, setSiteProgress] = useState([]);
-  const [activity, setActivity] = useState([]);
+  const [activeSites, setActiveSites] = useState([]);
   const [showWelcome, setShowWelcome] = useState(false);
   const canManageTeam = ['owner', 'admin'].includes(user.role);
 
@@ -177,10 +75,10 @@ export default function HomeDashboard({ user, navigate, notify }) {
     (async () => {
       setLoading(true);
       try {
-        const [sitesResult, summary, activityResult] = await Promise.all([
+        const [sitesResult, summary, activeSitesResult] = await Promise.all([
           api.sites(),
           api.dashboardSummary().catch(() => ({ totalDevices: 0, siteProgress: [] })),
-          api.activity({ limit: 15 }).catch(() => ({ activity: [] })),
+          api.activeSites().catch(() => ({ sites: [] })),
         ]);
         const sites = normalizeList(sitesResult);
         const totals = sites.reduce((current, site) => ({
@@ -188,18 +86,9 @@ export default function HomeDashboard({ user, navigate, notify }) {
           folders: current.folders + Number(site.folderCount ?? site.folder_count ?? 0),
         }), { surveys: 0, folders: 0 });
 
-        const progressBySiteId = new Map((summary?.siteProgress || []).map((entry) => [entry.siteId, entry]));
-        const progressBySite = sites
-          .map((site) => {
-            const entry = progressBySiteId.get(site.id);
-            return { id: site.id, name: site.name, progress: entry?.progress || 0, deviceCount: entry?.deviceCount || 0 };
-          })
-          .sort((a, b) => a.progress - b.progress);
-
         if (active) {
           setStats({ sites: sites.length, surveys: totals.surveys, folders: totals.folders, devices: summary?.totalDevices || 0 });
-          setSiteProgress(progressBySite);
-          setActivity(normalizeList(activityResult?.activity ?? activityResult));
+          setActiveSites(normalizeList(activeSitesResult?.sites ?? activeSitesResult));
         }
       } catch (error) {
         if (active) notify(error.message);
@@ -232,28 +121,29 @@ export default function HomeDashboard({ user, navigate, notify }) {
             <StatTile label="Plotted devices" value={stats.devices} note="Items on plans" icon={ChartBar} />
           </div>
 
-          {(() => {
-            const needsAttention = siteProgress.filter((site) => site.deviceCount > 0 && site.progress < 100).slice(0, 5);
-            if (!needsAttention.length) return null;
-            return (
-              <div className="home-progress">
-                <div className="home-progress__heading">
-                  <div>
-                    <h2>Needs attention</h2>
-                    <p>Sites with the least install progress so far.</p>
-                  </div>
-                  <button type="button" className="button button--ghost home-progress__view-all" onClick={() => navigate('sites')}>View all sites</button>
-                </div>
-                <div className="home-progress__list">
-                  {needsAttention.map((site) => (
-                    <ProgressRow key={site.id} site={site} onOpen={() => navigate(`sites/${site.id}`)} />
-                  ))}
-                </div>
+          <div className="home-progress">
+            <div className="home-progress__heading">
+              <div>
+                <h2>Your active sites</h2>
+                <p>Sites you've made changes to.</p>
               </div>
-            );
-          })()}
-
-          <ActivityFeed entries={activity} />
+              <button type="button" className="button button--ghost home-progress__view-all" onClick={() => navigate('sites')}>View all sites</button>
+            </div>
+            {!activeSites.length ? (
+              <p className="muted">Nothing here yet — sites you edit will show up as you go.</p>
+            ) : (
+              <ul className="active-sites-list">
+                {activeSites.map((site) => (
+                  <li key={site.siteId}>
+                    <button type="button" onClick={() => navigate(`sites/${site.siteId}`)}>
+                      <span className="active-sites-list__name">{site.siteName}</span>
+                      <span className="active-sites-list__meta">{site.changeCount} change{site.changeCount === 1 ? '' : 's'} · {formatWhen(site.lastActivityAt)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           <div className="home-actions">
             <ActionCard

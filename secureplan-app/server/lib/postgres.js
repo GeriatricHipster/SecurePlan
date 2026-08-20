@@ -447,6 +447,16 @@ const POSTGRES_SCHEMA = `
     PRIMARY KEY (survey_id, user_id)
   );
 
+  CREATE TABLE IF NOT EXISTS site_assignments (
+    site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    added_by TEXT REFERENCES users(id),
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (site_id, user_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_site_assignments_user ON site_assignments(user_id);
+
   CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users(LOWER(email));
   CREATE INDEX IF NOT EXISTS idx_site_members_user ON site_members(user_id);
   CREATE INDEX IF NOT EXISTS idx_folders_site_parent ON folders(site_id, parent_id, order_index);

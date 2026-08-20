@@ -1581,6 +1581,44 @@ h3 {
   gap: 10px;
 }
 
+.active-sites-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.active-sites-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  text-align: left;
+}
+
+.active-sites-list button:hover {
+  background: var(--surface-soft);
+}
+
+.active-sites-list__name {
+  color: var(--ink);
+  font-weight: 700;
+  font-size: .9rem;
+}
+
+.active-sites-list__meta {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: .78rem;
+}
+
 .home-progress__view-all {
   flex-shrink: 0;
 }

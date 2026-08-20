@@ -151,6 +151,10 @@ export async function assertSiteAccess(db, user, siteId, minimumRole = 'viewer')
   const role = await siteRole(db, user, siteId);
   if (!role) throw forbidden('You do not have access to this site.');
   if (!hasRole(role, minimumRole)) throw forbidden();
+  if (role === 'viewer' || role === 'installer') {
+    const assignment = await db.prepare('SELECT 1 FROM site_assignments WHERE site_id = ? AND user_id = ?').get(siteId, user.id);
+    if (!assignment) throw forbidden('You are not assigned to this site.');
+  }
   return role;
 }
 

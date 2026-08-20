@@ -23,13 +23,16 @@ export function createSitesRouter({ db, config, auth, emitSiteUpdate }) {
                 (SELECT COUNT(*) FROM site_members m WHERE m.site_id = s.id) AS member_count
            FROM sites s
            LEFT JOIN site_members sm ON sm.site_id = s.id AND sm.user_id = ?
-          WHERE ? IN ('owner','admin') OR ? = 1 OR sm.user_id IS NOT NULL
+           LEFT JOIN site_assignments sa ON sa.site_id = s.id AND sa.user_id = ?
+          WHERE ? IN ('owner','admin') OR ? = 1
+             OR (sm.user_id IS NOT NULL AND (sm.role NOT IN ('viewer', 'installer') OR sa.user_id IS NOT NULL))
           ORDER BY s.order_index, s.name COLLATE NOCASE`,
       )
       .all(
         req.user.role,
         req.user.workspace_access,
         req.user.role,
+        req.user.id,
         req.user.id,
         req.user.role,
         req.user.workspace_access,
@@ -151,6 +154,54 @@ export function createSitesRouter({ db, config, auth, emitSiteUpdate }) {
     for (const file of files) await deleteStoredFile(file.storage_key, file.kind, config);
     emitSiteUpdate(site.id, 'site.deleted', req.user, { siteId: site.id });
     res.json({ data: { deletedId: site.id }, success: true });
+  });
+
+  router.get('/sites/:siteId/assignable-users', async (req, res) => {
+    const site = await getSite(db, idValue(req.params.siteId, 'siteId'));
+    await assertSiteAccess(db, req.user, site.id, 'admin');
+    const rows = await db
+      .prepare("SELECT id, name, email, role FROM users WHERE role IN ('viewer', 'installer') AND disabled_at IS NULL ORDER BY name COLLATE NOCASE")
+      .all();
+    res.json({ data: rows, users: rows });
+  });
+
+  router.get('/sites/:siteId/assignments', async (req, res) => {
+    const site = await getSite(db, idValue(req.params.siteId, 'siteId'));
+    await assertSiteAccess(db, req.user, site.id, 'admin');
+    const rows = await db
+      .prepare(
+        `SELECT u.id, u.name, u.email FROM site_assignments sa
+           JOIN users u ON u.id = sa.user_id
+          WHERE sa.site_id = ? AND u.disabled_at IS NULL
+          ORDER BY u.name COLLATE NOCASE`,
+      )
+      .all(site.id);
+    res.json({ data: rows, assignments: rows });
+  });
+
+  router.post('/sites/:siteId/assignments', async (req, res) => {
+    const site = await getSite(db, idValue(req.params.siteId, 'siteId'));
+    await assertSiteAccess(db, req.user, site.id, 'admin');
+    const userId = idValue(req.body?.userId, 'userId');
+    const target = await db.prepare('SELECT id, role FROM users WHERE id = ? AND disabled_at IS NULL').get(userId);
+    if (!target) throw badRequest('User not found.', { field: 'userId' });
+    if (!['viewer', 'installer'].includes(target.role)) throw badRequest('Only viewer or installer role users can be assigned to specific sites.', { field: 'userId' });
+    const now = new Date().toISOString();
+    await db.prepare(
+      `INSERT INTO site_assignments (site_id, user_id, added_by, created_at)
+       VALUES (?, ?, ?, ?) ON CONFLICT (site_id, user_id) DO NOTHING`,
+    ).run(site.id, userId, req.user.id, now);
+    emitSiteUpdate(site.id, 'assignment.created', req.user, { userId });
+    res.status(201).json({ data: { siteId: site.id, userId }, success: true });
+  });
+
+  router.delete('/sites/:siteId/assignments/:userId', async (req, res) => {
+    const site = await getSite(db, idValue(req.params.siteId, 'siteId'));
+    await assertSiteAccess(db, req.user, site.id, 'admin');
+    const userId = idValue(req.params.userId, 'userId');
+    await db.prepare('DELETE FROM site_assignments WHERE site_id = ? AND user_id = ?').run(site.id, userId);
+    emitSiteUpdate(site.id, 'assignment.removed', req.user, { userId });
+    res.json({ data: { siteId: site.id, userId }, success: true });
   });
 
   return router;
