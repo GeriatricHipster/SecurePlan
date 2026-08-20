@@ -275,6 +275,30 @@ export function createDatabase(config) {
     CREATE INDEX IF NOT EXISTS idx_message_recipients_message ON message_recipients(message_id);
     CREATE INDEX IF NOT EXISTS idx_message_recipients_user ON message_recipients(user_id);
 
+    CREATE TABLE IF NOT EXISTS survey_tasks (
+      id TEXT PRIMARY KEY,
+      survey_id TEXT NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+      task_name TEXT NOT NULL,
+      assigned_to TEXT,
+      vendor TEXT,
+      deadline TEXT,
+      created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_survey_tasks_survey ON survey_tasks(survey_id, deadline);
+
+    CREATE TABLE IF NOT EXISTS task_custom_options (
+      id TEXT PRIMARY KEY,
+      field_type TEXT NOT NULL,
+      value TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(field_type, value)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_task_custom_options_field ON task_custom_options(field_type);
+
     CREATE TABLE IF NOT EXISTS password_reset_tokens (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

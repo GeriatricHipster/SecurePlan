@@ -482,6 +482,11 @@ export const api = {
     if (!response.ok) throw new Error(`Attachment download failed (${response.status}).`);
     return response.blob();
   },
+  taskOptions: () => request('/api/task-options'),
+  tasks: (surveyId) => request(`/api/surveys/${surveyId}/tasks`),
+  createTask: (surveyId, values) => request(`/api/surveys/${surveyId}/tasks`, json('POST', values)),
+  updateTask: (taskId, values) => request(`/api/tasks/${taskId}`, json('PATCH', values)),
+  deleteTask: (taskId) => request(`/api/tasks/${taskId}`, json('DELETE')),
   profiles: () => request('/api/profiles'),
   createProfile: (values) => request('/api/profiles', json('POST', values)),
   updateProfile: (id, values) => request(`/api/profiles/${id}`, json('PATCH', values)),

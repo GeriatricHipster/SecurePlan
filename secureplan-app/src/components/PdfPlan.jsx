@@ -190,12 +190,8 @@ function DeviceElement({ element, orientation, selected, isNestTarget, onPointer
       </span>
 
       {components.length > 0 && (
-        <span className="plan-element__components" aria-label={`Components: ${components.map((component) => component.label).join(', ')}`}>
-          {components.map((component, index) => (
-            <i key={`${component.type}-${index}`} title={component.label}>
-              {component.symbol || itemFor(component.category, component.type)?.symbol || '?'}
-            </i>
-          ))}
+        <span className="plan-element__components" aria-label={`${components.length} nested component${components.length === 1 ? '' : 's'}: ${components.map((component) => component.label).join(', ')}`} title={components.map((component) => component.label).join(', ')}>
+          {components.length}
         </span>
       )}
 

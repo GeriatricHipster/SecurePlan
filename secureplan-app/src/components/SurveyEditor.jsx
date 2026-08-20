@@ -10,7 +10,7 @@ import { exportSurveyPdf } from './surveyPdfExport.js';
 import {
   ArrowLeft, ArrowUpRight, Bell, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   Circle, Cloud, Copy, Download, Eye, FilePlus, History, Layers, ListChecks, Minus, Moon, Move, MousePointer2,
-  Pencil, Plus, Radio, RotateCw, Ruler, Send, Slash, Square, Sun, Trash2, Type, Users, X,
+  Pencil, Plus, Radio, RotateCw, Ruler, Send, Slash, Square, Sun, Trash2, Type, Users, X, ClipboardList,
 } from 'lucide-react';
 
 const HISTORY_ICONS = {
@@ -554,6 +554,140 @@ function SendReportPanel({ surveyId, reportId, notify, onClose }) {
     </div>
   );
 }
+function TaskFieldSelect({ value, options, onChange }) {
+  const [customMode, setCustomMode] = useState(() => Boolean(value) && !options.includes(value));
+
+  const handleSelectChange = (event) => {
+    const next = event.target.value;
+    if (next === 'Other') {
+      setCustomMode(true);
+      onChange('');
+    } else {
+      setCustomMode(false);
+      onChange(next);
+    }
+  };
+
+  const selectValue = customMode ? 'Other' : (value || '');
+
+  return (
+    <div className="task-field-select">
+      <select value={selectValue} onChange={handleSelectChange}>
+        <option value="">—</option>
+        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+      </select>
+      {customMode && (
+        <input
+          type="text"
+          placeholder="Enter custom value"
+          value={value || ''}
+          onChange={(event) => onChange(event.target.value)}
+          onBlur={() => { if (!value?.trim()) setCustomMode(false); }}
+          autoFocus
+        />
+      )}
+    </div>
+  );
+}
+
+function TasksPanel({ surveyId, canAnnotate, notify }) {
+  const [tasks, setTasks] = useState([]);
+  const [options, setOptions] = useState({ taskName: [], assignedTo: [], vendor: [] });
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState({ taskName: '', assignedTo: '', vendor: '', deadline: '' });
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    try {
+      const [taskResult, optionResult] = await Promise.all([api.tasks(surveyId), api.taskOptions()]);
+      setTasks(normalizeList(taskResult?.tasks ?? taskResult));
+      setOptions(optionResult?.data ?? optionResult);
+    } catch (error) { notify(error.message); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { load(); }, [surveyId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const refreshOptions = async () => {
+    try {
+      const optionResult = await api.taskOptions();
+      setOptions(optionResult?.data ?? optionResult);
+    } catch { /* non-critical - dropdowns just won't show a brand-new custom value from someone else yet */ }
+  };
+
+  const addTask = async () => {
+    if (!draft.taskName.trim()) return;
+    setSaving(true);
+    try {
+      const result = await api.createTask(surveyId, draft);
+      setTasks((current) => [...current, result?.data ?? result]);
+      setDraft({ taskName: '', assignedTo: '', vendor: '', deadline: '' });
+      setAdding(false);
+      await refreshOptions();
+    } catch (error) { notify(error.message); }
+    finally { setSaving(false); }
+  };
+
+  const updateTaskField = async (taskId, field, value) => {
+    setTasks((current) => current.map((task) => task.id === taskId ? { ...task, [field]: value } : task));
+    try {
+      await api.updateTask(taskId, { [field]: value });
+      await refreshOptions();
+    } catch (error) { notify(error.message); load(); }
+  };
+
+  const removeTask = async (taskId) => {
+    try { await api.deleteTask(taskId); setTasks((current) => current.filter((task) => task.id !== taskId)); }
+    catch (error) { notify(error.message); }
+  };
+
+  if (loading) return <div className="loading-panel"><Spinner label="Loading tasks…" /></div>;
+
+  return (
+    <div className="tasks-panel">
+      {tasks.length > 0 && (
+        <div className="task-row task-row--header">
+          <span>Task Name</span>
+          <span>Assigned To</span>
+          <span>Deadline</span>
+          <span>Vendor</span>
+          <span />
+        </div>
+      )}
+      <div className="tasks-panel__list">
+        {tasks.length === 0 && !adding ? (
+          <p className="muted">No tasks yet.</p>
+        ) : tasks.map((task) => (
+          <div key={task.id} className="task-row">
+            <TaskFieldSelect value={task.taskName} options={options.taskName} onChange={(value) => updateTaskField(task.id, 'taskName', value)} />
+            <TaskFieldSelect value={task.assignedTo} options={options.assignedTo} onChange={(value) => updateTaskField(task.id, 'assignedTo', value)} />
+            <input type="date" value={task.deadline || ''} onChange={(event) => updateTaskField(task.id, 'deadline', event.target.value)} disabled={!canAnnotate} />
+            <TaskFieldSelect value={task.vendor} options={options.vendor} onChange={(value) => updateTaskField(task.id, 'vendor', value)} />
+            {canAnnotate ? <button type="button" className="task-row__remove" onClick={() => removeTask(task.id)} aria-label="Delete task"><Trash2 size={14} /></button> : <span />}
+          </div>
+        ))}
+      </div>
+      {canAnnotate && (
+        adding ? (
+          <div className="task-row task-row--new">
+            <TaskFieldSelect value={draft.taskName} options={options.taskName} onChange={(value) => setDraft((current) => ({ ...current, taskName: value }))} />
+            <TaskFieldSelect value={draft.assignedTo} options={options.assignedTo} onChange={(value) => setDraft((current) => ({ ...current, assignedTo: value }))} />
+            <input type="date" value={draft.deadline} onChange={(event) => setDraft((current) => ({ ...current, deadline: event.target.value }))} />
+            <TaskFieldSelect value={draft.vendor} options={options.vendor} onChange={(value) => setDraft((current) => ({ ...current, vendor: value }))} />
+            <div className="task-row__actions">
+              <button type="button" className="button button--ghost" onClick={() => { setAdding(false); setDraft({ taskName: '', assignedTo: '', vendor: '', deadline: '' }); }}>Cancel</button>
+              <button type="button" className="button button--primary" disabled={saving || !draft.taskName.trim()} onClick={addTask}>{saving ? 'Adding…' : 'Add'}</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" className="button button--secondary tasks-panel__add-button" onClick={() => setAdding(true)}><Plus size={15} aria-hidden="true" /> Add task</button>
+        )
+      )}
+    </div>
+  );
+}
+
 function AssignedUsersPanel({ surveyId, notify }) {
   const [assignments, setAssignments] = useState([]);
   const [assignable, setAssignable] = useState([]);
@@ -1407,6 +1541,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
         <div className="editor-actions">
           {canEdit && <button type="button" className="button button--ghost" onClick={rotate} title="Rotate survey clockwise"><RotateCw aria-hidden="true" size={16} /><span className="button-label">Rotate {orientation}°</span></button>}
           <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'schedule' })}><ListChecks aria-hidden="true" size={16} /><span className="button-label">Schedule</span></button>
+          <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'tasks' })}><ClipboardList aria-hidden="true" size={16} /><span className="button-label">Tasks</span></button>
           <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'history' })}><History aria-hidden="true" size={16} /><span className="button-label">History</span></button>
           <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'reports' })}><Radio aria-hidden="true" size={16} /><span className="button-label">Reports</span></button>
           {canManageAssignments && <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'assignments' })}><Users aria-hidden="true" size={16} /><span className="button-label">Assigned</span></button>}
@@ -1435,6 +1570,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
       <nav className="editor-mobile-nav" aria-label="Survey editor panels"><button type="button" className={mobilePanel === 'library' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'library' ? null : 'library')}>{canEdit ? <Plus aria-hidden="true" size={18} /> : <Layers aria-hidden="true" size={18} />}{canEdit ? 'Add' : 'Layers'}</button><button type="button" className={activeTool.type === 'select' && !mobilePanel ? 'active' : ''} onClick={() => { setActiveTool({ kind: 'markup', type: 'select', label: 'Select' }); setMobilePanel(null); }}><Move aria-hidden="true" size={18} />Move</button><button type="button" className={mobilePanel === 'inspector' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'inspector' ? null : 'inspector')} disabled={!selected}><ListChecks aria-hidden="true" size={18} />{selected ? 'Details' : 'Select item'}</button></nav>
 
       <Modal open={modal?.type === 'schedule'} title="Device schedule" description={`${elements.filter((element) => element.category !== 'markup').length} plotted security components`} onClose={() => setModal(null)} wide><Schedule elements={elements} onSelect={setSelectedId} onClose={() => setModal(null)} /></Modal>
+      <Modal open={modal?.type === 'tasks'} title="Tasks" description="Track work items, who's on them, which vendor, and when they're due." onClose={() => setModal(null)} wide>{modal?.type === 'tasks' && <TasksPanel surveyId={surveyId} canAnnotate={canAnnotate} notify={notify} />}</Modal>
       <Modal open={modal?.type === 'history'} title="Survey history" description="Who plotted, edited, or removed items, and when." onClose={() => setModal(null)} wide>{modal?.type === 'history' && <HistoryPanel surveyId={surveyId} notify={notify} />}</Modal>
       <Modal open={modal?.type === 'reports'} title="Reports" description="Write up what you did, attach photos, and send it to whoever needs to know." onClose={() => setModal(null)} wide>{modal?.type === 'reports' && <ReportsPanel surveyId={surveyId} canAnnotate={canAnnotate} notify={notify} />}</Modal>
       <Modal open={modal?.type === 'assignments'} title="Assigned users" description="Control which viewers and installers can see this survey." onClose={() => setModal(null)} wide>{modal?.type === 'assignments' && <AssignedUsersPanel surveyId={surveyId} notify={notify} />}</Modal>
