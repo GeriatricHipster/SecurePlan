@@ -767,6 +767,69 @@ function AssignedUsersPanel({ surveyId, notify }) {
   );
 }
 
+const DOOR_COMPONENT_OPTIONS = ['REX', 'DPS', 'Strike', 'Mag Lock', 'Reader', 'Piezo', 'Crash Bar'];
+
+function DoorComponentsSection({ element, canAnnotate, onPatch }) {
+  const components = Array.isArray(element.metadata?.doorComponents) ? element.metadata.doorComponents : [];
+  const [adding, setAdding] = useState(false);
+  const [selectValue, setSelectValue] = useState('');
+  const [customValue, setCustomValue] = useState('');
+
+  const resetAddRow = () => {
+    setAdding(false);
+    setSelectValue('');
+    setCustomValue('');
+  };
+
+  const commitAdd = () => {
+    const value = selectValue === 'Other' ? customValue.trim() : selectValue;
+    if (!value || components.includes(value)) { resetAddRow(); return; }
+    onPatch({ metadata: { ...element.metadata, doorComponents: [...components, value] } });
+    resetAddRow();
+  };
+
+  const removeComponent = (value) => {
+    onPatch({ metadata: { ...element.metadata, doorComponents: components.filter((item) => item !== value) } });
+  };
+
+  return (
+    <div className="door-components">
+      <h3 className="door-components__title">Components</h3>
+      {components.length === 0 && !adding && <p className="muted">No components added yet.</p>}
+      {components.length > 0 && (
+        <div className="door-components__list">
+          {components.map((value) => (
+            <span key={value} className="door-components__chip">
+              {value}
+              {canAnnotate && <button type="button" onClick={() => removeComponent(value)} aria-label={`Remove ${value}`}><X size={11} /></button>}
+            </span>
+          ))}
+        </div>
+      )}
+      {canAnnotate && (
+        adding ? (
+          <div className="door-components__add-row">
+            <select value={selectValue} onChange={(event) => setSelectValue(event.target.value)} autoFocus>
+              <option value="">Select a component…</option>
+              {DOOR_COMPONENT_OPTIONS.filter((option) => !components.includes(option)).map((option) => <option key={option} value={option}>{option}</option>)}
+              <option value="Other">Other</option>
+            </select>
+            {selectValue === 'Other' && (
+              <input type="text" placeholder="Custom component name" value={customValue} onChange={(event) => setCustomValue(event.target.value)} />
+            )}
+            <div className="door-components__add-actions">
+              <button type="button" className="button button--ghost" onClick={resetAddRow}>Cancel</button>
+              <button type="button" className="button button--secondary" disabled={!selectValue || (selectValue === 'Other' && !customValue.trim())} onClick={commitAdd}>Add</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" className="button button--ghost door-components__add-button" onClick={() => setAdding(true)}><Plus size={13} aria-hidden="true" /> Add component</button>
+        )
+      )}
+    </div>
+  );
+}
+
 function ChecklistSection({ element, canAnnotate }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -876,6 +939,7 @@ function DeviceLifecyclePanel({ element, canAnnotate, onPatch }) {
       <Field label="Progress"><div className="workflow-progress"><span style={{ width: `${workflowStatusFor({ metadata: { workflowStatus: form.workflowStatus } }).progress}%`, backgroundColor: workflowStatusFor({ metadata: { workflowStatus: form.workflowStatus } }).color }} /><output>{workflowStatusFor({ metadata: { workflowStatus: form.workflowStatus } }).progress}%</output></div></Field>
     </div>
     <NotifyTeammatesButton element={element} />
+    {isDoorType(element.type) && <DoorComponentsSection element={element} canAnnotate={canAnnotate} onPatch={onPatch} />}
     <ChecklistSection element={element} canAnnotate={canAnnotate} />
     <details className="asset-record"><summary><strong>Asset record</strong><span>Manufacturer, model, serial, network and warranty</span></summary><div className="form-grid form-grid--two">
       <Field label="Manufacturer"><input value={form.manufacturer || ''} disabled={!canAnnotate} onChange={(event) => update('manufacturer', event.target.value)} onBlur={() => saveAsset('manufacturer')} /></Field>
