@@ -28,7 +28,14 @@ function serializeAttachment(row) {
   };
 }
 
+function computeThreadKey(senderId, recipientIds) {
+  if (!recipientIds.length) return 'everyone';
+  const participants = [...new Set([senderId, ...recipientIds])].sort();
+  return participants.join(',');
+}
+
 function serializeMessage(row, attachments, recipients) {
+  const recipientIds = recipients.map((r) => r.user_id || r.id);
   return {
     id: row.id,
     senderId: row.sender_id,
@@ -37,6 +44,7 @@ function serializeMessage(row, attachments, recipients) {
     attachments: attachments.map(serializeAttachment),
     recipients: recipients.map((r) => ({ id: r.user_id || r.id, name: r.name })),
     isTargeted: recipients.length > 0,
+    threadKey: computeThreadKey(row.sender_id, recipientIds),
     createdAt: row.created_at,
   };
 }
@@ -58,6 +66,7 @@ export function createMessagesRouter({ db, config, auth, notifyUser }) {
 
   router.get('/messages', async (req, res) => {
     const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
+    const threadFilter = req.query.thread ? String(req.query.thread) : null;
     const messageRows = await db
       .prepare(
         `SELECT m.*, u.name AS sender_name
@@ -70,7 +79,7 @@ export function createMessagesRouter({ db, config, auth, notifyUser }) {
           LIMIT ?`,
       )
       .all(req.user.id, req.user.id, limit);
-    const messages = [];
+    let messages = [];
     for (const messageRow of messageRows) {
       const attachmentRows = await db.prepare('SELECT * FROM message_attachments WHERE message_id = ? ORDER BY created_at').all(messageRow.id);
       const recipientRows = await db
@@ -83,7 +92,66 @@ export function createMessagesRouter({ db, config, auth, notifyUser }) {
         .all(messageRow.id);
       messages.push(serializeMessage(messageRow, attachmentRows, recipientRows));
     }
+    if (threadFilter) messages = messages.filter((message) => message.threadKey === threadFilter);
     res.json({ data: messages, messages });
+  });
+
+  router.get('/message-threads', async (req, res) => {
+    const messageRows = await db
+      .prepare(
+        `SELECT m.*, u.name AS sender_name
+           FROM messages m
+           LEFT JOIN users u ON u.id = m.sender_id
+          WHERE NOT EXISTS (SELECT 1 FROM message_recipients mr WHERE mr.message_id = m.id)
+             OR m.sender_id = ?
+             OR EXISTS (SELECT 1 FROM message_recipients mr WHERE mr.message_id = m.id AND mr.user_id = ?)
+          ORDER BY m.created_at DESC`,
+      )
+      .all(req.user.id, req.user.id);
+
+    const threads = new Map();
+    for (const messageRow of messageRows) {
+      const recipientRows = await db
+        .prepare(
+          `SELECT mr.user_id, u.name
+             FROM message_recipients mr
+             LEFT JOIN users u ON u.id = mr.user_id
+            WHERE mr.message_id = ?`,
+        )
+        .all(messageRow.id);
+      const recipientIds = recipientRows.map((r) => r.user_id);
+      const threadKey = computeThreadKey(messageRow.sender_id, recipientIds);
+      if (threads.has(threadKey)) continue; // messages are already ordered newest-first, so the first hit per key is the most recent
+
+      let participants;
+      if (threadKey === 'everyone') {
+        participants = [{ id: null, name: 'Everyone' }];
+      } else {
+        const participantIds = [...new Set([messageRow.sender_id, ...recipientIds])].filter((id) => id !== req.user.id);
+        if (!participantIds.length) {
+          // A message to yourself only (edge case) - still needs a label.
+          participants = [{ id: req.user.id, name: 'You' }];
+        } else {
+          const placeholders = participantIds.map(() => '?').join(',');
+          const participantRows = await db.prepare(`SELECT id, name FROM users WHERE id IN (${placeholders})`).all(...participantIds);
+          participants = participantRows;
+        }
+      }
+
+      threads.set(threadKey, {
+        threadKey,
+        isBroadcast: threadKey === 'everyone',
+        participants,
+        lastMessage: {
+          senderName: messageRow.sender_name,
+          bodyText: messageRow.body_text,
+          createdAt: messageRow.created_at,
+        },
+      });
+    }
+
+    const list = [...threads.values()];
+    res.json({ data: list, threads: list });
   });
 
   router.post('/messages', attachmentUpload.array('attachments', 10), async (req, res) => {

@@ -711,7 +711,21 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
         ctx.fillStyle = '#1c272e';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
-        ctx.fillText(element.label, cx, cy + radius + 6);
+        const maxLabelWidth = 150;
+        const words = element.label.split(/\s+/).filter(Boolean);
+        const lines = [];
+        let currentLine = '';
+        for (const word of words) {
+          const testLine = currentLine ? `${currentLine} ${word}` : word;
+          if (currentLine && ctx.measureText(testLine).width > maxLabelWidth) {
+            lines.push(currentLine);
+            currentLine = word;
+          } else {
+            currentLine = testLine;
+          }
+        }
+        if (currentLine) lines.push(currentLine);
+        lines.forEach((line, index) => ctx.fillText(line, cx, cy + radius + 6 + index * 13));
       }
     }
 

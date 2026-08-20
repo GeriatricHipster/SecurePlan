@@ -472,7 +472,13 @@ export const api = {
   unreadNotificationCount: () => request('/api/notifications/unread-count'),
   markNotificationRead: (id) => request(`/api/notifications/${id}/read`, json('POST')),
   markAllNotificationsRead: () => request('/api/notifications/mark-all-read', json('POST')),
-  messages: (limit = 100) => request(`/api/messages?limit=${limit}`),
+  messages: (options = {}) => {
+    const params = new URLSearchParams();
+    params.set('limit', options.limit ?? 100);
+    if (options.thread) params.set('thread', options.thread);
+    return request(`/api/messages?${params.toString()}`);
+  },
+  messageThreads: () => request('/api/message-threads'),
   createMessage: (form) => request('/api/messages', { method: 'POST', body: form }),
   messageRecipients: () => request('/api/message-recipients'),
   deleteMessage: (id) => request(`/api/messages/${id}`, json('DELETE')),
