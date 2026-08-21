@@ -92,7 +92,7 @@ export default function GanttChart({ surveyId, notify }) {
 
   const arrows = [];
   rows.forEach((row) => {
-    row.task.predecessors.forEach((predecessor) => {
+    (row.task.predecessors || []).forEach((predecessor) => {
       const predRow = rowByTaskId.get(predecessor.id);
       if (!predRow || !predRow.hasDates || !row.hasDates) return;
       const fromX = (predRow.offset + predRow.span) * dayWidth;
@@ -121,9 +121,9 @@ export default function GanttChart({ surveyId, notify }) {
       </div>
 
       {!tasks.length ? (
-        <p className="muted">No tasks yet. Add some in the Tasks tab.</p>
+        <p className="muted">No tasks yet. Add some on the Tasks tab.</p>
       ) : !datedCount ? (
-        <p className="muted">No tasks have a start date or deadline yet. Set dates in the Tasks tab to see them plotted here.</p>
+        <p className="muted">No tasks have a start date or deadline yet. Set dates on the Tasks tab to see them plotted here.</p>
       ) : (
         <div className="gantt-v2__panes">
           <div className="gantt-v2__labels">

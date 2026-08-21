@@ -594,9 +594,11 @@ function TaskFieldSelect({ value, options, onChange }) {
 function TaskDependencies({ task, allTasks, onChange, canAnnotate }) {
   const [adding, setAdding] = useState(false);
   const [selected, setSelected] = useState('');
+  const predecessors = task.predecessors || [];
+  const successors = task.successors || [];
 
   const eligiblePredecessors = allTasks.filter((candidate) => (
-    candidate.id !== task.id && !task.predecessors.some((p) => p.id === candidate.id)
+    candidate.id !== task.id && !predecessors.some((p) => p.id === candidate.id)
   ));
 
   const addPredecessor = async () => {
@@ -614,8 +616,8 @@ function TaskDependencies({ task, allTasks, onChange, canAnnotate }) {
     <div className="task-dependencies">
       <div className="task-dependencies__group">
         <strong>Predecessors</strong>
-        {task.predecessors.length === 0 && <span className="muted">None</span>}
-        {task.predecessors.map((predecessor) => (
+        {predecessors.length === 0 && <span className="muted">None</span>}
+        {predecessors.map((predecessor) => (
           <span key={predecessor.id} className="task-dependencies__chip">
             {predecessor.taskName}
             {canAnnotate && <button type="button" onClick={() => removePredecessor(predecessor.id)} aria-label={`Remove ${predecessor.taskName} as a predecessor`}><X size={11} /></button>}
@@ -636,10 +638,10 @@ function TaskDependencies({ task, allTasks, onChange, canAnnotate }) {
           )
         )}
       </div>
-      {task.successors.length > 0 && (
+      {successors.length > 0 && (
         <div className="task-dependencies__group">
           <strong>Successors</strong>
-          {task.successors.map((successor) => <span key={successor.id} className="task-dependencies__chip task-dependencies__chip--readonly">{successor.taskName}</span>)}
+          {successors.map((successor) => <span key={successor.id} className="task-dependencies__chip task-dependencies__chip--readonly">{successor.taskName}</span>)}
         </div>
       )}
     </div>
@@ -1371,7 +1373,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
   const [mobilePanel, setMobilePanel] = useState(null);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   const [modal, setModal] = useState(null);
-  const [scheduleTab, setScheduleTab] = useState('devices');
+  const [trackingTab, setTrackingTab] = useState('tasks');
   const remoteTimer = useRef(null);
   const selectedIdRef = useRef(null);
   const planStageRef = useRef(null);
@@ -1803,8 +1805,8 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
         <Presence users={presence.length ? presence : [user]} status={syncStatus} />
         <div className="editor-actions">
           {canEdit && <button type="button" className="button button--ghost" onClick={rotate} title="Rotate survey clockwise"><RotateCw aria-hidden="true" size={16} /><span className="button-label">Rotate {orientation}°</span></button>}
-          <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'schedule' })}><ListChecks aria-hidden="true" size={16} /><span className="button-label">Schedule</span></button>
-          <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'tasks' })}><ClipboardList aria-hidden="true" size={16} /><span className="button-label">Tasks</span></button>
+          <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'devices' })}><ListChecks aria-hidden="true" size={16} /><span className="button-label">Devices</span></button>
+          <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'tracking' })}><ClipboardList aria-hidden="true" size={16} /><span className="button-label">Tracking</span></button>
           <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'history' })}><History aria-hidden="true" size={16} /><span className="button-label">History</span></button>
           <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'reports' })}><Radio aria-hidden="true" size={16} /><span className="button-label">Reports</span></button>
           {canManageAssignments && <button type="button" className="button button--secondary" onClick={() => setModal({ type: 'assignments' })}><Users aria-hidden="true" size={16} /><span className="button-label">Assigned</span></button>}
@@ -1832,15 +1834,15 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
 
       <nav className="editor-mobile-nav" aria-label="Survey editor panels"><button type="button" className={mobilePanel === 'library' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'library' ? null : 'library')}>{canEdit ? <Plus aria-hidden="true" size={18} /> : <Layers aria-hidden="true" size={18} />}{canEdit ? 'Add' : 'Layers'}</button><button type="button" className={activeTool.type === 'select' && !mobilePanel ? 'active' : ''} onClick={() => { setActiveTool({ kind: 'markup', type: 'select', label: 'Select' }); setMobilePanel(null); }}><Move aria-hidden="true" size={18} />Move</button><button type="button" className={mobilePanel === 'inspector' ? 'active' : ''} onClick={() => setMobilePanel(mobilePanel === 'inspector' ? null : 'inspector')} disabled={!selected}><ListChecks aria-hidden="true" size={18} />{selected ? 'Details' : 'Select item'}</button></nav>
 
-      <Modal open={modal?.type === 'schedule'} title="Device schedule" description={`${elements.filter((element) => element.category !== 'markup').length} plotted security components`} onClose={() => setModal(null)} wide>
+      <Modal open={modal?.type === 'devices'} title="Devices" description={`${elements.filter((element) => element.category !== 'markup').length} plotted security components`} onClose={() => setModal(null)} wide>{modal?.type === 'devices' && <Schedule elements={elements} onSelect={setSelectedId} onClose={() => setModal(null)} />}</Modal>
+      <Modal open={modal?.type === 'tracking'} title="Tracking" description="Tasks, who's on them, and a timeline view of how they line up." onClose={() => setModal(null)} wide>
         <div className="schedule-subtabs">
-          <button type="button" className={scheduleTab === 'devices' ? 'active' : ''} onClick={() => setScheduleTab('devices')}>Devices</button>
-          <button type="button" className={scheduleTab === 'gantt' ? 'active' : ''} onClick={() => setScheduleTab('gantt')}>Gantt</button>
+          <button type="button" className={trackingTab === 'tasks' ? 'active' : ''} onClick={() => setTrackingTab('tasks')}>Tasks</button>
+          <button type="button" className={trackingTab === 'gantt' ? 'active' : ''} onClick={() => setTrackingTab('gantt')}>Gantt</button>
         </div>
-        {scheduleTab === 'devices' && <Schedule elements={elements} onSelect={setSelectedId} onClose={() => setModal(null)} />}
-        {scheduleTab === 'gantt' && modal?.type === 'schedule' && <GanttChart surveyId={surveyId} notify={notify} />}
+        {trackingTab === 'tasks' && modal?.type === 'tracking' && <TasksPanel surveyId={surveyId} canAnnotate={canAnnotate} notify={notify} />}
+        {trackingTab === 'gantt' && modal?.type === 'tracking' && <GanttChart surveyId={surveyId} notify={notify} />}
       </Modal>
-      <Modal open={modal?.type === 'tasks'} title="Tasks" description="Track work items, who's on them, which vendor, and when they're due." onClose={() => setModal(null)} wide>{modal?.type === 'tasks' && <TasksPanel surveyId={surveyId} canAnnotate={canAnnotate} notify={notify} />}</Modal>
       <Modal open={modal?.type === 'history'} title="Survey history" description="Who plotted, edited, or removed items, and when." onClose={() => setModal(null)} wide>{modal?.type === 'history' && <HistoryPanel surveyId={surveyId} notify={notify} />}</Modal>
       <Modal open={modal?.type === 'reports'} title="Reports" description="Write up what you did, attach photos, and send it to whoever needs to know." onClose={() => setModal(null)} wide>{modal?.type === 'reports' && <ReportsPanel surveyId={surveyId} canAnnotate={canAnnotate} notify={notify} />}</Modal>
       <Modal open={modal?.type === 'assignments'} title="Assigned users" description="Control which viewers and installers can see this survey." onClose={() => setModal(null)} wide>{modal?.type === 'assignments' && <AssignedUsersPanel surveyId={surveyId} notify={notify} />}</Modal>
