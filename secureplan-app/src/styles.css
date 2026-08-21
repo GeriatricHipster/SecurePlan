@@ -4454,6 +4454,25 @@ h3 {
   line-height: 36px;
 }
 
+.gantt-v2__bar-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 0;
+  background: rgb(0 0 0 / 25%);
+  transition: width .15s ease-out;
+}
+
+.gantt-v2__bar-label {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  display: block;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .gantt-v2__bar--selected {
   box-shadow: 0 0 0 2px var(--ink);
 }
@@ -4478,7 +4497,7 @@ h3 {
 
 .task-row {
   display: grid;
-  grid-template-columns: 1.4fr 1.2fr .9fr 1fr 32px;
+  grid-template-columns: 1.3fr 1fr .85fr .85fr .9fr .8fr 32px;
   gap: 8px;
   align-items: start;
 }
@@ -4510,6 +4529,25 @@ h3 {
 .task-row input[type="date"] {
   width: 100%;
   padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--page);
+  color: var(--ink);
+  font-size: .82rem;
+}
+
+.task-row__progress {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: .82rem;
+}
+
+.task-row__progress input[type="number"] {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 6px;
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--page);

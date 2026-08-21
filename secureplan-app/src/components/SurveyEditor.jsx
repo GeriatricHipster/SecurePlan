@@ -653,7 +653,7 @@ function TasksPanel({ surveyId, canAnnotate, notify }) {
   const [options, setOptions] = useState({ taskName: [], assignedTo: [], vendor: [] });
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState({ taskName: '', assignedTo: '', vendor: '', startDate: '', deadline: '' });
+  const [draft, setDraft] = useState({ taskName: '', assignedTo: '', vendor: '', startDate: '', deadline: '', progress: 0 });
   const [saving, setSaving] = useState(false);
 
   const load = async () => {
@@ -680,7 +680,7 @@ function TasksPanel({ surveyId, canAnnotate, notify }) {
     try {
       const result = await api.createTask(surveyId, draft);
       setTasks((current) => [...current, result?.data ?? result]);
-      setDraft({ taskName: '', assignedTo: '', vendor: '', startDate: '', deadline: '' });
+      setDraft({ taskName: '', assignedTo: '', vendor: '', startDate: '', deadline: '', progress: 0 });
       setAdding(false);
       await refreshOptions();
     } catch (error) { notify(error.message); }
@@ -718,8 +718,10 @@ function TasksPanel({ surveyId, canAnnotate, notify }) {
         <div className="task-row task-row--header">
           <span>Task Name</span>
           <span>Assigned To</span>
+          <span>Start Date</span>
           <span>Deadline</span>
           <span>Vendor</span>
+          <span>Progress</span>
           <span />
         </div>
       )}
@@ -731,12 +733,16 @@ function TasksPanel({ surveyId, canAnnotate, notify }) {
             <div className="task-row">
               <TaskFieldSelect value={task.taskName} options={options.taskName} onChange={(value) => updateTaskField(task.id, 'taskName', value)} />
               <TaskFieldSelect value={task.assignedTo} options={options.assignedTo} onChange={(value) => updateTaskField(task.id, 'assignedTo', value)} />
+              <input type="date" value={task.startDate || ''} onChange={(event) => updateTaskField(task.id, 'startDate', event.target.value)} disabled={!canAnnotate} />
               <input type="date" value={task.deadline || ''} onChange={(event) => updateTaskField(task.id, 'deadline', event.target.value)} disabled={!canAnnotate} />
               <TaskFieldSelect value={task.vendor} options={options.vendor} onChange={(value) => updateTaskField(task.id, 'vendor', value)} />
+              <div className="task-row__progress">
+                <input type="number" min="0" max="100" value={task.progress ?? 0} onChange={(event) => updateTaskField(task.id, 'progress', Math.max(0, Math.min(100, Number(event.target.value) || 0)))} disabled={!canAnnotate} />
+                <span>%</span>
+              </div>
               {canAnnotate ? <button type="button" className="task-row__remove" onClick={() => removeTask(task.id)} aria-label="Delete task"><Trash2 size={14} /></button> : <span />}
             </div>
             <div className="task-row__details">
-              <Field label="Start date"><input type="date" value={task.startDate || ''} onChange={(event) => updateTaskField(task.id, 'startDate', event.target.value)} disabled={!canAnnotate} /></Field>
               <TaskDependencies task={task} allTasks={tasks} onChange={changeDependency} canAnnotate={canAnnotate} />
             </div>
           </div>
@@ -747,11 +753,11 @@ function TasksPanel({ surveyId, canAnnotate, notify }) {
           <div className="task-row task-row--new">
             <TaskFieldSelect value={draft.taskName} options={options.taskName} onChange={(value) => setDraft((current) => ({ ...current, taskName: value }))} />
             <TaskFieldSelect value={draft.assignedTo} options={options.assignedTo} onChange={(value) => setDraft((current) => ({ ...current, assignedTo: value }))} />
+            <input type="date" value={draft.startDate} onChange={(event) => setDraft((current) => ({ ...current, startDate: event.target.value }))} title="Start date" />
             <input type="date" value={draft.deadline} onChange={(event) => setDraft((current) => ({ ...current, deadline: event.target.value }))} placeholder="Deadline" />
             <TaskFieldSelect value={draft.vendor} options={options.vendor} onChange={(value) => setDraft((current) => ({ ...current, vendor: value }))} />
-            <input type="date" value={draft.startDate} onChange={(event) => setDraft((current) => ({ ...current, startDate: event.target.value }))} title="Start date" />
             <div className="task-row__actions">
-              <button type="button" className="button button--ghost" onClick={() => { setAdding(false); setDraft({ taskName: '', assignedTo: '', vendor: '', startDate: '', deadline: '' }); }}>Cancel</button>
+              <button type="button" className="button button--ghost" onClick={() => { setAdding(false); setDraft({ taskName: '', assignedTo: '', vendor: '', startDate: '', deadline: '', progress: 0 }); }}>Cancel</button>
               <button type="button" className="button button--primary" disabled={saving || !draft.taskName.trim()} onClick={addTask}>{saving ? 'Adding…' : 'Add'}</button>
             </div>
           </div>

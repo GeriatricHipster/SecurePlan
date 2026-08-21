@@ -283,6 +283,7 @@ export function createDatabase(config) {
       vendor TEXT,
       start_date TEXT,
       deadline TEXT,
+      progress INTEGER NOT NULL DEFAULT 0,
       created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -362,6 +363,8 @@ export function createDatabase(config) {
   if (!surveyColumns.has('description')) db.exec('ALTER TABLE surveys ADD COLUMN description TEXT');
   if (!surveyColumns.has('scale_paper_inches')) db.exec('ALTER TABLE surveys ADD COLUMN scale_paper_inches REAL NOT NULL DEFAULT 1');
   if (!surveyColumns.has('scale_real_feet')) db.exec('ALTER TABLE surveys ADD COLUMN scale_real_feet REAL NOT NULL DEFAULT 4');
+  const taskColumns = new Set(db.prepare('PRAGMA table_info(survey_tasks)').all().map((column) => column.name));
+  if (!taskColumns.has('progress')) db.exec('ALTER TABLE survey_tasks ADD COLUMN progress INTEGER NOT NULL DEFAULT 0');
 
   seedBuiltInProfiles(db);
   return createAsyncSqliteAdapter(db);

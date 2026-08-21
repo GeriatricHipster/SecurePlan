@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { assertSiteAccess, assertSurveyAssignment } from '../lib/auth.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { getSurvey } from '../lib/resources.js';
-import { idValue, optionalNullableString, stringValue } from '../lib/validation.js';
+import { idValue, numberValue, optionalNullableString, stringValue } from '../lib/validation.js';
 import { logActivity } from '../db.js';
 import { mergedFieldOptions, rememberCustomFieldValue } from '../lib/customOptions.js';
 
@@ -65,6 +65,7 @@ function serializeTask(row, predecessors = [], successors = []) {
     vendor: row.vendor,
     startDate: row.start_date,
     deadline: row.deadline,
+    progress: Number(row.progress ?? 0),
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -132,13 +133,14 @@ export function createTasksRouter({ db, auth }) {
     const vendor = optionalNullableString(req.body?.vendor, 'vendor', 300);
     const startDate = optionalNullableString(req.body?.startDate, 'startDate', 40);
     const deadline = optionalNullableString(req.body?.deadline, 'deadline', 40);
+    const progress = numberValue(req.body?.progress ?? 0, 'progress', { min: 0, max: 100, integer: true });
 
     const now = new Date().toISOString();
     const id = crypto.randomUUID();
     await db.prepare(
-      `INSERT INTO survey_tasks (id, survey_id, task_name, assigned_to, vendor, start_date, deadline, created_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, survey.id, taskName, assignedTo, vendor, startDate, deadline, req.user.id, now, now);
+      `INSERT INTO survey_tasks (id, survey_id, task_name, assigned_to, vendor, start_date, deadline, progress, created_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, survey.id, taskName, assignedTo, vendor, startDate, deadline, progress, req.user.id, now, now);
 
     await Promise.all([
       rememberCustomValue(FIELD_TYPES.taskName, taskName),
@@ -164,11 +166,12 @@ export function createTasksRouter({ db, auth }) {
     const vendor = req.body?.vendor !== undefined ? optionalNullableString(req.body.vendor, 'vendor', 300) : existing.vendor;
     const startDate = req.body?.startDate !== undefined ? optionalNullableString(req.body.startDate, 'startDate', 40) : existing.start_date;
     const deadline = req.body?.deadline !== undefined ? optionalNullableString(req.body.deadline, 'deadline', 40) : existing.deadline;
+    const progress = req.body?.progress !== undefined ? numberValue(req.body.progress, 'progress', { min: 0, max: 100, integer: true }) : existing.progress;
 
     const now = new Date().toISOString();
     await db.prepare(
-      'UPDATE survey_tasks SET task_name = ?, assigned_to = ?, vendor = ?, start_date = ?, deadline = ?, updated_at = ? WHERE id = ?',
-    ).run(taskName, assignedTo, vendor, startDate, deadline, now, existing.id);
+      'UPDATE survey_tasks SET task_name = ?, assigned_to = ?, vendor = ?, start_date = ?, deadline = ?, progress = ?, updated_at = ? WHERE id = ?',
+    ).run(taskName, assignedTo, vendor, startDate, deadline, progress, now, existing.id);
 
     await Promise.all([
       rememberCustomValue(FIELD_TYPES.taskName, taskName),

@@ -186,9 +186,10 @@ export default function GanttChart({ surveyId, notify }) {
                       background: row.color,
                     }}
                     onClick={() => setSelectedTaskId((current) => current === row.task.id ? null : row.task.id)}
-                    title={`${row.task.taskName}: ${row.task.startDate || '?'} to ${row.task.deadline || '?'}${row.task.vendor ? ` \u00b7 ${row.task.vendor}` : ''}`}
+                    title={`${row.task.taskName}: ${row.task.startDate || '?'} to ${row.task.deadline || '?'}${row.task.vendor ? ` \u00b7 ${row.task.vendor}` : ''} \u00b7 ${row.task.progress ?? 0}% complete`}
                   >
-                    {row.task.taskName}
+                    <span className="gantt-v2__bar-progress" style={{ width: `${Math.max(0, Math.min(100, row.task.progress ?? 0))}%` }} />
+                    <span className="gantt-v2__bar-label">{row.task.taskName}</span>
                   </button>
                 ))}
               </div>
