@@ -9,7 +9,7 @@ import { FIT_PLAN_ZOOM, MAX_PLAN_ZOOM, MIN_PLAN_ZOOM } from './planGestures.js';
 import DeviceGlyph from './DeviceGlyph.jsx';
 import { exportSurveyPdf } from './surveyPdfExport.js';
 import {
-  ArrowLeft, ArrowUpRight, Bell, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  ArrowLeft, ArrowUpRight, Bell, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   Circle, Cloud, Copy, Download, Eye, FilePlus, History, Layers, ListChecks, Minus, Moon, Move, MousePointer2,
   Pencil, Plus, Radio, RotateCw, Ruler, Send, Slash, Square, Sun, Trash2, Type, Users, X, ClipboardList,
 } from 'lucide-react';
@@ -591,13 +591,69 @@ function TaskFieldSelect({ value, options, onChange }) {
   );
 }
 
+function TaskDependencies({ task, allTasks, onChange, canAnnotate }) {
+  const [adding, setAdding] = useState(false);
+  const [selected, setSelected] = useState('');
+
+  const eligiblePredecessors = allTasks.filter((candidate) => (
+    candidate.id !== task.id && !task.predecessors.some((p) => p.id === candidate.id)
+  ));
+
+  const addPredecessor = async () => {
+    if (!selected) return;
+    await onChange(task.id, 'add', selected);
+    setSelected('');
+    setAdding(false);
+  };
+
+  const removePredecessor = async (predecessorId) => {
+    await onChange(task.id, 'remove', predecessorId);
+  };
+
+  return (
+    <div className="task-dependencies">
+      <div className="task-dependencies__group">
+        <strong>Predecessors</strong>
+        {task.predecessors.length === 0 && <span className="muted">None</span>}
+        {task.predecessors.map((predecessor) => (
+          <span key={predecessor.id} className="task-dependencies__chip">
+            {predecessor.taskName}
+            {canAnnotate && <button type="button" onClick={() => removePredecessor(predecessor.id)} aria-label={`Remove ${predecessor.taskName} as a predecessor`}><X size={11} /></button>}
+          </span>
+        ))}
+        {canAnnotate && (
+          adding ? (
+            <span className="task-dependencies__add">
+              <select value={selected} onChange={(event) => setSelected(event.target.value)}>
+                <option value="">Select a task…</option>
+                {eligiblePredecessors.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.taskName}</option>)}
+              </select>
+              <button type="button" className="button button--ghost" onClick={() => { setAdding(false); setSelected(''); }}>Cancel</button>
+              <button type="button" className="button button--secondary" disabled={!selected} onClick={addPredecessor}>Add</button>
+            </span>
+          ) : (
+            <button type="button" className="task-dependencies__add-button" onClick={() => setAdding(true)}><Plus size={12} aria-hidden="true" /> Add</button>
+          )
+        )}
+      </div>
+      {task.successors.length > 0 && (
+        <div className="task-dependencies__group">
+          <strong>Successors</strong>
+          {task.successors.map((successor) => <span key={successor.id} className="task-dependencies__chip task-dependencies__chip--readonly">{successor.taskName}</span>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TasksPanel({ surveyId, canAnnotate, notify }) {
   const [tasks, setTasks] = useState([]);
   const [options, setOptions] = useState({ taskName: [], assignedTo: [], vendor: [] });
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState({ taskName: '', assignedTo: '', vendor: '', deadline: '' });
+  const [draft, setDraft] = useState({ taskName: '', assignedTo: '', vendor: '', startDate: '', deadline: '' });
   const [saving, setSaving] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
 
   const load = async () => {
     try {
@@ -623,7 +679,7 @@ function TasksPanel({ surveyId, canAnnotate, notify }) {
     try {
       const result = await api.createTask(surveyId, draft);
       setTasks((current) => [...current, result?.data ?? result]);
-      setDraft({ taskName: '', assignedTo: '', vendor: '', deadline: '' });
+      setDraft({ taskName: '', assignedTo: '', vendor: '', startDate: '', deadline: '' });
       setAdding(false);
       await refreshOptions();
     } catch (error) { notify(error.message); }
@@ -636,6 +692,16 @@ function TasksPanel({ surveyId, canAnnotate, notify }) {
       await api.updateTask(taskId, { [field]: value });
       await refreshOptions();
     } catch (error) { notify(error.message); load(); }
+  };
+
+  const changeDependency = async (taskId, action, otherTaskId) => {
+    try {
+      const result = action === 'add'
+        ? await api.addTaskDependency(taskId, otherTaskId)
+        : await api.removeTaskDependency(taskId, otherTaskId);
+      const updated = result?.data ?? result;
+      setTasks((current) => current.map((task) => task.id === taskId ? updated : task));
+    } catch (error) { notify(error.message); }
   };
 
   const removeTask = async (taskId) => {
@@ -654,18 +720,30 @@ function TasksPanel({ surveyId, canAnnotate, notify }) {
           <span>Deadline</span>
           <span>Vendor</span>
           <span />
+          <span />
         </div>
       )}
       <div className="tasks-panel__list">
         {tasks.length === 0 && !adding ? (
           <p className="muted">No tasks yet.</p>
         ) : tasks.map((task) => (
-          <div key={task.id} className="task-row">
-            <TaskFieldSelect value={task.taskName} options={options.taskName} onChange={(value) => updateTaskField(task.id, 'taskName', value)} />
-            <TaskFieldSelect value={task.assignedTo} options={options.assignedTo} onChange={(value) => updateTaskField(task.id, 'assignedTo', value)} />
-            <input type="date" value={task.deadline || ''} onChange={(event) => updateTaskField(task.id, 'deadline', event.target.value)} disabled={!canAnnotate} />
-            <TaskFieldSelect value={task.vendor} options={options.vendor} onChange={(value) => updateTaskField(task.id, 'vendor', value)} />
-            {canAnnotate ? <button type="button" className="task-row__remove" onClick={() => removeTask(task.id)} aria-label="Delete task"><Trash2 size={14} /></button> : <span />}
+          <div key={task.id} className="tasks-panel__item">
+            <div className="task-row">
+              <TaskFieldSelect value={task.taskName} options={options.taskName} onChange={(value) => updateTaskField(task.id, 'taskName', value)} />
+              <TaskFieldSelect value={task.assignedTo} options={options.assignedTo} onChange={(value) => updateTaskField(task.id, 'assignedTo', value)} />
+              <input type="date" value={task.deadline || ''} onChange={(event) => updateTaskField(task.id, 'deadline', event.target.value)} disabled={!canAnnotate} />
+              <TaskFieldSelect value={task.vendor} options={options.vendor} onChange={(value) => updateTaskField(task.id, 'vendor', value)} />
+              <button type="button" className="task-row__expand" onClick={() => setExpandedId((current) => current === task.id ? null : task.id)} aria-label={expandedId === task.id ? 'Collapse' : 'Expand start date and dependencies'}>
+                {expandedId === task.id ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
+              </button>
+              {canAnnotate ? <button type="button" className="task-row__remove" onClick={() => removeTask(task.id)} aria-label="Delete task"><Trash2 size={14} /></button> : <span />}
+            </div>
+            {expandedId === task.id && (
+              <div className="task-row__details">
+                <Field label="Start date"><input type="date" value={task.startDate || ''} onChange={(event) => updateTaskField(task.id, 'startDate', event.target.value)} disabled={!canAnnotate} /></Field>
+                <TaskDependencies task={task} allTasks={tasks} onChange={changeDependency} canAnnotate={canAnnotate} />
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -674,10 +752,11 @@ function TasksPanel({ surveyId, canAnnotate, notify }) {
           <div className="task-row task-row--new">
             <TaskFieldSelect value={draft.taskName} options={options.taskName} onChange={(value) => setDraft((current) => ({ ...current, taskName: value }))} />
             <TaskFieldSelect value={draft.assignedTo} options={options.assignedTo} onChange={(value) => setDraft((current) => ({ ...current, assignedTo: value }))} />
-            <input type="date" value={draft.deadline} onChange={(event) => setDraft((current) => ({ ...current, deadline: event.target.value }))} />
+            <input type="date" value={draft.deadline} onChange={(event) => setDraft((current) => ({ ...current, deadline: event.target.value }))} placeholder="Deadline" />
             <TaskFieldSelect value={draft.vendor} options={options.vendor} onChange={(value) => setDraft((current) => ({ ...current, vendor: value }))} />
+            <input type="date" value={draft.startDate} onChange={(event) => setDraft((current) => ({ ...current, startDate: event.target.value }))} title="Start date" />
             <div className="task-row__actions">
-              <button type="button" className="button button--ghost" onClick={() => { setAdding(false); setDraft({ taskName: '', assignedTo: '', vendor: '', deadline: '' }); }}>Cancel</button>
+              <button type="button" className="button button--ghost" onClick={() => { setAdding(false); setDraft({ taskName: '', assignedTo: '', vendor: '', startDate: '', deadline: '' }); }}>Cancel</button>
               <button type="button" className="button button--primary" disabled={saving || !draft.taskName.trim()} onClick={addTask}>{saving ? 'Adding…' : 'Add'}</button>
             </div>
           </div>

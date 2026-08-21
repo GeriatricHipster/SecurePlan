@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api, normalizeList } from '../api.js';
 import { Modal, Spinner, formatWhen } from './Common.jsx';
-import { Activity, ChartBar, FilePlus, FolderPlus, MapPin, Search } from 'lucide-react';
+import { Activity, ChartBar, Search } from 'lucide-react';
 
 const WELCOME_STORAGE_KEY = 'secureplan-welcomed';
 
@@ -30,19 +30,6 @@ function WelcomeModal({ open, onClose }) {
   );
 }
 
-function StatTile({ label, value, note, icon: Icon }) {
-  return (
-    <div className="stat-tile">
-      <div className="stat-tile__top">
-        <span className="stat-tile__label">{label}</span>
-        {Icon && <span className="stat-tile__icon" aria-hidden="true"><Icon size={16} /></span>}
-      </div>
-      <strong className="stat-tile__value">{value}</strong>
-      {note && <span className="stat-tile__note">{note}</span>}
-    </div>
-  );
-}
-
 function ActionCard({ title, description, buttonText, onClick }) {
   return (
     <div className="home-action-card">
@@ -56,7 +43,6 @@ function ActionCard({ title, description, buttonText, onClick }) {
 
 export default function HomeDashboard({ user, navigate, notify }) {
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ sites: 0, surveys: 0, folders: 0, devices: 0 });
   const [activeSites, setActiveSites] = useState([]);
   const [showWelcome, setShowWelcome] = useState(false);
   const canManageTeam = ['owner', 'admin'].includes(user.role);
@@ -75,21 +61,8 @@ export default function HomeDashboard({ user, navigate, notify }) {
     (async () => {
       setLoading(true);
       try {
-        const [sitesResult, summary, activeSitesResult] = await Promise.all([
-          api.sites(),
-          api.dashboardSummary().catch(() => ({ totalDevices: 0, siteProgress: [] })),
-          api.activeSites().catch(() => ({ sites: [] })),
-        ]);
-        const sites = normalizeList(sitesResult);
-        const totals = sites.reduce((current, site) => ({
-          surveys: current.surveys + Number(site.surveyCount ?? site.survey_count ?? 0),
-          folders: current.folders + Number(site.folderCount ?? site.folder_count ?? 0),
-        }), { surveys: 0, folders: 0 });
-
-        if (active) {
-          setStats({ sites: sites.length, surveys: totals.surveys, folders: totals.folders, devices: summary?.totalDevices || 0 });
-          setActiveSites(normalizeList(activeSitesResult?.sites ?? activeSitesResult));
-        }
+        const activeSitesResult = await api.activeSites();
+        if (active) setActiveSites(normalizeList(activeSitesResult?.sites ?? activeSitesResult));
       } catch (error) {
         if (active) notify(error.message);
       } finally {
@@ -114,17 +87,10 @@ export default function HomeDashboard({ user, navigate, notify }) {
 
       {loading ? <div className="loading-panel"><Spinner label="Loading overview…" /></div> : (
         <>
-          <div className="home-stats">
-            <StatTile label="Sites" value={stats.sites} note="Open locations" icon={MapPin} />
-            <StatTile label="Surveys" value={stats.surveys} note="Active floor plans" icon={FilePlus} />
-            <StatTile label="Folders" value={stats.folders} note="Organized groups" icon={FolderPlus} />
-            <StatTile label="Plotted devices" value={stats.devices} note="Items on plans" icon={ChartBar} />
-          </div>
-
           <div className="home-progress">
             <div className="home-progress__heading">
               <div>
-                <h2>Your active sites</h2>
+                <h2>Sites</h2>
                 <p>Sites you've made changes to.</p>
               </div>
               <button type="button" className="button button--ghost home-progress__view-all" onClick={() => navigate('sites')}>View all sites</button>
