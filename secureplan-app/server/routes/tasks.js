@@ -116,11 +116,28 @@ export function createTasksRouter({ db, auth }) {
     const role = await assertSiteAccess(db, req.user, survey.site_id);
     await assertSurveyAssignment(db, req.user, role, survey.id);
     const rows = await db.prepare('SELECT * FROM survey_tasks WHERE survey_id = ? ORDER BY (deadline IS NULL), deadline, created_at').all(survey.id);
-    const tasks = [];
-    for (const row of rows) {
-      const { predecessors, successors } = await getDependencies(db, row.id);
-      tasks.push(serializeTask(row, predecessors, successors));
+    if (!rows.length) return res.json({ data: [], tasks: [] });
+
+    // Batch-load every dependency link for this survey's tasks in one query, instead of two separate
+    // queries per task - the previous approach meant every added task made the list slower to load.
+    const dependencyRows = await db.prepare(
+      `SELECT td.task_id, td.depends_on_task_id, predecessor.task_name AS predecessor_name, successor.task_name AS successor_name
+         FROM task_dependencies td
+         JOIN survey_tasks predecessor ON predecessor.id = td.depends_on_task_id
+         JOIN survey_tasks successor ON successor.id = td.task_id
+        WHERE successor.survey_id = ?`,
+    ).all(survey.id);
+
+    const predecessorsByTask = new Map();
+    const successorsByTask = new Map();
+    for (const dep of dependencyRows) {
+      if (!predecessorsByTask.has(dep.task_id)) predecessorsByTask.set(dep.task_id, []);
+      predecessorsByTask.get(dep.task_id).push({ id: dep.depends_on_task_id, taskName: dep.predecessor_name });
+      if (!successorsByTask.has(dep.depends_on_task_id)) successorsByTask.set(dep.depends_on_task_id, []);
+      successorsByTask.get(dep.depends_on_task_id).push({ id: dep.task_id, taskName: dep.successor_name });
     }
+
+    const tasks = rows.map((row) => serializeTask(row, predecessorsByTask.get(row.id) || [], successorsByTask.get(row.id) || []));
     res.json({ data: tasks, tasks });
   });
 
