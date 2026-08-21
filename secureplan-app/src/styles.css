@@ -4478,7 +4478,7 @@ h3 {
 
 .task-row {
   display: grid;
-  grid-template-columns: 1.4fr 1.2fr .9fr 1fr 32px 32px;
+  grid-template-columns: 1.4fr 1.2fr .9fr 1fr 32px;
   gap: 8px;
   align-items: start;
 }
@@ -4545,21 +4545,6 @@ h3 {
 .task-row__remove:hover {
   background: var(--surface-soft);
   color: var(--red);
-}
-
-.task-row__expand {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  place-items: center;
-}
-
-.task-row__expand:hover {
-  background: var(--surface-soft);
-  color: var(--ink);
 }
 
 .tasks-panel__item {

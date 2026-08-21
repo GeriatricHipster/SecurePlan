@@ -655,7 +655,6 @@ function TasksPanel({ surveyId, canAnnotate, notify }) {
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState({ taskName: '', assignedTo: '', vendor: '', startDate: '', deadline: '' });
   const [saving, setSaving] = useState(false);
-  const [expandedId, setExpandedId] = useState(null);
 
   const load = async () => {
     try {
@@ -722,7 +721,6 @@ function TasksPanel({ surveyId, canAnnotate, notify }) {
           <span>Deadline</span>
           <span>Vendor</span>
           <span />
-          <span />
         </div>
       )}
       <div className="tasks-panel__list">
@@ -735,17 +733,12 @@ function TasksPanel({ surveyId, canAnnotate, notify }) {
               <TaskFieldSelect value={task.assignedTo} options={options.assignedTo} onChange={(value) => updateTaskField(task.id, 'assignedTo', value)} />
               <input type="date" value={task.deadline || ''} onChange={(event) => updateTaskField(task.id, 'deadline', event.target.value)} disabled={!canAnnotate} />
               <TaskFieldSelect value={task.vendor} options={options.vendor} onChange={(value) => updateTaskField(task.id, 'vendor', value)} />
-              <button type="button" className="task-row__expand" onClick={() => setExpandedId((current) => current === task.id ? null : task.id)} aria-label={expandedId === task.id ? 'Collapse' : 'Expand start date and dependencies'}>
-                {expandedId === task.id ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
-              </button>
               {canAnnotate ? <button type="button" className="task-row__remove" onClick={() => removeTask(task.id)} aria-label="Delete task"><Trash2 size={14} /></button> : <span />}
             </div>
-            {expandedId === task.id && (
-              <div className="task-row__details">
-                <Field label="Start date"><input type="date" value={task.startDate || ''} onChange={(event) => updateTaskField(task.id, 'startDate', event.target.value)} disabled={!canAnnotate} /></Field>
-                <TaskDependencies task={task} allTasks={tasks} onChange={changeDependency} canAnnotate={canAnnotate} />
-              </div>
-            )}
+            <div className="task-row__details">
+              <Field label="Start date"><input type="date" value={task.startDate || ''} onChange={(event) => updateTaskField(task.id, 'startDate', event.target.value)} disabled={!canAnnotate} /></Field>
+              <TaskDependencies task={task} allTasks={tasks} onChange={changeDependency} canAnnotate={canAnnotate} />
+            </div>
           </div>
         ))}
       </div>
