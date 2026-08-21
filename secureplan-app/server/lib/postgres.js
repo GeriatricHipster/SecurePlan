@@ -410,6 +410,7 @@ const POSTGRES_SCHEMA = `
     task_name TEXT NOT NULL,
     assigned_to TEXT,
     vendor TEXT,
+    start_date TEXT,
     deadline TEXT,
     created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
     created_at TEXT NOT NULL,
@@ -417,6 +418,17 @@ const POSTGRES_SCHEMA = `
   );
 
   CREATE INDEX IF NOT EXISTS idx_survey_tasks_survey ON survey_tasks(survey_id, deadline);
+
+  CREATE TABLE IF NOT EXISTS task_dependencies (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES survey_tasks(id) ON DELETE CASCADE,
+    depends_on_task_id TEXT NOT NULL REFERENCES survey_tasks(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    UNIQUE(task_id, depends_on_task_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_task_dependencies_task ON task_dependencies(task_id);
+  CREATE INDEX IF NOT EXISTS idx_task_dependencies_depends_on ON task_dependencies(depends_on_task_id);
 
   CREATE TABLE IF NOT EXISTS task_custom_options (
     id TEXT PRIMARY KEY,
