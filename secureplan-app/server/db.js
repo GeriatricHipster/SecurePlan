@@ -364,6 +364,7 @@ export function createDatabase(config) {
   if (!surveyColumns.has('scale_paper_inches')) db.exec('ALTER TABLE surveys ADD COLUMN scale_paper_inches REAL NOT NULL DEFAULT 1');
   if (!surveyColumns.has('scale_real_feet')) db.exec('ALTER TABLE surveys ADD COLUMN scale_real_feet REAL NOT NULL DEFAULT 4');
   const taskColumns = new Set(db.prepare('PRAGMA table_info(survey_tasks)').all().map((column) => column.name));
+  if (!taskColumns.has('start_date')) db.exec('ALTER TABLE survey_tasks ADD COLUMN start_date TEXT');
   if (!taskColumns.has('progress')) db.exec('ALTER TABLE survey_tasks ADD COLUMN progress INTEGER NOT NULL DEFAULT 0');
 
   seedBuiltInProfiles(db);
