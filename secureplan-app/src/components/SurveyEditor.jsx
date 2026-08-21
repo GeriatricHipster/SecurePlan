@@ -11,7 +11,7 @@ import { exportSurveyPdf } from './surveyPdfExport.js';
 import {
   ArrowLeft, ArrowUpRight, Bell, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   Circle, Cloud, Copy, Download, Eye, FilePlus, History, Layers, ListChecks, Minus, Moon, Move, MousePointer2,
-  Pencil, Plus, Radio, RotateCw, Ruler, Send, Slash, Square, Sun, Trash2, Type, Users, X, ClipboardList,
+  Pencil, Plus, Radio, RotateCw, Ruler, Send, Slash, Square, Sun, Trash2, Type, Users, X, ClipboardList, Maximize2, Minimize2,
 } from 'lucide-react';
 
 const HISTORY_ICONS = {
@@ -770,6 +770,45 @@ function TasksPanel({ surveyId, canAnnotate, notify }) {
   );
 }
 
+function TrackingPanel({ surveyId, canAnnotate, notify }) {
+  const [trackingTab, setTrackingTab] = useState('tasks');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const wrapperRef = useRef(null);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(Boolean(document.fullscreenElement) && document.fullscreenElement === wrapperRef.current);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await wrapperRef.current?.requestFullscreen();
+    } catch {
+      // Fullscreen isn't available in every environment (e.g. some embedded webviews) - fail silently.
+    }
+  };
+
+  return (
+    <div className={`tracking-panel ${isFullscreen ? 'tracking-panel--fullscreen' : ''}`} ref={wrapperRef}>
+      <div className="schedule-subtabs">
+        <button type="button" className={trackingTab === 'tasks' ? 'active' : ''} onClick={() => setTrackingTab('tasks')}>Tasks</button>
+        <button type="button" className={trackingTab === 'gantt' ? 'active' : ''} onClick={() => setTrackingTab('gantt')}>Gantt</button>
+        <span className="schedule-subtabs__spacer" />
+        <button type="button" className="button button--ghost" onClick={toggleFullscreen}>
+          {isFullscreen ? <Minimize2 aria-hidden="true" size={15} /> : <Maximize2 aria-hidden="true" size={15} />}
+          {isFullscreen ? 'Exit full screen' : 'Full screen'}
+        </button>
+      </div>
+      <div className="tracking-panel__body">
+        {trackingTab === 'tasks' && <TasksPanel surveyId={surveyId} canAnnotate={canAnnotate} notify={notify} />}
+        {trackingTab === 'gantt' && <GanttChart surveyId={surveyId} notify={notify} />}
+      </div>
+    </div>
+  );
+}
+
 function AssignedUsersPanel({ surveyId, notify }) {
   const [assignments, setAssignments] = useState([]);
   const [assignable, setAssignable] = useState([]);
@@ -1373,7 +1412,6 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
   const [mobilePanel, setMobilePanel] = useState(null);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   const [modal, setModal] = useState(null);
-  const [trackingTab, setTrackingTab] = useState('tasks');
   const remoteTimer = useRef(null);
   const selectedIdRef = useRef(null);
   const planStageRef = useRef(null);
@@ -1836,12 +1874,7 @@ export default function SurveyEditor({ user, surveyId, siteId, navigate, notify,
 
       <Modal open={modal?.type === 'devices'} title="Devices" description={`${elements.filter((element) => element.category !== 'markup').length} plotted security components`} onClose={() => setModal(null)} wide>{modal?.type === 'devices' && <Schedule elements={elements} onSelect={setSelectedId} onClose={() => setModal(null)} />}</Modal>
       <Modal open={modal?.type === 'tracking'} title="Tracking" description="Tasks, who's on them, and a timeline view of how they line up." onClose={() => setModal(null)} wide>
-        <div className="schedule-subtabs">
-          <button type="button" className={trackingTab === 'tasks' ? 'active' : ''} onClick={() => setTrackingTab('tasks')}>Tasks</button>
-          <button type="button" className={trackingTab === 'gantt' ? 'active' : ''} onClick={() => setTrackingTab('gantt')}>Gantt</button>
-        </div>
-        {trackingTab === 'tasks' && modal?.type === 'tracking' && <TasksPanel surveyId={surveyId} canAnnotate={canAnnotate} notify={notify} />}
-        {trackingTab === 'gantt' && modal?.type === 'tracking' && <GanttChart surveyId={surveyId} notify={notify} />}
+        {modal?.type === 'tracking' && <TrackingPanel surveyId={surveyId} canAnnotate={canAnnotate} notify={notify} />}
       </Modal>
       <Modal open={modal?.type === 'history'} title="Survey history" description="Who plotted, edited, or removed items, and when." onClose={() => setModal(null)} wide>{modal?.type === 'history' && <HistoryPanel surveyId={surveyId} notify={notify} />}</Modal>
       <Modal open={modal?.type === 'reports'} title="Reports" description="Write up what you did, attach photos, and send it to whoever needs to know." onClose={() => setModal(null)} wide>{modal?.type === 'reports' && <ReportsPanel surveyId={surveyId} canAnnotate={canAnnotate} notify={notify} />}</Modal>

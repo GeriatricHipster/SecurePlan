@@ -162,7 +162,9 @@ function DeviceElementBase({ element, orientation, selected, isNestTarget, onPoi
   const rotation = Number(element.rotation || 0) + Number(orientation || 0);
   const color = elementColor(element);
   const outlineColor = doorOutlineColorFor(element.metadata?.doorFunction || element.type);
-  const components = Array.isArray(element.metadata?.components) ? element.metadata.components : [];
+  const nestedComponents = Array.isArray(element.metadata?.components) ? element.metadata.components : [];
+  const doorComponents = Array.isArray(element.metadata?.doorComponents) ? element.metadata.doorComponents : [];
+  const componentCount = nestedComponents.length + doorComponents.length;
   const workflow = workflowStatusFor(element);
 
   return (
@@ -200,24 +202,19 @@ function DeviceElementBase({ element, orientation, selected, isNestTarget, onPoi
         />
       </span>
 
-      {components.length > 0 && (
-        <span className="plan-element__components" aria-label={`${components.length} nested component${components.length === 1 ? '' : 's'}: ${components.map((component) => component.label).join(', ')}`} title={components.map((component) => component.label).join(', ')}>
-          {components.length}
+      {componentCount > 0 && (
+        <span className="plan-element__components" aria-label={`${componentCount} component${componentCount === 1 ? '' : 's'}`} title={[...nestedComponents.map((c) => c.label), ...doorComponents].join(', ')}>
+          {componentCount}
         </span>
       )}
 
-      <span className="plan-element__label">{element.label}</span>
+      <span className="plan-element__label" style={element.metadata?.labelWidth ? { maxWidth: `${element.metadata.labelWidth}px` } : undefined}>{element.label}</span>
       <span
         className="plan-element__status"
         style={{ '--status-color': workflow.color }}
         title={`Installation status: ${workflow.label}`}
         aria-label={`Installation status: ${workflow.label}`}
       />
-      {(Number(element.noteCount ?? element.note_count ?? 0) + Number(element.photoCount ?? element.photo_count ?? 0)) > 0 && (
-        <small aria-hidden="true">
-          {Number(element.noteCount ?? element.note_count ?? 0) + Number(element.photoCount ?? element.photo_count ?? 0)}
-        </small>
-      )}
     </button>
   );
 }
@@ -337,6 +334,23 @@ function SelectionHandles({ element, orientation, dimensions, onStart }) {
   return <div className="resize-handles" aria-label={`Resize ${element.label}`}>{points.map(([handle, x, y]) => <button key={handle} type="button" className={`resize-handle resize-handle--${handle}`} style={{ left: `${x * 100}%`, top: `${y * 100}%` }} onPointerDown={(event) => onStart(event, element, handle)} aria-label={`Resize ${element.label} from ${handle}`} />)}</div>;
 }
 
+function LabelResizeHandles({ element, orientation, dimensions, onStart }) {
+  if (!element || element.category === 'markup') return null;
+  const center = toDisplay({ x: Number(element.x), y: Number(element.y) }, orientation);
+  const size = Number(element.metadata?.size || 42);
+  const labelWidth = Number(element.metadata?.labelWidth || 150);
+  const labelHalfWidthPct = (labelWidth / 2) / dimensions.width;
+  const labelY = center.y + ((size / 2 + 16) / dimensions.height);
+  const leftX = center.x - labelHalfWidthPct;
+  const rightX = center.x + labelHalfWidthPct;
+  return (
+    <div className="label-resize-handles" aria-label={`Resize ${element.label || 'device'} name box`}>
+      <button type="button" className="label-resize-handle label-resize-handle--left" style={{ left: `${leftX * 100}%`, top: `${labelY * 100}%` }} onPointerDown={(event) => onStart(event, element, 'left')} aria-label="Resize name box width" />
+      <button type="button" className="label-resize-handle label-resize-handle--right" style={{ left: `${rightX * 100}%`, top: `${labelY * 100}%` }} onPointerDown={(event) => onStart(event, element, 'right')} aria-label="Resize name box width" />
+    </div>
+  );
+}
+
 export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, zoom, onZoom, elements, visibleLayers, selectedId, activeTool, canEdit, onPlace, onDropComponent, onNestOnto, onDraw, onPreviewElement, onPatchElement, onResizeElement, onSelect, onMove, onDeleteSelected, notify, stageRef, scalePaperInches, scaleRealFeet }) {
   const canvasRef = useRef(null);
   const surfaceRef = useRef(null);
@@ -344,6 +358,7 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
   const drawRef = useRef(null);
   const scrollRef = useRef(null);
   const resizeRef = useRef(null);
+  const labelResizeRef = useRef(null);
   const fovDragRef = useRef(null);
   const [selectedFov, setSelectedFov] = useState(null);
   const draftFrameRef = useRef(null);
@@ -891,6 +906,15 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
     surfaceRef.current.setPointerCapture(event.pointerId);
   };
 
+  const startLabelResize = (event, element) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (pinchRef.current || consumedTouchRef.current.has(event.pointerId)) return;
+    onSelect(element.id);
+    labelResizeRef.current = { id: element.id, pointerId: event.pointerId, element };
+    surfaceRef.current.setPointerCapture(event.pointerId);
+  };
+
   const pointerMove = (event) => {
     if (event.pointerType === 'touch' && touchPointersRef.current.has(event.pointerId)) {
       touchPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -992,6 +1016,17 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
         onResizeElement(element.id, values, false);
       }
     }
+    if (labelResizeRef.current?.pointerId === event.pointerId) {
+      const { element } = labelResizeRef.current;
+      const center = toDisplay({ x: Number(element.x), y: Number(element.y) }, orientation);
+      const displayPoint = surfacePoint(event);
+      const centerPx = center.x * dimensions.width;
+      const pointPx = displayPoint.x * dimensions.width;
+      const newWidth = Math.max(60, Math.min(400, Math.abs(pointPx - centerPx) * 2));
+      const values = { metadata: { ...(element.metadata || {}), labelWidth: Math.round(newWidth) } };
+      labelResizeRef.current.values = values;
+      onResizeElement(element.id, values, false);
+    }
     if (fovDragRef.current?.pointerId === event.pointerId) {
       const { elementId, fovIndex, handle, direction, isMultisensor } = fovDragRef.current;
       const element = elements.find((item) => item.id === elementId);
@@ -1082,6 +1117,12 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
       else if (values) onResizeElement(id, values, true);
       resizeRef.current = null;
     }
+    if (labelResizeRef.current?.pointerId === event.pointerId) {
+      const { id, values, element } = labelResizeRef.current;
+      if (values && cancelled) onResizeElement(id, { metadata: element.metadata || {} }, false);
+      else if (values) onResizeElement(id, values, true);
+      labelResizeRef.current = null;
+    }
     if (fovDragRef.current?.pointerId === event.pointerId) {
       const { elementId, fovIndex, isMultisensor } = fovDragRef.current;
       const element = elements.find((item) => item.id === elementId);
@@ -1153,6 +1194,7 @@ export default function PdfPlan({ survey, orientation, pageNumber, onPageInfo, z
             {draftShape && ['line', 'arrow', 'measure'].includes(draftShape.type) && <svg className="draft-line" viewBox="0 0 100 100" preserveAspectRatio="none"><line x1={draftShape.start.x * 100} y1={draftShape.start.y * 100} x2={draftShape.end.x * 100} y2={draftShape.end.y * 100} /></svg>}
             {draftShape && draftShape.type === 'measure' && <span className="measure-label" style={{ left: `${((draftShape.start.x + draftShape.end.x) / 2) * 100}%`, top: `${((draftShape.start.y + draftShape.end.y) / 2) * 100}%` }}>{measureLabel(draftShape.start, draftShape.end).label}</span>}
             {canEdit && <SelectionHandles element={elements.find((element) => element.id === selectedId)} orientation={orientation} dimensions={dimensions} onStart={startResize} />}
+            {canEdit && <LabelResizeHandles element={elements.find((element) => element.id === selectedId)} orientation={orientation} dimensions={dimensions} onStart={startLabelResize} />}
             {canEdit && <MarkupPopup element={elements.find((element) => element.id === editingId)} orientation={orientation} onPreview={onPreviewElement} onCommit={onPatchElement} onClose={() => setEditingId(null)} />}
           </div>
           {rendering && <div className="plan-rendering" role="status">Rendering floor plan…</div>}

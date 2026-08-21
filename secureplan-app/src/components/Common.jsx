@@ -1,5 +1,29 @@
-import React, { useEffect, useId, useRef } from 'react';
-import { FileQuestion, MoreHorizontal, X } from 'lucide-react';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { ArrowUp, FileQuestion, MoreHorizontal, X } from 'lucide-react';
+
+export function BackToTopButton() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setVisible(window.scrollY > 400);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <button
+      type="button"
+      className="back-to-top"
+      onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+      aria-label="Back to top"
+    >
+      <ArrowUp aria-hidden="true" size={18} />
+    </button>
+  );
+}
 
 export function Brand({ compact = false }) {
   return (

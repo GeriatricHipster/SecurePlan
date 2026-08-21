@@ -309,6 +309,31 @@ h3 {
   color: var(--red-dark) !important;
 }
 
+.back-to-top {
+  position: fixed;
+  right: max(24px, env(safe-area-inset-right));
+  bottom: max(24px, env(safe-area-inset-bottom));
+  z-index: 150;
+  display: grid;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-md);
+  place-items: center;
+  animation: back-to-top-in .15s ease-out;
+}
+
+.back-to-top:hover {
+  background: var(--surface-soft);
+}
+
+@keyframes back-to-top-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .icon-button {
   display: inline-grid;
   min-width: 44px;
@@ -3868,6 +3893,36 @@ h3 {
   touch-action: none;
 }
 
+.label-resize-handles {
+  position: absolute;
+  z-index: 45;
+  inset: 0;
+  pointer-events: none;
+}
+
+.label-resize-handle {
+  position: absolute;
+  width: 10px;
+  height: 20px;
+  padding: 0;
+  border: 2.5px solid var(--red);
+  background: transparent;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+  touch-action: none;
+  cursor: ew-resize;
+}
+
+.label-resize-handle--left {
+  border-right: none;
+  border-radius: 4px 0 0 4px;
+}
+
+.label-resize-handle--right {
+  border-left: none;
+  border-radius: 0 4px 4px 0;
+}
+
 .resize-handle--nw,
 .resize-handle--se,
 .resize-handle--start,
@@ -4157,10 +4212,15 @@ h3 {
 
 .schedule-subtabs {
   display: flex;
+  align-items: center;
   gap: 6px;
   margin-bottom: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--line);
+}
+
+.schedule-subtabs__spacer {
+  flex: 1;
 }
 
 .schedule-subtabs button {
@@ -4170,6 +4230,22 @@ h3 {
   color: var(--ink-soft);
   font-size: .84rem;
   font-weight: 700;
+}
+
+.tracking-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.tracking-panel--fullscreen {
+  height: 100dvh;
+  padding: 20px clamp(16px, 3vw, 40px);
+  background: var(--page);
+  overflow-y: auto;
+}
+
+.tracking-panel__body {
+  min-height: 0;
 }
 
 .schedule-subtabs button.active {

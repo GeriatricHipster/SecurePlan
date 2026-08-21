@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api, normalizeList } from '../api.js';
-import { Modal, Spinner, formatWhen } from './Common.jsx';
+import { BackToTopButton, Modal, Spinner, formatWhen } from './Common.jsx';
 import { Activity, ChartBar, Search } from 'lucide-react';
 
 const WELCOME_STORAGE_KEY = 'secureplan-welcomed';
@@ -129,6 +129,7 @@ export default function HomeDashboard({ user, navigate, notify }) {
           </div>
         </>
       )}
+      <BackToTopButton />
     </main>
   );
 }

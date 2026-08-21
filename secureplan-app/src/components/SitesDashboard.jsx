@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api, normalizeList } from '../api.js';
-import { ConfirmDialog, EmptyState, Field, Menu, MenuButton, Modal, Spinner, formatWhen, initials, roleCanManage } from './Common.jsx';
+import { BackToTopButton, ConfirmDialog, EmptyState, Field, Menu, MenuButton, Modal, Spinner, formatWhen, initials, roleCanManage } from './Common.jsx';
 import { LayoutGrid, Plus, Search, Upload } from 'lucide-react';
 
 function SiteCard({ site, index, total, canManage, canDelete, onOpen, onEdit, onCopy, onDelete, onMove }) {
@@ -256,6 +256,7 @@ export default function SitesDashboard({ user, navigate, notify }) {
           </div>
         </div>
       </Modal>
+      <BackToTopButton />
     </main>
   );
 }
